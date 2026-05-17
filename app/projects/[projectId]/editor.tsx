@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { isPathKind } from '@/domain/annotationFactory';
+import { defaultColorForKind, isPathKind } from '@/domain/annotationFactory';
 import type { Annotation, EditorTool, NormalizedPoint, TopoProject } from '@/domain/types';
 import { EditorTopBar } from '@/editor/EditorTopBar';
 import { ToolPalette } from '@/editor/ToolPalette';
@@ -51,8 +51,7 @@ export default function EditorScreen() {
       photoId: photo.id,
       routeId: route?.id,
       kind: activeTool,
-      color:
-        activeTool === 'walkoff' ? '#2F80ED' : activeTool === 'scramble' ? '#F2994A' : '#C6F24F',
+      color: defaultColorForKind(activeTool),
       points: draftPoints,
       createdAt: now,
       updatedAt: now,
