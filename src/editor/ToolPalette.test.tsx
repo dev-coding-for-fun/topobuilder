@@ -7,8 +7,8 @@ describe('ToolPalette', () => {
     const onSelectTool = jest.fn();
 
     render(<ToolPalette selectedTool="bolt" onSelectTool={onSelectTool} />);
-    fireEvent.press(screen.getByLabelText('Anchor'));
+    fireEvent.press(screen.getByLabelText('Anchor with rappel'));
 
-    expect(onSelectTool).toHaveBeenCalledWith('anchor');
+    expect(onSelectTool).toHaveBeenCalledWith('rappel');
   });
 });

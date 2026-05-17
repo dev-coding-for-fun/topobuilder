@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import type { ComponentProps } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 type IoniconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -52,7 +52,7 @@ export function EditorTopBar({
           pressed && canSave && styles.pressed,
         ]}
       >
-        <Text style={styles.saveLabel}>Save</Text>
+        <Ionicons color="#F2B58F" name="checkmark" size={22} />
       </Pressable>
     </View>
   );
@@ -157,12 +157,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     height: 44,
     justifyContent: 'center',
-    paddingHorizontal: 18,
-  },
-  saveLabel: {
-    color: '#F2B58F',
-    fontSize: 16,
-    fontWeight: '700',
+    width: 44,
   },
   wrapper: {
     alignItems: 'center',

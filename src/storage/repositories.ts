@@ -1,4 +1,4 @@
-import type { Annotation, PhotoAsset, Route, TopoProject, TopoSummary } from '@/domain/types';
+import type { Annotation, PathAnnotationKind, PhotoAsset, Route, TopoProject, TopoSummary } from '@/domain/types';
 
 import type { TopoDatabase } from './database';
 
@@ -206,7 +206,7 @@ function mapAnnotation(row: AnnotationRow): Annotation {
   if (row.points_json) {
     return {
       ...base,
-      kind: row.kind as Annotation['kind'] & 'climbLine',
+      kind: row.kind as PathAnnotationKind,
       points: JSON.parse(row.points_json),
     };
   }

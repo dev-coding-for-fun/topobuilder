@@ -1,49 +1,435 @@
-import { Canvas, Circle, Group, Image as SkiaImage, Line, Path, Rect, Skia, useImage } from '@shopify/react-native-skia';
-import { useMemo, useState } from 'react';
-import { LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Canvas,
+  Circle,
+  Group,
+  Image as SkiaImage,
+  Line,
+  Path,
+  Rect,
+  Skia,
+  Text as SkiaText,
+  useFont,
+  useImage,
+} from '@shopify/react-native-skia';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, { runOnJS, useDerivedValue, useSharedValue } from 'react-native-reanimated';
 
-import { denormalizePoint, fitContain, normalizePoint, screenToImagePoint } from '@/domain/geometry';
-import type { Annotation, AnnotationKind, EditorTool, NormalizedPoint, PhotoAsset } from '@/domain/types';
+import {
+  clampPan,
+  denormalizePoint,
+  fitCover,
+  findNearestPointIndex,
+  findNearestPolylineSegment,
+  minContainScale,
+  screenToNormalizedImagePoint,
+} from '@/domain/geometry';
+import { isPathKind } from '@/domain/annotationFactory';
+import type {
+  Annotation,
+  MarkerAnnotationKind,
+  PathAnnotation,
+  PathAnnotationKind,
+  EditorTool,
+  NormalizedPoint,
+  PhotoAsset,
+} from '@/domain/types';
+
+const MAX_ZOOM = 6;
+const TAP_MAX_DELTA = 10;
+const LINE_HIT_RADIUS = 28;
+const HANDLE_HIT_RADIUS = 32;
+const HANDLE_RADIUS = 9;
+const STAMP_RED = '#C91F37';
+const STAMP_WHITE = '#F8FAFC';
 
 type TopoCanvasProps = {
   photo: PhotoAsset;
   annotations: Annotation[];
   activeTool: EditorTool;
-  onPlaceAnnotation: (kind: AnnotationKind, point: NormalizedPoint) => void;
+  selectedPathId?: string;
+  onBeginPathDraft: (kind: PathAnnotationKind, point: NormalizedPoint) => void;
+  onCommitSelectedPathEdit: () => void;
+  onExtendPathDraft: (point: NormalizedPoint, sampleSize: { width: number; height: number }) => void;
+  onFinishPathDraft: (point: NormalizedPoint, sampleSize: { width: number; height: number }) => void;
+  onMoveSelectedPathPoint: (
+    pointIndex: number,
+    point: NormalizedPoint,
+    sampleSize: { width: number; height: number },
+  ) => void;
+  onPlaceAnnotation: (kind: MarkerAnnotationKind, point: NormalizedPoint) => void;
+  onSelectPath: (annotationId?: string, points?: NormalizedPoint[]) => void;
 };
 
 export function TopoCanvas({
   photo,
   annotations,
   activeTool,
+  selectedPathId,
+  onBeginPathDraft,
+  onCommitSelectedPathEdit,
+  onExtendPathDraft,
+  onFinishPathDraft,
+  onMoveSelectedPathPoint,
   onPlaceAnnotation,
+  onSelectPath,
 }: TopoCanvasProps) {
   const image = useImage(photo.uri);
+  const routeMarkerFont = useFont(null, 16);
   const [canvasSize, setCanvasSize] = useState({ width: 1, height: 1 });
 
   const imageFit = useMemo(
-    () => fitContain({ width: photo.width, height: photo.height }, canvasSize),
+    () => fitCover({ width: photo.width, height: photo.height }, canvasSize),
     [canvasSize, photo.height, photo.width],
   );
+
+  // Minimum user scale = the scale at which the entire photo just fits inside the canvas
+  // (contain-fit). User scale = 1 = cover-fit. So this value is always ≤ 1 and is < 1
+  // whenever the photo's aspect ratio doesn't match the canvas.
+  const minScale = useMemo(
+    () => minContainScale({ width: photo.width, height: photo.height }, canvasSize),
+    [canvasSize, photo.height, photo.width],
+  );
+  // Mirror minScale into a shared value so the gesture worklets can read it on the UI thread.
+  const minScaleSv = useSharedValue(1);
+  useEffect(() => {
+    minScaleSv.value = minScale;
+  }, [minScale, minScaleSv]);
+
+  const scale = useSharedValue(1);
+  const tx = useSharedValue(0);
+  const ty = useSharedValue(0);
+  const startScale = useSharedValue(1);
+  const startTx = useSharedValue(0);
+  const startTy = useSharedValue(0);
+  // Focal point captured at pinch start. We scale around this fixed anchor and then
+  // translate by how far the live midpoint has drifted from it, so the photo follows
+  // the two-finger midpoint (Apple Photos / Maps style) while the zoom stays anchored.
+  const startFocalX = useSharedValue(0);
+  const startFocalY = useSharedValue(0);
+  // Manually-tracked active touch count. PinchGesture's own `numberOfPointers` field is
+  // unreliable on both iOS (sticks at 2 after a lift) and Android (gesture-handler bug
+  // since 2.16+), so we count touches via the raw onTouchesDown/onTouchesUp callbacks.
+  const activePointers = useSharedValue(0);
+  const dragHandleIndexRef = useRef(-1);
+  const activePathTool = activeTool !== 'select' && isPathKind(activeTool);
+  const pathAnnotations = useMemo(
+    () =>
+      annotations.filter(
+        (annotation): annotation is PathAnnotation => 'points' in annotation && annotation.id !== 'draft',
+      ),
+    [annotations],
+  );
+  const selectedPath = pathAnnotations.find((annotation) => annotation.id === selectedPathId);
+
+  // Reset zoom/pan whenever the photo changes so each topo opens at the cover view.
+  useEffect(() => {
+    scale.value = 1;
+    tx.value = 0;
+    ty.value = 0;
+  }, [photo.id, scale, tx, ty]);
 
   function handleLayout(event: LayoutChangeEvent) {
     const { width, height } = event.nativeEvent.layout;
     setCanvasSize({ width, height });
   }
 
-  function handlePress(event: { nativeEvent: { locationX: number; locationY: number } }) {
-    if (activeTool === 'select') {
+  function sampleSizeFor(viewScale: number) {
+    return {
+      width: imageFit.width * viewScale,
+      height: imageFit.height * viewScale,
+    };
+  }
+
+  function normalizedPointAt(
+    screenX: number,
+    screenY: number,
+    viewTx: number,
+    viewTy: number,
+    viewScale: number,
+  ) {
+    return screenToNormalizedImagePoint(
+      { x: screenX, y: screenY },
+      imageFit,
+      { tx: viewTx, ty: viewTy, scale: viewScale },
+    );
+  }
+
+  // Latest closure for tap-to-place/select, refreshed every render so gesture worklets always
+  // see the current active tool, fit, and callback without rebuilding the gesture.
+  const placeRef = useRef<
+    (screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) => void
+  >(() => undefined);
+  placeRef.current = (screenX, screenY, viewTx, viewTy, viewScale) => {
+    if (imageFit.width <= 0 || imageFit.height <= 0) {
       return;
     }
 
-    const annotationKind: AnnotationKind = activeTool;
-    const imagePoint = screenToImagePoint(
-      { x: event.nativeEvent.locationX, y: event.nativeEvent.locationY },
-      { width: photo.width, height: photo.height },
-      canvasSize,
-    );
-    onPlaceAnnotation(annotationKind, normalizePoint(imagePoint, photo));
+    const point = normalizedPointAt(screenX, screenY, viewTx, viewTy, viewScale);
+    const displaySize = sampleSizeFor(viewScale);
+
+    if (activeTool === 'select') {
+      const hit = pathAnnotations
+        .map((annotation) => ({
+          annotation,
+          hit: findNearestPolylineSegment(annotation.points, point, displaySize, LINE_HIT_RADIUS),
+        }))
+        .filter((item): item is { annotation: PathAnnotation; hit: { index: number; distance: number } } =>
+          Boolean(item.hit),
+        )
+        .sort((a, b) => a.hit.distance - b.hit.distance)[0];
+
+      onSelectPath(hit?.annotation.id, hit?.annotation.points);
+      return;
+    }
+
+    if (!isPathKind(activeTool)) {
+      onPlaceAnnotation(activeTool, point);
+    }
+  };
+
+  function dispatchTap(screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) {
+    placeRef.current(screenX, screenY, viewTx, viewTy, viewScale);
   }
+
+  function dispatchBeginPath(screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) {
+    if (activeTool === 'select' || !isPathKind(activeTool)) {
+      return;
+    }
+    onBeginPathDraft(activeTool, normalizedPointAt(screenX, screenY, viewTx, viewTy, viewScale));
+  }
+
+  function dispatchExtendPath(screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) {
+    onExtendPathDraft(
+      normalizedPointAt(screenX, screenY, viewTx, viewTy, viewScale),
+      sampleSizeFor(viewScale),
+    );
+  }
+
+  function dispatchFinishPath(screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) {
+    onFinishPathDraft(
+      normalizedPointAt(screenX, screenY, viewTx, viewTy, viewScale),
+      sampleSizeFor(viewScale),
+    );
+  }
+
+  function dispatchBeginControlPointDrag(
+    screenX: number,
+    screenY: number,
+    viewTx: number,
+    viewTy: number,
+    viewScale: number,
+  ) {
+    if (!selectedPath) {
+      dragHandleIndexRef.current = -1;
+      return;
+    }
+
+    const hit = findNearestPointIndex(
+      selectedPath.points,
+      normalizedPointAt(screenX, screenY, viewTx, viewTy, viewScale),
+      sampleSizeFor(viewScale),
+      HANDLE_HIT_RADIUS,
+    );
+    dragHandleIndexRef.current = hit?.index ?? -1;
+  }
+
+  function dispatchMoveControlPoint(
+    screenX: number,
+    screenY: number,
+    viewTx: number,
+    viewTy: number,
+    viewScale: number,
+  ) {
+    if (dragHandleIndexRef.current < 0) {
+      return;
+    }
+    onMoveSelectedPathPoint(
+      dragHandleIndexRef.current,
+      normalizedPointAt(screenX, screenY, viewTx, viewTy, viewScale),
+      sampleSizeFor(viewScale),
+    );
+  }
+
+  function dispatchFinishControlPointDrag() {
+    if (dragHandleIndexRef.current >= 0) {
+      onCommitSelectedPathEdit();
+    }
+    dragHandleIndexRef.current = -1;
+  }
+
+  const panGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .minPointers(1)
+        .maxPointers(1)
+        .onStart(() => {
+          startTx.value = tx.value;
+          startTy.value = ty.value;
+        })
+        .onChange((event) => {
+          const next = clampPan(
+            { x: startTx.value + event.translationX, y: startTy.value + event.translationY },
+            scale.value,
+            imageFit,
+            canvasSize,
+          );
+          tx.value = next.x;
+          ty.value = next.y;
+        }),
+    [canvasSize, imageFit, scale, startTx, startTy, tx, ty],
+  );
+
+  const drawGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .minPointers(1)
+        .maxPointers(1)
+        .minDistance(3)
+        .onStart((event) => {
+          if (activePointers.value > 1) {
+            return;
+          }
+          runOnJS(dispatchBeginPath)(event.x, event.y, tx.value, ty.value, scale.value);
+        })
+        .onChange((event) => {
+          if (activePointers.value > 1) {
+            return;
+          }
+          runOnJS(dispatchExtendPath)(event.x, event.y, tx.value, ty.value, scale.value);
+        })
+        .onEnd((event) => {
+          if (activePointers.value > 1) {
+            return;
+          }
+          runOnJS(dispatchFinishPath)(event.x, event.y, tx.value, ty.value, scale.value);
+        }),
+    // Dispatch functions are refreshed through render closures and only read JS state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activePointers, scale, tx, ty],
+  );
+
+  const controlPointGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .minPointers(1)
+        .maxPointers(1)
+        .minDistance(3)
+        .onStart((event) => {
+          runOnJS(dispatchBeginControlPointDrag)(event.x, event.y, tx.value, ty.value, scale.value);
+        })
+        .onChange((event) => {
+          runOnJS(dispatchMoveControlPoint)(event.x, event.y, tx.value, ty.value, scale.value);
+        })
+        .onEnd(() => {
+          runOnJS(dispatchFinishControlPointDrag)();
+        }),
+    // Dispatch functions are refreshed through render closures and only read JS state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [scale, tx, ty],
+  );
+
+  const pinchGesture = useMemo(
+    () =>
+      Gesture.Pinch()
+        .onTouchesDown((event) => {
+          activePointers.value = event.numberOfTouches;
+        })
+        .onTouchesUp((event) => {
+          activePointers.value = event.numberOfTouches;
+        })
+        .onTouchesCancelled((event) => {
+          activePointers.value = event.numberOfTouches;
+        })
+        .onStart((event) => {
+          startScale.value = scale.value;
+          startTx.value = tx.value;
+          startTy.value = ty.value;
+          startFocalX.value = event.focalX;
+          startFocalY.value = event.focalY;
+        })
+        .onChange((event) => {
+          // Right before pinch.onEnd, when a finger lifts, gesture-handler can fire one
+          // more onChange where the focal has shifted toward the remaining finger. Skip
+          // it — applying it would translate the image by half the inter-finger span.
+          if (activePointers.value < 2) {
+            return;
+          }
+          const target = startScale.value * event.scale;
+          const next = Math.min(Math.max(target, minScaleSv.value), MAX_ZOOM);
+          const k = next / startScale.value;
+          // Scale around the start focal, then translate by how far the live midpoint
+          // has drifted from it. Pinch + drag in a single gesture.
+          const focalDeltaX = event.focalX - startFocalX.value;
+          const focalDeltaY = event.focalY - startFocalY.value;
+          const candidateTx = startFocalX.value * (1 - k) + k * startTx.value + focalDeltaX;
+          const candidateTy = startFocalY.value * (1 - k) + k * startTy.value + focalDeltaY;
+          const clamped = clampPan(
+            { x: candidateTx, y: candidateTy },
+            next,
+            imageFit,
+            canvasSize,
+          );
+          scale.value = next;
+          tx.value = clamped.x;
+          ty.value = clamped.y;
+        }),
+    [
+      activePointers,
+      canvasSize,
+      imageFit,
+      minScaleSv,
+      scale,
+      startFocalX,
+      startFocalY,
+      startScale,
+      startTx,
+      startTy,
+      tx,
+      ty,
+    ],
+  );
+
+  const tapGesture = useMemo(
+    () =>
+      Gesture.Tap()
+        .maxDeltaX(TAP_MAX_DELTA)
+        .maxDeltaY(TAP_MAX_DELTA)
+        .onEnd((event) => {
+          runOnJS(dispatchTap)(event.x, event.y, tx.value, ty.value, scale.value);
+        }),
+    // dispatchTap is stable across renders; it dereferences placeRef internally.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  const composedGesture = useMemo(
+    () => {
+      const oneFingerGesture =
+        activeTool === 'select' && selectedPath ? controlPointGesture : activePathTool ? drawGesture : panGesture;
+      return Gesture.Race(tapGesture, Gesture.Simultaneous(oneFingerGesture, pinchGesture));
+    },
+    [
+      activePathTool,
+      activeTool,
+      controlPointGesture,
+      drawGesture,
+      panGesture,
+      pinchGesture,
+      selectedPath,
+      tapGesture,
+    ],
+  );
+
+  const groupTransform = useDerivedValue(
+    () => [
+      { translateX: tx.value },
+      { translateY: ty.value },
+      { scale: scale.value },
+    ],
+    [scale, tx, ty],
+  );
 
   const renderableSize = {
     width: imageFit.width,
@@ -51,37 +437,75 @@ export function TopoCanvas({
   };
 
   return (
-    <Pressable onPress={handlePress} onLayout={handleLayout} style={styles.container}>
-      <Canvas style={StyleSheet.absoluteFill}>
-        <Group transform={[{ translateX: imageFit.offsetX }, { translateY: imageFit.offsetY }]}>
-          {image ? (
-            <SkiaImage image={image} x={0} y={0} width={imageFit.width} height={imageFit.height} fit="contain" />
-          ) : (
-            <Rect x={0} y={0} width={imageFit.width} height={imageFit.height} color="#CBD5E1" />
-          )}
-          {annotations.map((annotation) => (
-            <AnnotationShape
-              annotation={annotation}
-              key={annotation.id}
-              size={renderableSize}
-            />
-          ))}
-        </Group>
-      </Canvas>
-      {!image && (
-        <View pointerEvents="none" style={styles.loading}>
-          <Text style={styles.loadingText}>Loading topo photo...</Text>
-        </View>
-      )}
-    </Pressable>
+    <GestureDetector gesture={composedGesture}>
+      <Animated.View onLayout={handleLayout} style={styles.container}>
+        <Canvas style={StyleSheet.absoluteFill}>
+          <Group transform={groupTransform}>
+            <Group transform={[{ translateX: imageFit.offsetX }, { translateY: imageFit.offsetY }]}>
+              {image ? (
+                <SkiaImage
+                  image={image}
+                  x={0}
+                  y={0}
+                  width={imageFit.width}
+                  height={imageFit.height}
+                  fit="contain"
+                />
+              ) : (
+                <Rect x={0} y={0} width={imageFit.width} height={imageFit.height} color="#CBD5E1" />
+              )}
+              {annotations.map((annotation) => (
+                <AnnotationShape
+                  annotation={annotation}
+                  key={annotation.id}
+                  routeMarkerFont={routeMarkerFont}
+                  size={renderableSize}
+                />
+              ))}
+              {selectedPath ? <SelectedPathHandles points={selectedPath.points} size={renderableSize} /> : null}
+            </Group>
+          </Group>
+        </Canvas>
+        {!image && (
+          <View pointerEvents="none" style={styles.loading}>
+            <Text style={styles.loadingText}>Loading topo photo...</Text>
+          </View>
+        )}
+      </Animated.View>
+    </GestureDetector>
+  );
+}
+
+function SelectedPathHandles({
+  points,
+  size,
+}: {
+  points: NormalizedPoint[];
+  size: { width: number; height: number };
+}) {
+  return (
+    <Group>
+      {points.map((point, index) => {
+        const next = denormalizePoint(point, size);
+        return (
+          <Group key={`${point.x}-${point.y}-${index}`}>
+            <Circle color="#0F172A" cx={next.x} cy={next.y} r={HANDLE_RADIUS + 3} />
+            <Circle color="#F8FAFC" cx={next.x} cy={next.y} r={HANDLE_RADIUS} />
+            <Circle color="#1D4ED8" cx={next.x} cy={next.y} r={HANDLE_RADIUS - 4} />
+          </Group>
+        );
+      })}
+    </Group>
   );
 }
 
 function AnnotationShape({
   annotation,
+  routeMarkerFont,
   size,
 }: {
   annotation: Annotation;
+  routeMarkerFont: ReturnType<typeof useFont>;
   size: { width: number; height: number };
 }) {
   if ('points' in annotation) {
@@ -108,6 +532,131 @@ function AnnotationShape({
   }
 
   const point = denormalizePoint(annotation.point, size);
+
+  if (annotation.kind === 'bolt') {
+    return (
+      <Group>
+        <Line
+          color={STAMP_WHITE}
+          p1={{ x: point.x - 8, y: point.y - 8 }}
+          p2={{ x: point.x + 8, y: point.y + 8 }}
+          strokeCap="round"
+          strokeWidth={5}
+        />
+        <Line
+          color={STAMP_WHITE}
+          p1={{ x: point.x + 8, y: point.y - 8 }}
+          p2={{ x: point.x - 8, y: point.y + 8 }}
+          strokeCap="round"
+          strokeWidth={5}
+        />
+        <Line
+          color={STAMP_RED}
+          p1={{ x: point.x - 8, y: point.y - 8 }}
+          p2={{ x: point.x + 8, y: point.y + 8 }}
+          strokeCap="round"
+          strokeWidth={3}
+        />
+        <Line
+          color={STAMP_RED}
+          p1={{ x: point.x + 8, y: point.y - 8 }}
+          p2={{ x: point.x - 8, y: point.y + 8 }}
+          strokeCap="round"
+          strokeWidth={3}
+        />
+      </Group>
+    );
+  }
+
+  if (annotation.kind === 'rappel' || annotation.kind === 'belay') {
+    return (
+      <Group>
+        <Circle color={STAMP_RED} cx={point.x} cy={point.y} r={10} />
+        <Circle
+          color={STAMP_WHITE}
+          cx={point.x}
+          cy={point.y}
+          r={10}
+          strokeWidth={3}
+          style="stroke"
+        />
+        {annotation.kind === 'rappel' ? (
+          <Group>
+            <Line
+              color={STAMP_WHITE}
+              p1={{ x: point.x, y: point.y + 10 }}
+              p2={{ x: point.x, y: point.y + 24 }}
+              strokeCap="round"
+              strokeWidth={5}
+            />
+            <Line
+              color={STAMP_WHITE}
+              p1={{ x: point.x, y: point.y + 24 }}
+              p2={{ x: point.x - 5, y: point.y + 18 }}
+              strokeCap="round"
+              strokeWidth={5}
+            />
+            <Line
+              color={STAMP_WHITE}
+              p1={{ x: point.x, y: point.y + 24 }}
+              p2={{ x: point.x + 5, y: point.y + 18 }}
+              strokeCap="round"
+              strokeWidth={5}
+            />
+            <Line
+              color={STAMP_RED}
+              p1={{ x: point.x, y: point.y + 10 }}
+              p2={{ x: point.x, y: point.y + 24 }}
+              strokeCap="round"
+              strokeWidth={3}
+            />
+            <Line
+              color={STAMP_RED}
+              p1={{ x: point.x, y: point.y + 24 }}
+              p2={{ x: point.x - 5, y: point.y + 18 }}
+              strokeCap="round"
+              strokeWidth={3}
+            />
+            <Line
+              color={STAMP_RED}
+              p1={{ x: point.x, y: point.y + 24 }}
+              p2={{ x: point.x + 5, y: point.y + 18 }}
+              strokeCap="round"
+              strokeWidth={3}
+            />
+          </Group>
+        ) : null}
+      </Group>
+    );
+  }
+
+  if (annotation.kind === 'start') {
+    const label = (annotation.label ?? '12').slice(0, 2);
+    const textWidth = routeMarkerFont?.measureText(label).width ?? 0;
+
+    return (
+      <Group>
+        <Circle color={STAMP_RED} cx={point.x} cy={point.y} r={15} />
+        <Circle
+          color={STAMP_WHITE}
+          cx={point.x}
+          cy={point.y}
+          r={15}
+          strokeWidth={3}
+          style="stroke"
+        />
+        {routeMarkerFont ? (
+          <SkiaText
+            color={STAMP_WHITE}
+            font={routeMarkerFont}
+            text={label}
+            x={point.x - textWidth / 2}
+            y={point.y + 6}
+          />
+        ) : null}
+      </Group>
+    );
+  }
 
   if (annotation.kind === 'arrow') {
     return (

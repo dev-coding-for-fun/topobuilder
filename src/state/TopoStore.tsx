@@ -43,6 +43,7 @@ type TopoStoreValue = {
     kind: Extract<AnnotationKind, 'climbLine' | 'walkoff' | 'scramble'>;
     points: NormalizedPoint[];
   }) => Promise<Annotation>;
+  updateAnnotation: (annotation: Annotation) => Promise<Annotation>;
   removeAnnotation: (annotation: Annotation) => Promise<void>;
 };
 
@@ -248,6 +249,23 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
     [db, refresh],
   );
 
+  const updateAnnotation = useCallback(
+    async (annotation: Annotation) => {
+      if (!db) {
+        throw new Error('Database is not ready');
+      }
+
+      const updated = {
+        ...annotation,
+        updatedAt: nowIso(),
+      };
+      await upsertAnnotation(db, updated);
+      await refresh();
+      return updated;
+    },
+    [db, refresh],
+  );
+
   const value = useMemo<TopoStoreValue>(
     () => ({
       isReady: Boolean(db),
@@ -259,9 +277,10 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
       addPhotoFromUri,
       addAnnotation,
       addPathAnnotation,
+      updateAnnotation,
       removeAnnotation,
     }),
-    [addAnnotation, addPathAnnotation, addPhotoFromLibrary, addPhotoFromUri, createProject, db, loadProject, refresh, removeAnnotation, summaries],
+    [addAnnotation, addPathAnnotation, addPhotoFromLibrary, addPhotoFromUri, createProject, db, loadProject, refresh, removeAnnotation, summaries, updateAnnotation],
   );
 
   return <TopoStoreContext.Provider value={value}>{children}</TopoStoreContext.Provider>;
