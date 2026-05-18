@@ -125,7 +125,7 @@ describe('TopoCanvas selection callbacks', () => {
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
     };
-    const { onSelectLabel, onSelectPath } = renderCanvas({ annotations: [label] });
+    const { onSelectLabel, onSelectPath, onSelectStamp } = renderCanvas({ annotations: [label] });
 
     act(() => {
       mockTapEnd?.({ x: 0.5, y: 0.5 });
@@ -133,6 +133,7 @@ describe('TopoCanvas selection callbacks', () => {
 
     expect(onSelectLabel).toHaveBeenCalledWith('label-1');
     expect(onSelectPath).not.toHaveBeenCalledWith(undefined);
+    expect(onSelectStamp).not.toHaveBeenCalledWith(undefined);
   });
 
   it('selects a path without clearing label selection in the same tap', () => {
@@ -149,13 +150,36 @@ describe('TopoCanvas selection callbacks', () => {
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
     };
-    const { onSelectLabel, onSelectPath } = renderCanvas({ annotations: [path] });
+    const { onSelectLabel, onSelectPath, onSelectStamp } = renderCanvas({ annotations: [path] });
 
     act(() => {
       mockTapEnd?.({ x: 0.5, y: 0.5 });
     });
 
     expect(onSelectPath).toHaveBeenCalledWith('path-1', path.points);
+    expect(onSelectLabel).not.toHaveBeenCalledWith(undefined);
+    expect(onSelectStamp).not.toHaveBeenCalledWith(undefined);
+  });
+
+  it('selects a stamp without clearing it through other selection callbacks', () => {
+    const stamp: Annotation = {
+      id: 'bolt-1',
+      topoId: 'topo-1',
+      photoId: 'photo-1',
+      kind: 'bolt',
+      color: '#FACC15',
+      point: { x: 0.5, y: 0.5 },
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const { onSelectLabel, onSelectPath, onSelectStamp } = renderCanvas({ annotations: [stamp] });
+
+    act(() => {
+      mockTapEnd?.({ x: 0.5, y: 0.5 });
+    });
+
+    expect(onSelectStamp).toHaveBeenCalledWith('bolt-1');
+    expect(onSelectPath).not.toHaveBeenCalledWith(undefined);
     expect(onSelectLabel).not.toHaveBeenCalledWith(undefined);
   });
 });

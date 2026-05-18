@@ -264,7 +264,6 @@ export function TopoCanvas({
 
       if (labelHit) {
         onSelectLabel(labelHit.id);
-        onSelectStamp(undefined);
         return;
       }
 
@@ -280,8 +279,6 @@ export function TopoCanvas({
 
       if (stampHit) {
         onSelectStamp(stampHit.id);
-        onSelectPath(undefined);
-        onSelectLabel(undefined);
         return;
       }
 
@@ -295,7 +292,6 @@ export function TopoCanvas({
 
       if (bestPathHit) {
         onSelectPath(bestPathHit.annotation.id, bestPathHit.annotation.points);
-        onSelectStamp(undefined);
         return;
       }
 
