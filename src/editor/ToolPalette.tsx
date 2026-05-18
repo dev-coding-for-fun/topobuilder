@@ -4,6 +4,7 @@ import Octicons from '@expo/vector-icons/Octicons';
 import type { ComponentProps } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { defaultAnnotationColourForTarget, type StampAnnotationKind } from '@/domain/annotationColours';
 import type { EditorTool } from '@/domain/types';
 
 type IoniconName = ComponentProps<typeof Ionicons>['name'];
@@ -58,9 +59,11 @@ const toolGroups: ToolGroup[] = [
 ];
 
 export function ToolPalette({
+  stampColors,
   selectedTool,
   onSelectTool,
 }: {
+  stampColors?: Partial<Record<StampAnnotationKind, string>>;
   selectedTool: EditorTool;
   onSelectTool: (tool: EditorTool) => void;
 }) {
@@ -94,7 +97,11 @@ export function ToolPalette({
                   pressed && !isSelected && !isDisabled && styles.pressed,
                 ]}
               >
-                <SubmenuIcon icon={tool.icon} selected={isSelected} />
+                <SubmenuIcon
+                  color={tool.id && isStampTool(tool.id) ? stampColors?.[tool.id] : undefined}
+                  icon={tool.icon}
+                  selected={isSelected}
+                />
               </Pressable>
             );
           })}
@@ -151,30 +158,45 @@ function ToolbarIcon({ icon, selected }: { icon: ToolbarIcon; selected: boolean 
   return <Ionicons color={foreground} name={icon.name} size={22} />;
 }
 
-function SubmenuIcon({ icon, selected }: { icon: SubmenuTool['icon']; selected: boolean }) {
+function SubmenuIcon({
+  color = defaultAnnotationColourForTarget('bolt'),
+  icon,
+  selected,
+}: {
+  color?: string;
+  icon: SubmenuTool['icon'];
+  selected: boolean;
+}) {
   const foreground = selected ? '#1B1B1F' : '#F8FAFC';
 
   switch (icon) {
     case 'bolt':
-      return <Ionicons color={foreground} name="close" size={18} />;
+      return <Ionicons color={color} name="close" size={18} testID="bolt-submenu-icon" />;
     case 'rappelAnchor':
       return (
         <View style={styles.anchorIconWrap}>
-          <View style={styles.anchorCircle} />
+          <View style={[styles.anchorCircle, { backgroundColor: color }]} testID="rappel-submenu-icon" />
           <Ionicons color="#F8FAFC" name="arrow-down" size={14} style={styles.anchorArrow} />
         </View>
       );
     case 'belayAnchor':
-      return <View style={styles.anchorCircle} />;
+      return <View style={[styles.anchorCircle, { backgroundColor: color }]} testID="belay-submenu-icon" />;
     case 'routeMarker':
       return (
-        <View style={[styles.routeMarker, selected && styles.selectedRouteMarker]}>
+        <View
+          style={[styles.routeMarker, { backgroundColor: color }, selected && styles.selectedRouteMarker]}
+          testID="start-submenu-icon"
+        >
           <Text style={[styles.routeMarkerLabel, selected && styles.selectedRouteMarkerLabel]}>
             12
           </Text>
         </View>
       );
   }
+}
+
+function isStampTool(tool: EditorTool): tool is StampAnnotationKind {
+  return tool === 'bolt' || tool === 'rappel' || tool === 'belay' || tool === 'start';
 }
 
 const styles = StyleSheet.create({

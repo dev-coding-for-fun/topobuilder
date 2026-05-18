@@ -27,7 +27,6 @@ import {
 import type { Annotation, MarkerAnnotation, NormalizedPoint } from '@/domain/types';
 
 const HANDLE_RADIUS = 9;
-const STAMP_RED = '#C91F37';
 const STAMP_WHITE = '#F8FAFC';
 const LABEL_HANDLE_RADIUS = 8;
 const LABEL_BACKDROP_RADIUS = 6;
@@ -203,14 +202,14 @@ export const AnnotationShape = memo(function AnnotationShape({
           strokeWidth={5}
         />
         <Line
-          color={STAMP_RED}
+          color={annotation.color}
           p1={{ x: point.x - 8, y: point.y - 8 }}
           p2={{ x: point.x + 8, y: point.y + 8 }}
           strokeCap="round"
           strokeWidth={3}
         />
         <Line
-          color={STAMP_RED}
+          color={annotation.color}
           p1={{ x: point.x + 8, y: point.y - 8 }}
           p2={{ x: point.x - 8, y: point.y + 8 }}
           strokeCap="round"
@@ -223,7 +222,7 @@ export const AnnotationShape = memo(function AnnotationShape({
   if (annotation.kind === 'rappel' || annotation.kind === 'belay') {
     return (
       <Group>
-        <Circle color={STAMP_RED} cx={point.x} cy={point.y} r={10} />
+        <Circle color={annotation.color} cx={point.x} cy={point.y} r={10} />
         <Circle
           color={STAMP_WHITE}
           cx={point.x}
@@ -256,21 +255,21 @@ export const AnnotationShape = memo(function AnnotationShape({
               strokeWidth={5}
             />
             <Line
-              color={STAMP_RED}
+              color={annotation.color}
               p1={{ x: point.x, y: point.y + 10 }}
               p2={{ x: point.x, y: point.y + 24 }}
               strokeCap="round"
               strokeWidth={3}
             />
             <Line
-              color={STAMP_RED}
+              color={annotation.color}
               p1={{ x: point.x, y: point.y + 24 }}
               p2={{ x: point.x - 5, y: point.y + 18 }}
               strokeCap="round"
               strokeWidth={3}
             />
             <Line
-              color={STAMP_RED}
+              color={annotation.color}
               p1={{ x: point.x, y: point.y + 24 }}
               p2={{ x: point.x + 5, y: point.y + 18 }}
               strokeCap="round"
@@ -288,7 +287,7 @@ export const AnnotationShape = memo(function AnnotationShape({
 
     return (
       <Group>
-        <Circle color={STAMP_RED} cx={point.x} cy={point.y} r={15} />
+        <Circle color={annotation.color} cx={point.x} cy={point.y} r={15} />
         <Circle
           color={STAMP_WHITE}
           cx={point.x}

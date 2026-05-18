@@ -7,7 +7,7 @@ import type {
   PathAnnotation,
   PathAnnotationKind,
 } from './types';
-import { defaultAnnotationColourForTarget } from './annotationColours';
+import { defaultAnnotationColourForTarget, type StampAnnotationKind } from './annotationColours';
 import { DEFAULT_LABEL_FONT_SIZE, clampLabelFontSize } from './textLabels';
 
 const pathKinds = new Set<AnnotationKind>(['climbLine', 'walkoff', 'scramble']);
@@ -32,6 +32,14 @@ export function isLabelAnnotation(annotation: Annotation): annotation is MarkerA
   return isMarkerAnnotation(annotation) && annotation.kind === 'label';
 }
 
+export function isStampKind(kind: AnnotationKind): kind is StampAnnotationKind {
+  return kind === 'bolt' || kind === 'rappel' || kind === 'belay' || kind === 'start';
+}
+
+export function isStampAnnotation(annotation: Annotation): annotation is MarkerAnnotation & { kind: StampAnnotationKind } {
+  return isMarkerAnnotation(annotation) && isStampKind(annotation.kind);
+}
+
 export function annotationsForPhoto(annotations: Annotation[], photoId?: string) {
   return annotations.filter((annotation) => annotation.photoId === photoId);
 }
@@ -39,20 +47,19 @@ export function annotationsForPhoto(annotations: Annotation[], photoId?: string)
 export function defaultColorForKind(kind: AnnotationKind) {
   switch (kind) {
     case 'climbLine':
-      return '#C6F24F';
     case 'walkoff':
-      return '#2F80ED';
     case 'scramble':
-      return '#F2994A';
+      return defaultAnnotationColourForTarget('line');
     case 'label':
       return defaultAnnotationColourForTarget('label');
     case 'anchor':
-    case 'rappel':
-      return '#9B51E0';
-    case 'start':
-      return '#27AE60';
-    default:
+    case 'arrow':
       return '#EB5757';
+    case 'belay':
+    case 'bolt':
+    case 'rappel':
+    case 'start':
+      return defaultAnnotationColourForTarget(kind);
   }
 }
 

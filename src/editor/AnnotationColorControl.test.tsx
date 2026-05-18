@@ -22,4 +22,22 @@ describe('AnnotationColorControl', () => {
     expect(onSelectColor).toHaveBeenCalledWith('#DC2626');
     expect(screen.getByLabelText('Annotation colour: Ink')).toBeTruthy();
   });
+
+  it('uses target-specific accessibility labels', () => {
+    const onSelectColor = jest.fn();
+
+    render(
+      <AnnotationColorControl
+        currentColor="#FACC15"
+        onSelectColor={onSelectColor}
+        swatches={ANNOTATION_COLOUR_PALETTE}
+        targetLabel="Line colour"
+      />,
+    );
+
+    fireEvent.press(screen.getByLabelText('Line colour: Yellow'));
+    fireEvent.press(screen.getByLabelText('Blue line colour'));
+
+    expect(onSelectColor).toHaveBeenCalledWith('#2563EB');
+  });
 });

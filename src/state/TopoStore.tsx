@@ -44,6 +44,7 @@ type TopoStoreValue = {
     routeId?: string;
     kind: Extract<AnnotationKind, 'climbLine' | 'walkoff' | 'scramble'>;
     points: NormalizedPoint[];
+    color?: string;
   }) => Promise<Annotation>;
   updateAnnotation: (annotation: Annotation) => Promise<Annotation>;
   removeAnnotation: (annotation: Annotation) => Promise<void>;
@@ -214,6 +215,7 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
       routeId?: string;
       kind: Extract<AnnotationKind, 'climbLine' | 'walkoff' | 'scramble'>;
       points: NormalizedPoint[];
+      color?: string;
     }) => {
       if (!db) {
         throw new Error('Database is not ready');
@@ -227,6 +229,7 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
         routeId: input.routeId,
         kind: input.kind,
         point: input.points[0] ?? { x: 0, y: 0 },
+        color: input.color,
         now,
       });
 

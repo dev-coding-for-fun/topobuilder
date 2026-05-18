@@ -30,9 +30,10 @@ describe('annotation factory', () => {
   });
 
   it('uses a stable default color per annotation kind', () => {
-    expect(defaultColorForKind('climbLine')).toBe('#C6F24F');
-    expect(defaultColorForKind('walkoff')).toBe('#2F80ED');
-    expect(defaultColorForKind('scramble')).toBe('#F2994A');
+    expect(defaultColorForKind('climbLine')).toBe('#FACC15');
+    expect(defaultColorForKind('walkoff')).toBe('#FACC15');
+    expect(defaultColorForKind('scramble')).toBe('#FACC15');
+    expect(defaultColorForKind('bolt')).toBe('#FACC15');
   });
 
   it('paints saved path annotations with the same color the draft preview uses', () => {

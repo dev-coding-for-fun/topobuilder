@@ -7,22 +7,24 @@ export function AnnotationColorControl({
   currentColor,
   onSelectColor,
   swatches,
+  targetLabel = 'Annotation colour',
 }: {
   currentColor: string;
   onSelectColor: (color: string) => void;
   swatches: AnnotationColourSwatch[];
+  targetLabel?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   const currentSwatch = swatches.find((swatch) => swatch.value.toUpperCase() === currentColor.toUpperCase());
 
   if (expanded) {
     return (
-      <View accessibilityLabel="Annotation colour choices" style={styles.expanded}>
+      <View accessibilityLabel={`${targetLabel} choices`} style={styles.expanded}>
         {swatches.map((swatch) => {
           const isSelected = swatch.value.toUpperCase() === currentColor.toUpperCase();
           return (
             <Pressable
-              accessibilityLabel={`${swatch.label} annotation colour`}
+              accessibilityLabel={`${swatch.label} ${targetLabel.toLowerCase()}`}
               accessibilityRole="button"
               accessibilityState={{ selected: isSelected }}
               key={swatch.id}
@@ -52,7 +54,7 @@ export function AnnotationColorControl({
 
   return (
     <Pressable
-      accessibilityLabel={`Annotation colour${currentSwatch ? `: ${currentSwatch.label}` : ''}`}
+      accessibilityLabel={`${targetLabel}${currentSwatch ? `: ${currentSwatch.label}` : ''}`}
       accessibilityRole="button"
       onPress={() => setExpanded(true)}
       style={({ pressed }) => [styles.collapsed, pressed && styles.pressed]}
@@ -64,7 +66,7 @@ export function AnnotationColorControl({
           currentColor.toUpperCase() === '#F8FAFC' && styles.lightSwatch,
         ]}
       />
-      <Text style={styles.collapsedLabel}>Colour</Text>
+      <Text style={styles.collapsedLabel}>{targetLabel}</Text>
       <Text style={styles.chevron}>^</Text>
     </Pressable>
   );

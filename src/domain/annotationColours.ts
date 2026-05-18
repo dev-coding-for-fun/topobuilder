@@ -1,4 +1,4 @@
-import type { AnnotationKind } from './types';
+import type { AnnotationKind, MarkerAnnotationKind } from './types';
 
 export type RgbColour = {
   r: number;
@@ -12,7 +12,8 @@ export type AnnotationColourSwatch = {
   value: string;
 };
 
-export type AnnotationColourTarget = Extract<AnnotationKind, 'label'>;
+export type StampAnnotationKind = Extract<MarkerAnnotationKind, 'bolt' | 'rappel' | 'belay' | 'start'>;
+export type AnnotationColourTarget = 'label' | 'line' | StampAnnotationKind;
 
 export type TextBackdropDecision = {
   color: '#000000' | '#FFFFFF';
@@ -37,6 +38,8 @@ export const ANNOTATION_COLOUR_PALETTE: AnnotationColourSwatch[] = [
 ];
 
 export const DEFAULT_TEXT_ANNOTATION_COLOUR = '#111827';
+export const DEFAULT_LINE_ANNOTATION_COLOUR = '#FACC15';
+export const DEFAULT_STAMP_ANNOTATION_COLOUR = '#FACC15';
 export const TEXT_BACKDROP_TARGET_CONTRAST = 4.5;
 export const TEXT_BACKDROP_FALLBACK_OPACITY = 0.34;
 export const TEXT_BACKDROP_FALLBACK_BACKGROUND = '#D1D5DB';
@@ -47,6 +50,13 @@ export function defaultAnnotationColourForTarget(target: AnnotationColourTarget)
   switch (target) {
     case 'label':
       return DEFAULT_TEXT_ANNOTATION_COLOUR;
+    case 'line':
+      return DEFAULT_LINE_ANNOTATION_COLOUR;
+    case 'belay':
+    case 'bolt':
+    case 'rappel':
+    case 'start':
+      return DEFAULT_STAMP_ANNOTATION_COLOUR;
   }
 }
 

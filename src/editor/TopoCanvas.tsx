@@ -1,5 +1,6 @@
 import {
   Canvas,
+  Circle,
   Group,
   Image as SkiaImage,
   Rect,
@@ -21,7 +22,7 @@ import {
   pointDistance,
   screenToNormalizedImagePoint,
 } from '@/domain/geometry';
-import { isLabelAnnotation, isPathAnnotation, isPathKind } from '@/domain/annotationFactory';
+import { isLabelAnnotation, isPathAnnotation, isPathKind, isStampAnnotation } from '@/domain/annotationFactory';
 import {
   DEFAULT_SCREEN_LABEL_FONT_SIZE,
   containsPoint,
@@ -53,6 +54,7 @@ import {
 const MAX_ZOOM = 6;
 const TAP_MAX_DELTA = 10;
 const LINE_HIT_RADIUS = 28;
+const STAMP_HIT_RADIUS = 32;
 const HANDLE_HIT_RADIUS = 32;
 const LABEL_HANDLE_HIT_RADIUS = 34;
 const LABEL_BOUNDS_HIT_PADDING = 8;
@@ -85,7 +87,9 @@ type TopoCanvasProps = {
   onResizeSelectedLabel: (fontSize: number) => void;
   onSelectLabel: (annotationId?: string) => void;
   onSelectPath: (annotationId?: string, points?: NormalizedPoint[]) => void;
+  onSelectStamp: (annotationId?: string) => void;
   selectedLabelId?: string;
+  selectedStampId?: string;
 };
 
 export function TopoCanvas({
@@ -105,7 +109,9 @@ export function TopoCanvas({
   onResizeSelectedLabel,
   onSelectLabel,
   onSelectPath,
+  onSelectStamp,
   selectedLabelId,
+  selectedStampId,
 }: TopoCanvasProps) {
   const image = useImage(photo.uri);
   const routeMarkerFont = useFont(null, 16);
@@ -166,8 +172,17 @@ export function TopoCanvas({
       ),
     [annotations],
   );
+  const stampAnnotations = useMemo(
+    () =>
+      annotations.filter(
+        (annotation): annotation is MarkerAnnotation =>
+          isStampAnnotation(annotation) && annotation.id !== 'draft',
+      ),
+    [annotations],
+  );
   const selectedPath = pathAnnotations.find((annotation) => annotation.id === selectedPathId);
   const selectedLabel = labelAnnotations.find((annotation) => annotation.id === selectedLabelId);
+  const selectedStamp = stampAnnotations.find((annotation) => annotation.id === selectedStampId);
   const gestureMode: GestureMode = activePathTool
     ? 'draw'
     : activeTool === 'select' && selectedPath
@@ -249,6 +264,24 @@ export function TopoCanvas({
 
       if (labelHit) {
         onSelectLabel(labelHit.id);
+        onSelectStamp(undefined);
+        return;
+      }
+
+      let stampHit: MarkerAnnotation | undefined;
+      for (let index = stampAnnotations.length - 1; index >= 0; index -= 1) {
+        const annotation = stampAnnotations[index];
+        const stampPoint = denormalizePoint(annotation.point, displaySize);
+        if (pointDistance(target, stampPoint) <= STAMP_HIT_RADIUS) {
+          stampHit = annotation;
+          break;
+        }
+      }
+
+      if (stampHit) {
+        onSelectStamp(stampHit.id);
+        onSelectPath(undefined);
+        onSelectLabel(undefined);
         return;
       }
 
@@ -262,11 +295,13 @@ export function TopoCanvas({
 
       if (bestPathHit) {
         onSelectPath(bestPathHit.annotation.id, bestPathHit.annotation.points);
+        onSelectStamp(undefined);
         return;
       }
 
       onSelectPath(undefined);
       onSelectLabel(undefined);
+      onSelectStamp(undefined);
       return;
     }
 
@@ -763,6 +798,16 @@ export function TopoCanvas({
                   />
                 ))}
               {selectedPath ? <SelectedPathHandles points={selectedPath.points} size={renderableSize} /> : null}
+              {selectedStamp ? (
+                <Circle
+                  color="#1D4ED8"
+                  cx={denormalizePoint(selectedStamp.point, renderableSize).x}
+                  cy={denormalizePoint(selectedStamp.point, renderableSize).y}
+                  r={18}
+                  strokeWidth={2}
+                  style="stroke"
+                />
+              ) : null}
               {selectedLabel ? (
                 <SelectedLabelHandles
                   annotation={selectedLabel}

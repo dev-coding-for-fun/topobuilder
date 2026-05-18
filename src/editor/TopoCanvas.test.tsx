@@ -79,10 +79,12 @@ function renderCanvas({
   annotations,
   onSelectLabel = jest.fn(),
   onSelectPath = jest.fn(),
+  onSelectStamp = jest.fn(),
 }: {
   annotations: Annotation[];
   onSelectLabel?: jest.Mock;
   onSelectPath?: jest.Mock;
+  onSelectStamp?: jest.Mock;
 }) {
   mockTapEnd = undefined;
   render(
@@ -101,11 +103,12 @@ function renderCanvas({
       onResizeSelectedLabel={jest.fn()}
       onSelectLabel={onSelectLabel}
       onSelectPath={onSelectPath}
+      onSelectStamp={onSelectStamp}
       photo={photo}
     />,
   );
 
-  return { onSelectLabel, onSelectPath };
+  return { onSelectLabel, onSelectPath, onSelectStamp };
 }
 
 describe('TopoCanvas selection callbacks', () => {

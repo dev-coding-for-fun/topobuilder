@@ -22,7 +22,24 @@ jest.mock('@/editor/EditorTopBar', () => ({
 }));
 
 jest.mock('@/editor/ToolPalette', () => ({
-  ToolPalette: () => null,
+  ToolPalette: ({ onSelectTool }: { onSelectTool: (tool: string) => void }) => {
+    const React = require('react');
+    const { Pressable, Text } = require('react-native');
+    return React.createElement(
+      React.Fragment,
+      null,
+      React.createElement(
+        Pressable,
+        { accessibilityLabel: 'Line tool', onPress: () => onSelectTool('climbLine') },
+        React.createElement(Text, null, 'Line'),
+      ),
+      React.createElement(
+        Pressable,
+        { accessibilityLabel: 'Bolt', onPress: () => onSelectTool('bolt') },
+        React.createElement(Text, null, 'Bolt'),
+      ),
+    );
+  },
 }));
 
 jest.mock('@/editor/TopoCanvas', () => ({
@@ -94,15 +111,27 @@ describe('EditorScreen label editing', () => {
     });
     loadProject.mockResolvedValue(project);
     addAnnotation.mockImplementation(
-      async (input: { color?: string; labelFontSize?: number; point?: NormalizedPoint }) => ({
-        id: 'label-1',
+      async (input: { color?: string; kind?: string; labelFontSize?: number; point?: NormalizedPoint }) => ({
+        id: input.kind === 'label' || !input.kind ? 'label-1' : `${input.kind}-1`,
         topoId: 'project-1',
         photoId: 'photo-1',
-        kind: 'label',
+        kind: input.kind ?? 'label',
         color: input.color ?? '#111827',
-        label: '',
-        labelFontSize: input.labelFontSize,
+        label: input.kind === 'label' || !input.kind ? '' : undefined,
+        labelFontSize: input.kind === 'label' || !input.kind ? input.labelFontSize : undefined,
         point: input.point,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      }),
+    );
+    addPathAnnotation.mockImplementation(
+      async (input: { color?: string; kind: string; points: NormalizedPoint[] }) => ({
+        id: 'path-1',
+        topoId: 'project-1',
+        photoId: 'photo-1',
+        kind: input.kind,
+        color: input.color ?? '#FACC15',
+        points: input.points,
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
       }),
@@ -185,9 +214,9 @@ describe('EditorScreen label editing', () => {
       await latestCanvasProps().onPlaceAnnotation('label', { x: 0.2, y: 0.3 }, { labelFontSize: 24 });
     });
 
-    fireEvent.press(screen.getByLabelText('Annotation colour: Ink'));
+    fireEvent.press(screen.getByLabelText('Text colour: Ink'));
     await act(async () => {
-      fireEvent.press(screen.getByLabelText('Red annotation colour'));
+      fireEvent.press(screen.getByLabelText('Red text colour'));
     });
 
     await waitFor(() =>
@@ -200,6 +229,49 @@ describe('EditorScreen label editing', () => {
     });
 
     expect(addAnnotation).toHaveBeenLastCalledWith(expect.objectContaining({ color: '#DC2626' }));
+  });
+
+  it('uses selected swatch colour for new route lines', async () => {
+    render(<EditorScreen />);
+    await waitFor(() => expect(TopoCanvas).toHaveBeenCalled());
+
+    fireEvent.press(screen.getByLabelText('Line tool'));
+    fireEvent.press(screen.getByLabelText('Line colour: Yellow'));
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Blue line colour'));
+    });
+
+    act(() => {
+      latestCanvasProps().onBeginPathDraft('climbLine', { x: 0.1, y: 0.1 });
+    });
+    await act(async () => {
+      await latestCanvasProps().onFinishPathDraft(
+        { x: 0.5, y: 0.5 },
+        { width: 1000, height: 1000 },
+      );
+    });
+
+    expect(addPathAnnotation).toHaveBeenCalledWith(expect.objectContaining({ color: '#2563EB' }));
+  });
+
+  it('keeps stamp colour defaults independent by stamp kind', async () => {
+    render(<EditorScreen />);
+    await waitFor(() => expect(TopoCanvas).toHaveBeenCalled());
+
+    fireEvent.press(screen.getByLabelText('Bolt'));
+    fireEvent.press(screen.getByLabelText('Stamp colour: Yellow'));
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Magenta stamp colour'));
+    });
+    await act(async () => {
+      await latestCanvasProps().onPlaceAnnotation('bolt', { x: 0.2, y: 0.3 }, {});
+    });
+    await act(async () => {
+      await latestCanvasProps().onPlaceAnnotation('rappel', { x: 0.4, y: 0.5 }, {});
+    });
+
+    expect(addAnnotation).toHaveBeenCalledWith(expect.objectContaining({ kind: 'bolt', color: '#EC4899' }));
+    expect(addAnnotation).toHaveBeenCalledWith(expect.objectContaining({ kind: 'rappel', color: '#FACC15' }));
   });
 
   it('resizes the canvas region and hides bottom controls while editing text with the keyboard open', async () => {

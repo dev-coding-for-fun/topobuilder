@@ -5,14 +5,17 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
   ANNOTATION_COLOUR_PALETTE,
+  type AnnotationColourTarget,
+  type StampAnnotationKind,
   defaultAnnotationColourForTarget,
 } from '@/domain/annotationColours';
 import {
   annotationsForPhoto,
-  defaultColorForKind,
   isLabelAnnotation,
   isPathAnnotation,
   isPathKind,
+  isStampAnnotation,
+  isStampKind,
 } from '@/domain/annotationFactory';
 import {
   appendSampledPoint,
@@ -47,17 +50,25 @@ export default function EditorScreen() {
   const [selectedPathId, setSelectedPathId] = useState<string>();
   const [editingPathPoints, setEditingPathPoints] = useState<NormalizedPoint[]>();
   const [selectedLabelId, setSelectedLabelId] = useState<string>();
+  const [selectedStampId, setSelectedStampId] = useState<string>();
   const [editingLabel, setEditingLabel] = useState<MarkerAnnotation>();
+  const [editingStamp, setEditingStamp] = useState<MarkerAnnotation & { kind: StampAnnotationKind }>();
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [lastLabelColorByPhoto, setLastLabelColorByPhoto] = useState<Record<string, string>>({});
+  const [lastLineColorByPhoto, setLastLineColorByPhoto] = useState<Record<string, string>>({});
+  const [lastStampColorByPhoto, setLastStampColorByPhoto] = useState<Record<string, Partial<Record<StampAnnotationKind, string>>>>({});
   const draftPointsRef = useRef<NormalizedPoint[]>([]);
   const draftKindRef = useRef<PathAnnotationKind | undefined>(undefined);
   const selectedPathIdRef = useRef<string | undefined>(undefined);
   const editingPathPointsRef = useRef<NormalizedPoint[] | undefined>(undefined);
   const selectedLabelIdRef = useRef<string | undefined>(undefined);
+  const selectedStampIdRef = useRef<string | undefined>(undefined);
   const editingLabelRef = useRef<MarkerAnnotation | undefined>(undefined);
+  const editingStampRef = useRef<(MarkerAnnotation & { kind: StampAnnotationKind }) | undefined>(undefined);
   const lastLabelFontSizeByPhotoRef = useRef<Record<string, number>>({});
   const lastLabelColorByPhotoRef = useRef<Record<string, string>>({});
+  const lastLineColorByPhotoRef = useRef<Record<string, string>>({});
+  const lastStampColorByPhotoRef = useRef<Record<string, Partial<Record<StampAnnotationKind, string>>>>({});
 
   useEffect(() => {
     selectedPathIdRef.current = selectedPathId;
@@ -74,6 +85,14 @@ export default function EditorScreen() {
   useEffect(() => {
     editingLabelRef.current = editingLabel;
   }, [editingLabel]);
+
+  useEffect(() => {
+    selectedStampIdRef.current = selectedStampId;
+  }, [selectedStampId]);
+
+  useEffect(() => {
+    editingStampRef.current = editingStamp;
+  }, [editingStamp]);
 
   useEffect(() => {
     function updateKeyboardHeight(event: KeyboardEvent) {
@@ -113,23 +132,27 @@ export default function EditorScreen() {
   const annotations = useMemo(() => {
     const hasPathEdit = Boolean(selectedPathId && editingPathPoints);
     const hasLabelEdit = Boolean(selectedLabelId && editingLabel);
+    const hasStampEdit = Boolean(selectedStampId && editingStamp);
     const hasPathDraft =
       Boolean(project && photo && draftPoints.length > 0) &&
       activeTool !== 'select' &&
       isPathKind(activeTool);
 
-    if (!hasPathEdit && !hasLabelEdit && !hasPathDraft) {
+    if (!hasPathEdit && !hasLabelEdit && !hasStampEdit && !hasPathDraft) {
       return savedAnnotations;
     }
 
     const editedAnnotations =
-      hasPathEdit || hasLabelEdit
+      hasPathEdit || hasLabelEdit || hasStampEdit
         ? savedAnnotations.map((annotation) => {
             if (annotation.id === selectedPathId && editingPathPoints && isPathAnnotation(annotation)) {
               return { ...annotation, points: editingPathPoints };
             }
             if (annotation.id === selectedLabelId && editingLabel) {
               return editingLabel;
+            }
+            if (annotation.id === selectedStampId && editingStamp) {
+              return editingStamp;
             }
             return annotation;
           })
@@ -146,7 +169,7 @@ export default function EditorScreen() {
       photoId: photo.id,
       routeId: route?.id,
       kind: activeTool,
-      color: defaultColorForKind(activeTool),
+      color: currentLineColorForPhoto(photo.id),
       points: draftPoints,
       createdAt: now,
       updatedAt: now,
@@ -156,6 +179,7 @@ export default function EditorScreen() {
     activeTool,
     draftPoints,
     editingLabel,
+    editingStamp,
     editingPathPoints,
     photo,
     project,
@@ -163,6 +187,7 @@ export default function EditorScreen() {
     savedAnnotations,
     selectedLabelId,
     selectedPathId,
+    selectedStampId,
   ]);
 
   function clearDraftState() {
@@ -175,11 +200,15 @@ export default function EditorScreen() {
     selectedPathIdRef.current = undefined;
     editingPathPointsRef.current = undefined;
     selectedLabelIdRef.current = undefined;
+    selectedStampIdRef.current = undefined;
     editingLabelRef.current = undefined;
+    editingStampRef.current = undefined;
     setSelectedPathId(undefined);
     setEditingPathPoints(undefined);
     setSelectedLabelId(undefined);
+    setSelectedStampId(undefined);
     setEditingLabel(undefined);
+    setEditingStamp(undefined);
   }
 
   function selectPathSnapshot(annotationId?: string, points?: NormalizedPoint[]) {
@@ -187,22 +216,53 @@ export default function EditorScreen() {
     selectedPathIdRef.current = annotationId;
     editingPathPointsRef.current = nextPoints;
     selectedLabelIdRef.current = undefined;
+    selectedStampIdRef.current = undefined;
     editingLabelRef.current = undefined;
+    editingStampRef.current = undefined;
     setSelectedPathId(annotationId);
     setEditingPathPoints(nextPoints);
     setSelectedLabelId(undefined);
+    setSelectedStampId(undefined);
     setEditingLabel(undefined);
+    setEditingStamp(undefined);
   }
 
   function selectLabelSnapshot(annotation?: MarkerAnnotation) {
     selectedPathIdRef.current = undefined;
     editingPathPointsRef.current = undefined;
     selectedLabelIdRef.current = annotation?.id;
+    selectedStampIdRef.current = undefined;
     editingLabelRef.current = annotation;
+    editingStampRef.current = undefined;
     setSelectedPathId(undefined);
     setEditingPathPoints(undefined);
     setSelectedLabelId(annotation?.id);
+    setSelectedStampId(undefined);
     setEditingLabel(annotation);
+    setEditingStamp(undefined);
+  }
+
+  function selectStampSnapshot(annotation?: MarkerAnnotation & { kind: StampAnnotationKind }) {
+    selectedPathIdRef.current = undefined;
+    editingPathPointsRef.current = undefined;
+    selectedLabelIdRef.current = undefined;
+    selectedStampIdRef.current = annotation?.id;
+    editingLabelRef.current = undefined;
+    editingStampRef.current = annotation;
+    setSelectedPathId(undefined);
+    setEditingPathPoints(undefined);
+    setSelectedLabelId(undefined);
+    setSelectedStampId(annotation?.id);
+    setEditingLabel(undefined);
+    setEditingStamp(annotation);
+  }
+
+  function currentLineColorForPhoto(photoId: string) {
+    return lastLineColorByPhotoRef.current[photoId] ?? defaultAnnotationColourForTarget('line');
+  }
+
+  function currentStampColorForPhoto(photoId: string, kind: StampAnnotationKind) {
+    return lastStampColorByPhotoRef.current[photoId]?.[kind] ?? defaultAnnotationColourForTarget(kind);
   }
 
   async function handlePlace(
@@ -224,6 +284,8 @@ export default function EditorScreen() {
     const color =
       kind === 'label'
         ? (rememberedColor ?? defaultAnnotationColourForTarget('label'))
+        : isStampKind(kind)
+          ? currentStampColorForPhoto(photo.id, kind)
         : undefined;
 
     const annotation = await addAnnotation({
@@ -243,6 +305,19 @@ export default function EditorScreen() {
       setLastLabelColorByPhoto((colors) => ({ ...colors, [photo.id]: annotation.color }));
       setActiveTool('select');
       selectLabelSnapshot(annotation);
+    } else if (isStampKind(kind)) {
+      const placedStampColor = color ?? defaultAnnotationColourForTarget(kind);
+      lastStampColorByPhotoRef.current[photo.id] = {
+        ...lastStampColorByPhotoRef.current[photo.id],
+        [kind]: placedStampColor,
+      };
+      setLastStampColorByPhoto((colors) => ({
+        ...colors,
+        [photo.id]: {
+          ...colors[photo.id],
+          [kind]: placedStampColor,
+        },
+      }));
     }
     await refresh();
   }
@@ -289,7 +364,12 @@ export default function EditorScreen() {
       routeId: route?.id,
       kind,
       points: finalizedPoints,
+      color: currentLineColorForPhoto(photo.id),
     });
+    if (isPathAnnotation(annotation)) {
+      lastLineColorByPhotoRef.current[photo.id] = annotation.color;
+      setLastLineColorByPhoto((colors) => ({ ...colors, [photo.id]: annotation.color }));
+    }
     const selectedPoints = 'points' in annotation ? annotation.points : finalizedPoints;
     draftKindRef.current = undefined;
     draftPointsRef.current = [];
@@ -310,6 +390,15 @@ export default function EditorScreen() {
       (item): item is MarkerAnnotation => item.id === annotationId && isLabelAnnotation(item),
     );
     selectLabelSnapshot(annotation);
+    clearDraftState();
+  }
+
+  function selectStamp(annotationId?: string) {
+    const annotation = savedAnnotations.find(
+      (item): item is MarkerAnnotation & { kind: StampAnnotationKind } =>
+        item.id === annotationId && isStampAnnotation(item),
+    );
+    selectStampSnapshot(annotation);
     clearDraftState();
   }
 
@@ -384,6 +473,68 @@ export default function EditorScreen() {
     await refresh();
   }
 
+  async function changeSelectedPathColor(color: string) {
+    if (!photo) {
+      return;
+    }
+
+    lastLineColorByPhotoRef.current[photo.id] = color;
+    setLastLineColorByPhoto((colors) => ({ ...colors, [photo.id]: color }));
+    const annotationId = selectedPathIdRef.current;
+    const points = editingPathPointsRef.current;
+    const annotation = savedAnnotations.find((item) => item.id === annotationId);
+    if (!annotation || !isPathAnnotation(annotation)) {
+      return;
+    }
+
+    const next = { ...annotation, points: points ?? annotation.points, color };
+    const updated = await updateAnnotation(next);
+    if (isPathAnnotation(updated)) {
+      editingPathPointsRef.current = updated.points;
+      setEditingPathPoints(updated.points);
+    }
+    await refresh();
+  }
+
+  async function changeSelectedStampColor(color: string) {
+    if (!photo) {
+      return;
+    }
+
+    const annotation = editingStampRef.current;
+    const targetKind =
+      annotation?.kind ?? (activeTool !== 'select' && isStampKind(activeTool) ? activeTool : undefined);
+    if (!targetKind) {
+      return;
+    }
+
+    lastStampColorByPhotoRef.current[photo.id] = {
+      ...lastStampColorByPhotoRef.current[photo.id],
+      [targetKind]: color,
+    };
+    setLastStampColorByPhoto((colors) => ({
+      ...colors,
+      [photo.id]: {
+        ...colors[photo.id],
+        [targetKind]: color,
+      },
+    }));
+
+    if (!annotation) {
+      return;
+    }
+
+    const next = { ...annotation, color };
+    editingStampRef.current = next;
+    setEditingStamp(next);
+    const updated = await updateAnnotation(next);
+    if (isStampAnnotation(updated)) {
+      editingStampRef.current = updated;
+      setEditingStamp(updated);
+    }
+    await refresh();
+  }
+
   async function commitEditingLabelSnapshot() {
     const annotation = editingLabelRef.current;
     if (!annotation) {
@@ -451,11 +602,29 @@ export default function EditorScreen() {
     );
   }
 
-  const currentLabelColor =
-    editingLabel?.color ??
-    lastLabelColorByPhoto[photo.id] ??
-    defaultAnnotationColourForTarget('label');
-  const canChooseAnnotationColor = activeTool === 'label' || Boolean(selectedLabelId);
+  const selectedPath = savedAnnotations.find((annotation) => annotation.id === selectedPathId);
+  const activeColourTarget: AnnotationColourTarget | undefined = editingLabel
+    ? 'label'
+    : editingStamp
+      ? editingStamp.kind
+        : selectedPath && isPathAnnotation(selectedPath)
+        ? 'line'
+        : activeTool === 'label'
+          ? 'label'
+          : activeTool !== 'select' && isPathKind(activeTool)
+            ? 'line'
+            : activeTool !== 'select' && isStampKind(activeTool)
+              ? activeTool
+              : undefined;
+  const currentAnnotationColor =
+    activeColourTarget === 'label'
+      ? (editingLabel?.color ?? lastLabelColorByPhoto[photo.id] ?? defaultAnnotationColourForTarget('label'))
+      : activeColourTarget === 'line'
+        ? (selectedPath && isPathAnnotation(selectedPath) ? selectedPath.color : lastLineColorByPhoto[photo.id] ?? defaultAnnotationColourForTarget('line'))
+        : activeColourTarget
+          ? (editingStamp?.color ?? lastStampColorByPhoto[photo.id]?.[activeColourTarget] ?? defaultAnnotationColourForTarget(activeColourTarget))
+          : undefined;
+  const canChooseAnnotationColor = Boolean(activeColourTarget && currentAnnotationColor);
   const isKeyboardEditingLabel = Boolean(selectedLabelId && keyboardHeight > 0);
 
   return (
@@ -481,9 +650,11 @@ export default function EditorScreen() {
           onResizeSelectedLabel={resizeSelectedLabel}
           onSelectLabel={selectLabel}
           onSelectPath={selectPath}
+          onSelectStamp={selectStamp}
           photo={photo}
           selectedLabelId={selectedLabelId}
           selectedPathId={selectedPathId}
+          selectedStampId={selectedStampId}
         />
       </View>
       <SafeAreaView edges={['top']} pointerEvents="box-none" style={styles.topOverlay}>
@@ -505,11 +676,24 @@ export default function EditorScreen() {
       >
         {canChooseAnnotationColor ? (
           <AnnotationColorControl
-            currentColor={currentLabelColor}
+            currentColor={currentAnnotationColor ?? defaultAnnotationColourForTarget('label')}
             onSelectColor={(color) => {
-              void changeSelectedLabelColor(color);
+              if (activeColourTarget === 'label') {
+                void changeSelectedLabelColor(color);
+              } else if (activeColourTarget === 'line') {
+                void changeSelectedPathColor(color);
+              } else if (activeColourTarget) {
+                void changeSelectedStampColor(color);
+              }
             }}
             swatches={ANNOTATION_COLOUR_PALETTE}
+            targetLabel={
+              activeColourTarget === 'label'
+                ? 'Text colour'
+                : activeColourTarget === 'line'
+                  ? 'Line colour'
+                  : 'Stamp colour'
+            }
           />
         ) : null}
         <ToolPalette
@@ -520,6 +704,12 @@ export default function EditorScreen() {
             clearSelectionState();
           }}
           selectedTool={activeTool}
+            stampColors={{
+              belay: lastStampColorByPhoto[photo.id]?.belay ?? defaultAnnotationColourForTarget('belay'),
+              bolt: lastStampColorByPhoto[photo.id]?.bolt ?? defaultAnnotationColourForTarget('bolt'),
+              rappel: lastStampColorByPhoto[photo.id]?.rappel ?? defaultAnnotationColourForTarget('rappel'),
+              start: lastStampColorByPhoto[photo.id]?.start ?? defaultAnnotationColourForTarget('start'),
+            }}
         />
       </SafeAreaView>
     </View>

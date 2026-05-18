@@ -28,6 +28,11 @@ describe('annotation colour helpers', () => {
 
   it('returns target-specific defaults', () => {
     expect(defaultAnnotationColourForTarget('label')).toBe('#111827');
+    expect(defaultAnnotationColourForTarget('line')).toBe('#FACC15');
+    expect(defaultAnnotationColourForTarget('bolt')).toBe('#FACC15');
+    expect(defaultAnnotationColourForTarget('rappel')).toBe('#FACC15');
+    expect(defaultAnnotationColourForTarget('belay')).toBe('#FACC15');
+    expect(defaultAnnotationColourForTarget('start')).toBe('#FACC15');
   });
 
   it('parses hex colours and calculates WCAG contrast', () => {
