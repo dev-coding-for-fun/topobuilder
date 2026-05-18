@@ -95,13 +95,56 @@ export function SelectedLabelHandles({
         y={bounds.y}
       />
       {(Object.keys(handles) as Array<keyof typeof handles>).map((handle) => (
-        <Circle
-          color="#1D4ED8"
-          cx={handles[handle].x}
-          cy={handles[handle].y}
-          key={handle}
-          r={LABEL_HANDLE_RADIUS}
-        />
+        <Group key={handle}>
+          <Circle
+            color="#1D4ED8"
+            cx={handles[handle].x}
+            cy={handles[handle].y}
+            r={LABEL_HANDLE_RADIUS}
+          />
+          {handle === 'move' ? (
+            <Group>
+              <Line
+                color="#F8FAFC"
+                p1={{ x: handles[handle].x - 4, y: handles[handle].y }}
+                p2={{ x: handles[handle].x + 4, y: handles[handle].y }}
+                strokeCap="round"
+                strokeWidth={2}
+              />
+              <Line
+                color="#F8FAFC"
+                p1={{ x: handles[handle].x, y: handles[handle].y - 4 }}
+                p2={{ x: handles[handle].x, y: handles[handle].y + 4 }}
+                strokeCap="round"
+                strokeWidth={2}
+              />
+            </Group>
+          ) : (
+            <Group>
+              <Line
+                color="#F8FAFC"
+                p1={{ x: handles[handle].x - 4, y: handles[handle].y + 1 }}
+                p2={{ x: handles[handle].x + 1, y: handles[handle].y + 1 }}
+                strokeCap="round"
+                strokeWidth={2}
+              />
+              <Line
+                color="#F8FAFC"
+                p1={{ x: handles[handle].x + 1, y: handles[handle].y - 4 }}
+                p2={{ x: handles[handle].x + 1, y: handles[handle].y + 1 }}
+                strokeCap="round"
+                strokeWidth={2}
+              />
+              <Line
+                color="#F8FAFC"
+                p1={{ x: handles[handle].x - 4, y: handles[handle].y - 4 }}
+                p2={{ x: handles[handle].x + 3, y: handles[handle].y + 3 }}
+                strokeCap="round"
+                strokeWidth={2}
+              />
+            </Group>
+          )}
+        </Group>
       ))}
     </Group>
   );

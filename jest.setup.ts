@@ -18,5 +18,8 @@ jest.mock('@shopify/react-native-skia', () => ({
       }),
     },
   },
+  useFont: () => ({
+    measureText: jest.fn(() => ({ width: 0 })),
+  }),
   useImage: () => null,
 }));

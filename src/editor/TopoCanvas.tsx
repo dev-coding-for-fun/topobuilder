@@ -375,6 +375,16 @@ export function TopoCanvas({
     const handle = findNearestLabelHandle(bounds, target, LABEL_HANDLE_HIT_RADIUS);
 
     if (handle) {
+      if (handle.handle === 'move') {
+        const anchor = denormalizePoint(selectedLabel.point, displaySize);
+        labelDragModeRef.current = 'move';
+        labelMoveOffsetRef.current = {
+          x: target.x - anchor.x,
+          y: target.y - anchor.y,
+        };
+        return;
+      }
+
       labelDragModeRef.current = 'resize';
       const center = labelBoundsCenter(bounds);
       labelResizeStartRef.current = {
@@ -384,17 +394,7 @@ export function TopoCanvas({
       return;
     }
 
-    if (!containsPoint(bounds, target)) {
-      labelDragModeRef.current = 'none';
-      return;
-    }
-
-    const anchor = denormalizePoint(selectedLabel.point, displaySize);
-    labelDragModeRef.current = 'move';
-    labelMoveOffsetRef.current = {
-      x: target.x - anchor.x,
-      y: target.y - anchor.y,
-    };
+    labelDragModeRef.current = 'none';
   };
 
   const moveLabelRef = useRef<
@@ -751,15 +751,17 @@ export function TopoCanvas({
               ) : (
                 <Rect x={0} y={0} width={imageFit.width} height={imageFit.height} color="#CBD5E1" />
               )}
-              {annotations.map((annotation) => (
-                <AnnotationShape
-                  annotation={annotation}
-                  key={annotation.id}
-                  routeMarkerFont={routeMarkerFont}
-                  imageScale={imageFit.scale}
-                  size={renderableSize}
-                />
-              ))}
+              {annotations
+                .filter((annotation) => annotation.id !== selectedLabel?.id)
+                .map((annotation) => (
+                  <AnnotationShape
+                    annotation={annotation}
+                    key={annotation.id}
+                    routeMarkerFont={routeMarkerFont}
+                    imageScale={imageFit.scale}
+                    size={renderableSize}
+                  />
+                ))}
               {selectedPath ? <SelectedPathHandles points={selectedPath.points} size={renderableSize} /> : null}
               {selectedLabel ? (
                 <SelectedLabelHandles
@@ -824,8 +826,6 @@ const styles = StyleSheet.create({
   },
   labelInput: {
     backgroundColor: 'rgba(248, 250, 252, 0.18)',
-    borderColor: '#1D4ED8',
-    borderWidth: 1,
     fontWeight: '700',
     padding: 0,
     position: 'absolute',

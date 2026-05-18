@@ -16,7 +16,7 @@ export type LabelBounds = {
   height: number;
 };
 
-export type LabelResizeHandle = 'topRight';
+export type LabelHandle = 'move' | 'resize';
 
 export function clampLabelFontSize(fontSize: number) {
   return clamp(fontSize, MIN_LABEL_FONT_SIZE, MAX_LABEL_FONT_SIZE);
@@ -81,9 +81,10 @@ export function labelBoundsCenter(bounds: LabelBounds) {
   };
 }
 
-export function labelHandlePoints(bounds: LabelBounds): Record<LabelResizeHandle, { x: number; y: number }> {
+export function labelHandlePoints(bounds: LabelBounds): Record<LabelHandle, { x: number; y: number }> {
   return {
-    topRight: { x: bounds.x + bounds.width, y: bounds.y },
+    move: { x: bounds.x, y: bounds.y },
+    resize: { x: bounds.x + bounds.width, y: bounds.y + bounds.height },
   };
 }
 
@@ -92,10 +93,10 @@ export function findNearestLabelHandle(
   point: { x: number; y: number },
   tolerance: number,
 ) {
-  let best: { handle: LabelResizeHandle; distance: number } | undefined;
+  let best: { handle: LabelHandle; distance: number } | undefined;
   const handles = labelHandlePoints(bounds);
 
-  (Object.keys(handles) as LabelResizeHandle[]).forEach((handle) => {
+  (Object.keys(handles) as LabelHandle[]).forEach((handle) => {
     const distance = pointDistance(point, handles[handle]);
     if (distance <= tolerance && (!best || distance < best.distance)) {
       best = { handle, distance };
