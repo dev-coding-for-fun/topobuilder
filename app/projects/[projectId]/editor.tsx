@@ -1,6 +1,6 @@
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StatusBar, StyleSheet, Text, View } from 'react-native';
+import { Keyboard, KeyboardEvent, StatusBar, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
@@ -39,14 +39,16 @@ const CONTROL_POINT_MIN_DISTANCE = 44;
 
 export default function EditorScreen() {
   const { projectId, photoId } = useLocalSearchParams<{ projectId: string; photoId: string }>();
+  const { height: windowHeight } = useWindowDimensions();
   const { loadProject, addAnnotation, addPathAnnotation, updateAnnotation, removeAnnotation } = useTopoStore();
   const [project, setProject] = useState<TopoProject>();
-  const [activeTool, setActiveTool] = useState<EditorTool>('climbLine');
+  const [activeTool, setActiveTool] = useState<EditorTool>('select');
   const [draftPoints, setDraftPoints] = useState<NormalizedPoint[]>([]);
   const [selectedPathId, setSelectedPathId] = useState<string>();
   const [editingPathPoints, setEditingPathPoints] = useState<NormalizedPoint[]>();
   const [selectedLabelId, setSelectedLabelId] = useState<string>();
   const [editingLabel, setEditingLabel] = useState<MarkerAnnotation>();
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [lastLabelColorByPhoto, setLastLabelColorByPhoto] = useState<Record<string, string>>({});
   const draftPointsRef = useRef<NormalizedPoint[]>([]);
   const draftKindRef = useRef<PathAnnotationKind | undefined>(undefined);
@@ -72,6 +74,25 @@ export default function EditorScreen() {
   useEffect(() => {
     editingLabelRef.current = editingLabel;
   }, [editingLabel]);
+
+  useEffect(() => {
+    function updateKeyboardHeight(event: KeyboardEvent) {
+      const keyboardTop = event.endCoordinates.screenY;
+      const heightFromScreenY = windowHeight > keyboardTop ? windowHeight - keyboardTop : 0;
+      const nextHeight = heightFromScreenY > 0 ? heightFromScreenY : event.endCoordinates.height;
+      setKeyboardHeight(Math.max(0, Math.min(nextHeight, windowHeight)));
+    }
+
+    const subscriptions = [
+      Keyboard.addListener('keyboardDidShow', updateKeyboardHeight),
+      Keyboard.addListener('keyboardDidChangeFrame', updateKeyboardHeight),
+      Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0)),
+    ];
+
+    return () => {
+      subscriptions.forEach((subscription) => subscription.remove());
+    };
+  }, [windowHeight]);
 
   const refresh = useCallback(async () => {
     if (projectId) {
@@ -435,30 +456,36 @@ export default function EditorScreen() {
     lastLabelColorByPhoto[photo.id] ??
     defaultAnnotationColourForTarget('label');
   const canChooseAnnotationColor = activeTool === 'label' || Boolean(selectedLabelId);
+  const isKeyboardEditingLabel = Boolean(selectedLabelId && keyboardHeight > 0);
 
   return (
     <View style={styles.root}>
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar barStyle="light-content" />
-      <TopoCanvas
-        activeTool={activeTool}
-        annotations={annotations}
-        onBeginPathDraft={beginPathDraft}
-        onChangeSelectedLabelText={changeSelectedLabelText}
-        onCommitSelectedLabelEdit={commitSelectedLabelEdit}
-        onCommitSelectedPathEdit={commitSelectedPathEdit}
-        onExtendPathDraft={extendPathDraft}
-        onFinishPathDraft={finishPathDraft}
-        onMoveSelectedLabel={moveSelectedLabel}
-        onMoveSelectedPathPoint={moveSelectedPathPoint}
-        onPlaceAnnotation={handlePlace}
-        onResizeSelectedLabel={resizeSelectedLabel}
-        onSelectLabel={selectLabel}
-        onSelectPath={selectPath}
-        photo={photo}
-        selectedLabelId={selectedLabelId}
-        selectedPathId={selectedPathId}
-      />
+      <View
+        style={[styles.canvasRegion, isKeyboardEditingLabel ? { marginBottom: keyboardHeight } : null]}
+        testID="editor-canvas-region"
+      >
+        <TopoCanvas
+          activeTool={activeTool}
+          annotations={annotations}
+          onBeginPathDraft={beginPathDraft}
+          onChangeSelectedLabelText={changeSelectedLabelText}
+          onCommitSelectedLabelEdit={commitSelectedLabelEdit}
+          onCommitSelectedPathEdit={commitSelectedPathEdit}
+          onExtendPathDraft={extendPathDraft}
+          onFinishPathDraft={finishPathDraft}
+          onMoveSelectedLabel={moveSelectedLabel}
+          onMoveSelectedPathPoint={moveSelectedPathPoint}
+          onPlaceAnnotation={handlePlace}
+          onResizeSelectedLabel={resizeSelectedLabel}
+          onSelectLabel={selectLabel}
+          onSelectPath={selectPath}
+          photo={photo}
+          selectedLabelId={selectedLabelId}
+          selectedPathId={selectedPathId}
+        />
+      </View>
       <SafeAreaView edges={['top']} pointerEvents="box-none" style={styles.topOverlay}>
         <EditorTopBar
           canRedo={false}
@@ -470,7 +497,12 @@ export default function EditorScreen() {
           onUndo={handleUndo}
         />
       </SafeAreaView>
-      <SafeAreaView edges={['bottom']} pointerEvents="box-none" style={styles.bottomOverlay}>
+      <SafeAreaView
+        edges={['bottom']}
+        pointerEvents="box-none"
+        style={[styles.bottomOverlay, isKeyboardEditingLabel ? styles.hiddenBottomOverlay : null]}
+        testID="editor-bottom-overlay"
+      >
         {canChooseAnnotationColor ? (
           <AnnotationColorControl
             currentColor={currentLabelColor}
@@ -501,9 +533,15 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 0,
   },
+  canvasRegion: {
+    flex: 1,
+  },
   center: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  hiddenBottomOverlay: {
+    display: 'none',
   },
   loadingText: {
     color: '#F8FAFC',

@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { Keyboard, StyleSheet } from 'react-native';
 
 import type { NormalizedPoint, TopoProject } from '@/domain/types';
 import { TopoCanvas } from '@/editor/TopoCanvas';
@@ -51,9 +52,21 @@ const project: TopoProject = {
   annotations: [],
 };
 
+type KeyboardListener = (event: { endCoordinates: { height: number; screenY: number } }) => void;
+
+const keyboardListeners = new Map<string, KeyboardListener[]>();
+
 function latestCanvasProps() {
   const calls = (TopoCanvas as jest.Mock).mock.calls;
   return calls[calls.length - 1][0] as React.ComponentProps<typeof TopoCanvas>;
+}
+
+function emitKeyboardEvent(eventName: string, height: number, screenY: number) {
+  act(() => {
+    keyboardListeners.get(eventName)?.forEach((listener) => {
+      listener({ endCoordinates: { height, screenY } });
+    });
+  });
 }
 
 describe('EditorScreen label editing', () => {
@@ -65,6 +78,20 @@ describe('EditorScreen label editing', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    keyboardListeners.clear();
+    jest.spyOn(Keyboard, 'addListener').mockImplementation((eventName, listener) => {
+      const listeners = keyboardListeners.get(eventName) ?? [];
+      listeners.push(listener as KeyboardListener);
+      keyboardListeners.set(eventName, listeners);
+      return {
+        remove: jest.fn(() => {
+          keyboardListeners.set(
+            eventName,
+            (keyboardListeners.get(eventName) ?? []).filter((item) => item !== listener),
+          );
+        }),
+      } as unknown as ReturnType<typeof Keyboard.addListener>;
+    });
     loadProject.mockResolvedValue(project);
     addAnnotation.mockImplementation(
       async (input: { color?: string; labelFontSize?: number; point?: NormalizedPoint }) => ({
@@ -89,6 +116,10 @@ describe('EditorScreen label editing', () => {
       removeAnnotation,
       updateAnnotation,
     });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('saves a non-empty label when tapping away', async () => {
@@ -169,5 +200,27 @@ describe('EditorScreen label editing', () => {
     });
 
     expect(addAnnotation).toHaveBeenLastCalledWith(expect.objectContaining({ color: '#DC2626' }));
+  });
+
+  it('resizes the canvas region and hides bottom controls while editing text with the keyboard open', async () => {
+    render(<EditorScreen />);
+    await waitFor(() => expect(TopoCanvas).toHaveBeenCalled());
+
+    await act(async () => {
+      await latestCanvasProps().onPlaceAnnotation('label', { x: 0.2, y: 0.8 }, { labelFontSize: 24 });
+    });
+
+    emitKeyboardEvent('keyboardDidShow', 320, 480);
+
+    expect(StyleSheet.flatten(screen.getByTestId('editor-canvas-region').props.style).marginBottom).toBeGreaterThan(0);
+    expect(
+      StyleSheet.flatten(screen.getByTestId('editor-bottom-overlay', { includeHiddenElements: true }).props.style)
+        .display,
+    ).toBe('none');
+
+    emitKeyboardEvent('keyboardDidHide', 0, 800);
+
+    expect(StyleSheet.flatten(screen.getByTestId('editor-canvas-region').props.style).marginBottom).toBeUndefined();
+    expect(StyleSheet.flatten(screen.getByTestId('editor-bottom-overlay').props.style).display).toBeUndefined();
   });
 });
