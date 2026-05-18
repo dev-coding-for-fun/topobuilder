@@ -1,6 +1,7 @@
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
+import { annotationsForPhoto, isPathAnnotation } from '@/domain/annotationFactory';
 import type { Annotation, NormalizedPoint, PhotoAsset, TopoProject } from '@/domain/types';
 import { labelFontSize, labelText, measureLabelText, splitLabelLines } from '@/domain/textLabels';
 
@@ -13,7 +14,7 @@ function escapeHtml(value: string) {
 }
 
 function annotationSvg(annotation: Annotation, photo: PhotoAsset) {
-  if ('points' in annotation) {
+  if (isPathAnnotation(annotation)) {
     const path = smoothedPathData(annotation.points, photo);
     const dash = annotation.kind === 'walkoff' ? 'stroke-dasharray="8 10"' : annotation.kind === 'scramble' ? 'stroke-dasharray="16 8"' : '';
     return `<path d="${path}" fill="none" stroke="${annotation.color}" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" ${dash} />`;
@@ -71,7 +72,7 @@ function smoothedPathData(points: NormalizedPoint[], photo: PhotoAsset) {
 }
 
 export async function exportTopoPdf(project: TopoProject, photo: PhotoAsset) {
-  const annotations = project.annotations.filter((annotation) => annotation.photoId === photo.id);
+  const annotations = annotationsForPhoto(project.annotations, photo.id);
   const overlay = annotations.map((annotation) => annotationSvg(annotation, photo)).join('');
   const html = `
     <!doctype html>

@@ -1,13 +1,8 @@
 import {
   Canvas,
-  Circle,
   Group,
   Image as SkiaImage,
-  Line,
-  Path,
   Rect,
-  Skia,
-  Text as SkiaText,
   useFont,
   useImage,
 } from '@shopify/react-native-skia';
@@ -26,14 +21,13 @@ import {
   pointDistance,
   screenToNormalizedImagePoint,
 } from '@/domain/geometry';
-import { isPathKind } from '@/domain/annotationFactory';
+import { isLabelAnnotation, isPathAnnotation, isPathKind } from '@/domain/annotationFactory';
 import {
   DEFAULT_SCREEN_LABEL_FONT_SIZE,
   containsPoint,
-  displayFontSize,
   findNearestLabelHandle,
+  labelBoundsCenter,
   labelFontSize,
-  labelHandlePoints,
   labelText,
   measureLabelBounds,
   moveLabelPoint,
@@ -49,16 +43,20 @@ import type {
   NormalizedPoint,
   PhotoAsset,
 } from '@/domain/types';
+import {
+  AnnotationShape,
+  NativeLabel,
+  screenFrameForLabel,
+  SelectedLabelHandles,
+  SelectedPathHandles,
+} from '@/editor/AnnotationShapes';
 
 const MAX_ZOOM = 6;
 const TAP_MAX_DELTA = 10;
 const LINE_HIT_RADIUS = 28;
 const HANDLE_HIT_RADIUS = 32;
-const HANDLE_RADIUS = 9;
-const STAMP_RED = '#C91F37';
-const STAMP_WHITE = '#F8FAFC';
 const LABEL_HANDLE_HIT_RADIUS = 34;
-const LABEL_HANDLE_RADIUS = 8;
+const LABEL_BOUNDS_HIT_PADDING = 8;
 
 type GestureMode = 'draw' | 'editPath' | 'editLabel' | 'pan';
 type LabelDragMode = 'move' | 'resize' | 'none';
@@ -156,7 +154,8 @@ export function TopoCanvas({
   const pathAnnotations = useMemo(
     () =>
       annotations.filter(
-        (annotation): annotation is PathAnnotation => 'points' in annotation && annotation.id !== 'draft',
+        (annotation): annotation is PathAnnotation =>
+          isPathAnnotation(annotation) && annotation.id !== 'draft',
       ),
     [annotations],
   );
@@ -164,7 +163,7 @@ export function TopoCanvas({
     () =>
       annotations.filter(
         (annotation): annotation is MarkerAnnotation =>
-          'point' in annotation && annotation.kind === 'label' && annotation.id !== 'draft',
+          isLabelAnnotation(annotation) && annotation.id !== 'draft',
       ),
     [annotations],
   );
@@ -228,48 +227,42 @@ export function TopoCanvas({
 
     if (activeTool === 'select') {
       const target = denormalizePoint(point, displaySize);
-      const labelHit = [...labelAnnotations]
-        .reverse()
-        .map((annotation) => {
-          const bounds = measureLabelBounds({
-            point: annotation.point,
-            text: labelText(annotation),
-            fontSize: labelFontSize(annotation) * imageFit.scale * viewScale,
-            size: displaySize,
-          });
-          return { annotation, bounds };
-        })
-        .find((item) => {
-          const paddedBounds = {
-            x: item.bounds.x - LABEL_HANDLE_RADIUS,
-            y: item.bounds.y - LABEL_HANDLE_RADIUS,
-            width: item.bounds.width + LABEL_HANDLE_RADIUS * 2,
-            height: item.bounds.height + LABEL_HANDLE_RADIUS * 2,
-          };
-          return (
-            target.x >= paddedBounds.x &&
-            target.x <= paddedBounds.x + paddedBounds.width &&
-            target.y >= paddedBounds.y &&
-            target.y <= paddedBounds.y + paddedBounds.height
-          );
+      let labelHit: MarkerAnnotation | undefined;
+      for (let index = labelAnnotations.length - 1; index >= 0; index -= 1) {
+        const annotation = labelAnnotations[index];
+        const bounds = measureLabelBounds({
+          point: annotation.point,
+          text: labelText(annotation),
+          fontSize: labelFontSize(annotation) * imageFit.scale * viewScale,
+          size: displaySize,
         });
+        const paddedBounds = {
+          x: bounds.x - LABEL_BOUNDS_HIT_PADDING,
+          y: bounds.y - LABEL_BOUNDS_HIT_PADDING,
+          width: bounds.width + LABEL_BOUNDS_HIT_PADDING * 2,
+          height: bounds.height + LABEL_BOUNDS_HIT_PADDING * 2,
+        };
+        if (containsPoint(paddedBounds, target)) {
+          labelHit = annotation;
+          break;
+        }
+      }
+
       if (labelHit) {
-        onSelectLabel(labelHit.annotation.id);
+        onSelectLabel(labelHit.id);
         onSelectPath(undefined);
         return;
       }
 
-      const hit = pathAnnotations
-        .map((annotation) => ({
-          annotation,
-          hit: findNearestPolylineSegment(annotation.points, point, displaySize, LINE_HIT_RADIUS),
-        }))
-        .filter((item): item is { annotation: PathAnnotation; hit: { index: number; distance: number } } =>
-          Boolean(item.hit),
-        )
-        .sort((a, b) => a.hit.distance - b.hit.distance)[0];
+      let bestPathHit: { annotation: PathAnnotation; distance: number } | undefined;
+      for (const annotation of pathAnnotations) {
+        const hit = findNearestPolylineSegment(annotation.points, point, displaySize, LINE_HIT_RADIUS);
+        if (hit && (!bestPathHit || hit.distance < bestPathHit.distance)) {
+          bestPathHit = { annotation, distance: hit.distance };
+        }
+      }
 
-      onSelectPath(hit?.annotation.id, hit?.annotation.points);
+      onSelectPath(bestPathHit?.annotation.id, bestPathHit?.annotation.points);
       onSelectLabel(undefined);
       return;
     }
@@ -380,10 +373,7 @@ export function TopoCanvas({
 
     if (handle) {
       labelDragModeRef.current = 'resize';
-      const center = {
-        x: bounds.x + bounds.width / 2,
-        y: bounds.y + bounds.height / 2,
-      };
+      const center = labelBoundsCenter(bounds);
       labelResizeStartRef.current = {
         distance: Math.max(1, pointDistance(target, center)),
         fontSize: labelFontSize(selectedLabel),
@@ -427,10 +417,7 @@ export function TopoCanvas({
       fontSize,
       size: displaySize,
     });
-    const center = {
-      x: bounds.x + bounds.width / 2,
-      y: bounds.y + bounds.height / 2,
-    };
+    const center = labelBoundsCenter(bounds);
     const nextDistance = Math.max(1, pointDistance(target, center));
     const start = labelResizeStartRef.current;
     onResizeSelectedLabel(start.fontSize * (nextDistance / start.distance));
@@ -728,10 +715,13 @@ export function TopoCanvas({
     [scale, tx, ty],
   );
 
-  const renderableSize = {
-    width: imageFit.width,
-    height: imageFit.height,
-  };
+  const renderableSize = useMemo(
+    () => ({
+      width: imageFit.width,
+      height: imageFit.height,
+    }),
+    [imageFit.height, imageFit.width],
+  );
   const selectedLabelFrame = selectedLabel
     ? screenFrameForLabel({
         annotation: selectedLabel,
@@ -758,7 +748,7 @@ export function TopoCanvas({
               ) : (
                 <Rect x={0} y={0} width={imageFit.width} height={imageFit.height} color="#CBD5E1" />
               )}
-              {annotations.filter((annotation) => !('point' in annotation && annotation.kind === 'label')).map((annotation) => (
+              {annotations.filter((annotation) => !isLabelAnnotation(annotation)).map((annotation) => (
                 <AnnotationShape
                   annotation={annotation}
                   key={annotation.id}
@@ -820,352 +810,6 @@ export function TopoCanvas({
   );
 }
 
-function SelectedPathHandles({
-  points,
-  size,
-}: {
-  points: NormalizedPoint[];
-  size: { width: number; height: number };
-}) {
-  return (
-    <Group>
-      {points.map((point, index) => {
-        const next = denormalizePoint(point, size);
-        return (
-          <Group key={`${point.x}-${point.y}-${index}`}>
-            <Circle color="#0F172A" cx={next.x} cy={next.y} r={HANDLE_RADIUS + 3} />
-            <Circle color="#F8FAFC" cx={next.x} cy={next.y} r={HANDLE_RADIUS} />
-            <Circle color="#1D4ED8" cx={next.x} cy={next.y} r={HANDLE_RADIUS - 4} />
-          </Group>
-        );
-      })}
-    </Group>
-  );
-}
-
-function SelectedLabelHandles({
-  annotation,
-  imageScale,
-  size,
-}: {
-  annotation: MarkerAnnotation;
-  imageScale: number;
-  size: { width: number; height: number };
-}) {
-  const bounds = measureLabelBounds({
-    point: annotation.point,
-    text: labelText(annotation),
-    fontSize: displayFontSize(labelFontSize(annotation), { scale: imageScale }),
-    size,
-  });
-  const handles = labelHandlePoints(bounds);
-
-  return (
-    <Group>
-      <Rect
-        color="#1D4ED8"
-        height={bounds.height}
-        style="stroke"
-        strokeWidth={2}
-        width={bounds.width}
-        x={bounds.x}
-        y={bounds.y}
-      />
-      {(Object.keys(handles) as Array<keyof typeof handles>).map((handle) => (
-        <Circle
-          color="#1D4ED8"
-          cx={handles[handle].x}
-          cy={handles[handle].y}
-          key={handle}
-          r={LABEL_HANDLE_RADIUS}
-        />
-      ))}
-    </Group>
-  );
-}
-
-function AnnotationShape({
-  annotation,
-  imageScale,
-  routeMarkerFont,
-  size,
-}: {
-  annotation: Annotation;
-  imageScale: number;
-  routeMarkerFont: ReturnType<typeof useFont>;
-  size: { width: number; height: number };
-}) {
-  if ('points' in annotation) {
-    const path = makeSmoothedPath(annotation.points, size);
-
-    return (
-      <Path
-        color={annotation.color}
-        path={path}
-        strokeCap="round"
-        strokeJoin="round"
-        strokeWidth={annotation.kind === 'climbLine' ? 5 : 4}
-        style="stroke"
-      />
-    );
-  }
-
-  const point = denormalizePoint(annotation.point, size);
-
-  if (annotation.kind === 'label') {
-    return null;
-  }
-
-  if (annotation.kind === 'bolt') {
-    return (
-      <Group>
-        <Line
-          color={STAMP_WHITE}
-          p1={{ x: point.x - 8, y: point.y - 8 }}
-          p2={{ x: point.x + 8, y: point.y + 8 }}
-          strokeCap="round"
-          strokeWidth={5}
-        />
-        <Line
-          color={STAMP_WHITE}
-          p1={{ x: point.x + 8, y: point.y - 8 }}
-          p2={{ x: point.x - 8, y: point.y + 8 }}
-          strokeCap="round"
-          strokeWidth={5}
-        />
-        <Line
-          color={STAMP_RED}
-          p1={{ x: point.x - 8, y: point.y - 8 }}
-          p2={{ x: point.x + 8, y: point.y + 8 }}
-          strokeCap="round"
-          strokeWidth={3}
-        />
-        <Line
-          color={STAMP_RED}
-          p1={{ x: point.x + 8, y: point.y - 8 }}
-          p2={{ x: point.x - 8, y: point.y + 8 }}
-          strokeCap="round"
-          strokeWidth={3}
-        />
-      </Group>
-    );
-  }
-
-  if (annotation.kind === 'rappel' || annotation.kind === 'belay') {
-    return (
-      <Group>
-        <Circle color={STAMP_RED} cx={point.x} cy={point.y} r={10} />
-        <Circle
-          color={STAMP_WHITE}
-          cx={point.x}
-          cy={point.y}
-          r={10}
-          strokeWidth={3}
-          style="stroke"
-        />
-        {annotation.kind === 'rappel' ? (
-          <Group>
-            <Line
-              color={STAMP_WHITE}
-              p1={{ x: point.x, y: point.y + 10 }}
-              p2={{ x: point.x, y: point.y + 24 }}
-              strokeCap="round"
-              strokeWidth={5}
-            />
-            <Line
-              color={STAMP_WHITE}
-              p1={{ x: point.x, y: point.y + 24 }}
-              p2={{ x: point.x - 5, y: point.y + 18 }}
-              strokeCap="round"
-              strokeWidth={5}
-            />
-            <Line
-              color={STAMP_WHITE}
-              p1={{ x: point.x, y: point.y + 24 }}
-              p2={{ x: point.x + 5, y: point.y + 18 }}
-              strokeCap="round"
-              strokeWidth={5}
-            />
-            <Line
-              color={STAMP_RED}
-              p1={{ x: point.x, y: point.y + 10 }}
-              p2={{ x: point.x, y: point.y + 24 }}
-              strokeCap="round"
-              strokeWidth={3}
-            />
-            <Line
-              color={STAMP_RED}
-              p1={{ x: point.x, y: point.y + 24 }}
-              p2={{ x: point.x - 5, y: point.y + 18 }}
-              strokeCap="round"
-              strokeWidth={3}
-            />
-            <Line
-              color={STAMP_RED}
-              p1={{ x: point.x, y: point.y + 24 }}
-              p2={{ x: point.x + 5, y: point.y + 18 }}
-              strokeCap="round"
-              strokeWidth={3}
-            />
-          </Group>
-        ) : null}
-      </Group>
-    );
-  }
-
-  if (annotation.kind === 'start') {
-    const label = (annotation.label ?? '12').slice(0, 2);
-    const textWidth = routeMarkerFont?.measureText(label).width ?? 0;
-
-    return (
-      <Group>
-        <Circle color={STAMP_RED} cx={point.x} cy={point.y} r={15} />
-        <Circle
-          color={STAMP_WHITE}
-          cx={point.x}
-          cy={point.y}
-          r={15}
-          strokeWidth={3}
-          style="stroke"
-        />
-        {routeMarkerFont ? (
-          <SkiaText
-            color={STAMP_WHITE}
-            font={routeMarkerFont}
-            text={label}
-            x={point.x - textWidth / 2}
-            y={point.y + 6}
-          />
-        ) : null}
-      </Group>
-    );
-  }
-
-  if (annotation.kind === 'arrow') {
-    return (
-      <Group>
-        <Line
-          color={annotation.color}
-          p1={{ x: point.x - 18, y: point.y + 18 }}
-          p2={{ x: point.x + 18, y: point.y - 18 }}
-          strokeWidth={4}
-        />
-        <Line
-          color={annotation.color}
-          p1={{ x: point.x + 18, y: point.y - 18 }}
-          p2={{ x: point.x + 4, y: point.y - 18 }}
-          strokeWidth={4}
-        />
-      </Group>
-    );
-  }
-
-  return (
-    <Group>
-      <Circle color="#FFFFFF" cx={point.x} cy={point.y} r={12} />
-      <Circle color={annotation.color} cx={point.x} cy={point.y} r={8} />
-    </Group>
-  );
-}
-
-function screenFrameForLabel({
-  annotation,
-  imageFit,
-  transform,
-}: {
-  annotation: MarkerAnnotation;
-  imageFit: { offsetX: number; offsetY: number; scale: number; width: number; height: number };
-  transform: { scale: number; tx: number; ty: number };
-}) {
-  const fontSize = labelFontSize(annotation) * imageFit.scale * transform.scale;
-  const bounds = measureLabelBounds({
-    point: annotation.point,
-    text: labelText(annotation),
-    fontSize,
-    size: {
-      width: imageFit.width * transform.scale,
-      height: imageFit.height * transform.scale,
-    },
-  });
-  const x = transform.scale * (imageFit.offsetX + annotation.point.x * imageFit.width) + transform.tx;
-  const y = transform.scale * (imageFit.offsetY + annotation.point.y * imageFit.height) + transform.ty;
-
-  return {
-    fontSize,
-    height: bounds.height,
-    lineHeight: fontSize * 1.2,
-    width: bounds.width,
-    x,
-    y,
-  };
-}
-
-function NativeLabel({
-  annotation,
-  imageFit,
-  transform,
-}: {
-  annotation: MarkerAnnotation;
-  imageFit: { offsetX: number; offsetY: number; scale: number; width: number; height: number };
-  transform: { scale: number; tx: number; ty: number };
-}) {
-  const frame = screenFrameForLabel({ annotation, imageFit, transform });
-
-  return (
-    <Text
-      pointerEvents="none"
-      style={[
-        styles.nativeLabel,
-        {
-          color: annotation.color,
-          fontSize: frame.fontSize,
-          left: frame.x,
-          lineHeight: frame.lineHeight,
-          minWidth: frame.width,
-          top: frame.y,
-        },
-      ]}
-    >
-      {labelText(annotation)}
-    </Text>
-  );
-}
-
-function makeSmoothedPath(points: NormalizedPoint[], size: { width: number; height: number }) {
-  const path = Skia.Path.Make();
-  const drawingPoints = points.map((point) => denormalizePoint(point, size));
-  const first = drawingPoints[0];
-
-  if (!first) {
-    return path;
-  }
-
-  path.moveTo(first.x, first.y);
-
-  if (drawingPoints.length === 2) {
-    const last = drawingPoints[1];
-    path.lineTo(last.x, last.y);
-    return path;
-  }
-
-  for (let index = 1; index < drawingPoints.length - 1; index += 1) {
-    const control = drawingPoints[index];
-    const next = drawingPoints[index + 1];
-    const midpoint = {
-      x: (control.x + next.x) / 2,
-      y: (control.y + next.y) / 2,
-    };
-    path.quadTo(control.x, control.y, midpoint.x, midpoint.y);
-  }
-
-  const last = drawingPoints.at(-1);
-  if (last) {
-    path.lineTo(last.x, last.y);
-  }
-
-  return path;
-}
-
 const styles = StyleSheet.create({
   container: {
     backgroundColor: '#0F172A',
@@ -1189,11 +833,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(248, 250, 252, 0.18)',
     borderColor: '#1D4ED8',
     borderWidth: 1,
-    fontWeight: '700',
-    padding: 0,
-    position: 'absolute',
-  },
-  nativeLabel: {
     fontWeight: '700',
     padding: 0,
     position: 'absolute',

@@ -3,7 +3,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { defaultColorForKind, isPathKind } from '@/domain/annotationFactory';
+import {
+  annotationsForPhoto,
+  defaultColorForKind,
+  isLabelAnnotation,
+  isPathAnnotation,
+  isPathKind,
+} from '@/domain/annotationFactory';
 import {
   appendSampledPoint,
   finalizeSampledPoints,
@@ -73,27 +79,35 @@ export default function EditorScreen() {
   const photo = project?.photos.find((item) => item.id === photoId);
   const route = project?.routes[0];
   const savedAnnotations = useMemo(
-    () => project?.annotations.filter((annotation) => annotation.photoId === photoId) ?? [],
+    () => annotationsForPhoto(project?.annotations ?? [], photoId),
     [photoId, project?.annotations],
   );
   const annotations = useMemo(() => {
-    const editedAnnotations = savedAnnotations.map((annotation) => {
-      if (annotation.id === selectedPathId && editingPathPoints && 'points' in annotation) {
-        return { ...annotation, points: editingPathPoints };
-      }
-      if (annotation.id === selectedLabelId && editingLabel) {
-        return editingLabel;
-      }
-      return annotation;
-    });
+    const hasPathEdit = Boolean(selectedPathId && editingPathPoints);
+    const hasLabelEdit = Boolean(selectedLabelId && editingLabel);
+    const hasPathDraft =
+      Boolean(project && photo && draftPoints.length > 0) &&
+      activeTool !== 'select' &&
+      isPathKind(activeTool);
 
-    if (
-      !project ||
-      !photo ||
-      draftPoints.length === 0 ||
-      activeTool === 'select' ||
-      !isPathKind(activeTool)
-    ) {
+    if (!hasPathEdit && !hasLabelEdit && !hasPathDraft) {
+      return savedAnnotations;
+    }
+
+    const editedAnnotations =
+      hasPathEdit || hasLabelEdit
+        ? savedAnnotations.map((annotation) => {
+            if (annotation.id === selectedPathId && editingPathPoints && isPathAnnotation(annotation)) {
+              return { ...annotation, points: editingPathPoints };
+            }
+            if (annotation.id === selectedLabelId && editingLabel) {
+              return editingLabel;
+            }
+            return annotation;
+          })
+        : savedAnnotations;
+
+    if (!project || !photo || !hasPathDraft || !isPathKind(activeTool)) {
       return editedAnnotations;
     }
 
@@ -123,14 +137,13 @@ export default function EditorScreen() {
     selectedPathId,
   ]);
 
-  async function handlePlace(
-    kind: MarkerAnnotationKind,
-    point: NormalizedPoint,
-    context: { labelFontSize?: number },
-  ) {
-    if (!project || !photo) {
-      return;
-    }
+  function clearDraftState() {
+    draftKindRef.current = undefined;
+    draftPointsRef.current = [];
+    setDraftPoints([]);
+  }
+
+  function clearSelectionState() {
     selectedPathIdRef.current = undefined;
     editingPathPointsRef.current = undefined;
     selectedLabelIdRef.current = undefined;
@@ -139,6 +152,40 @@ export default function EditorScreen() {
     setEditingPathPoints(undefined);
     setSelectedLabelId(undefined);
     setEditingLabel(undefined);
+  }
+
+  function selectPathSnapshot(annotationId?: string, points?: NormalizedPoint[]) {
+    const nextPoints = points ? [...points] : undefined;
+    selectedPathIdRef.current = annotationId;
+    editingPathPointsRef.current = nextPoints;
+    selectedLabelIdRef.current = undefined;
+    editingLabelRef.current = undefined;
+    setSelectedPathId(annotationId);
+    setEditingPathPoints(nextPoints);
+    setSelectedLabelId(undefined);
+    setEditingLabel(undefined);
+  }
+
+  function selectLabelSnapshot(annotation?: MarkerAnnotation) {
+    selectedPathIdRef.current = undefined;
+    editingPathPointsRef.current = undefined;
+    selectedLabelIdRef.current = annotation?.id;
+    editingLabelRef.current = annotation;
+    setSelectedPathId(undefined);
+    setEditingPathPoints(undefined);
+    setSelectedLabelId(annotation?.id);
+    setEditingLabel(annotation);
+  }
+
+  async function handlePlace(
+    kind: MarkerAnnotationKind,
+    point: NormalizedPoint,
+    context: { labelFontSize?: number },
+  ) {
+    if (!project || !photo) {
+      return;
+    }
+    clearSelectionState();
 
     const rememberedFontSize = lastLabelFontSizeByPhotoRef.current[photo.id];
     const labelFontSize =
@@ -155,14 +202,11 @@ export default function EditorScreen() {
       label: kind === 'label' ? '' : undefined,
       labelFontSize,
     });
-    if (kind === 'label' && 'point' in annotation) {
+    if (isLabelAnnotation(annotation)) {
       lastLabelFontSizeByPhotoRef.current[photo.id] =
         annotation.labelFontSize ?? labelFontSize ?? DEFAULT_LABEL_FONT_SIZE;
-      selectedLabelIdRef.current = annotation.id;
-      editingLabelRef.current = annotation;
       setActiveTool('select');
-      setSelectedLabelId(annotation.id);
-      setEditingLabel(annotation);
+      selectLabelSnapshot(annotation);
     }
     await refresh();
   }
@@ -171,14 +215,7 @@ export default function EditorScreen() {
     if (!isPathKind(kind)) {
       return;
     }
-    selectedPathIdRef.current = undefined;
-    editingPathPointsRef.current = undefined;
-    selectedLabelIdRef.current = undefined;
-    editingLabelRef.current = undefined;
-    setSelectedPathId(undefined);
-    setEditingPathPoints(undefined);
-    setSelectedLabelId(undefined);
-    setEditingLabel(undefined);
+    clearSelectionState();
     draftKindRef.current = kind;
     draftPointsRef.current = [point];
     setDraftPoints([point]);
@@ -221,48 +258,23 @@ export default function EditorScreen() {
     draftKindRef.current = undefined;
     draftPointsRef.current = [];
     setDraftPoints([]);
-    selectedPathIdRef.current = annotation.id;
-    editingPathPointsRef.current = selectedPoints;
-    selectedLabelIdRef.current = undefined;
-    editingLabelRef.current = undefined;
     setActiveTool('select');
-    setSelectedPathId(annotation.id);
-    setEditingPathPoints(selectedPoints);
-    setSelectedLabelId(undefined);
-    setEditingLabel(undefined);
+    selectPathSnapshot(annotation.id, selectedPoints);
     await refresh();
   }
 
   function selectPath(annotationId?: string, points?: NormalizedPoint[]) {
     void commitEditingLabelSnapshot();
-    selectedPathIdRef.current = annotationId;
-    editingPathPointsRef.current = points ? [...points] : undefined;
-    selectedLabelIdRef.current = undefined;
-    editingLabelRef.current = undefined;
-    setSelectedPathId(annotationId);
-    setEditingPathPoints(points ? [...points] : undefined);
-    setSelectedLabelId(undefined);
-    setEditingLabel(undefined);
-    draftKindRef.current = undefined;
-    draftPointsRef.current = [];
-    setDraftPoints([]);
+    selectPathSnapshot(annotationId, points);
+    clearDraftState();
   }
 
   function selectLabel(annotationId?: string) {
     const annotation = savedAnnotations.find(
-      (item): item is MarkerAnnotation => item.id === annotationId && 'point' in item && item.kind === 'label',
+      (item): item is MarkerAnnotation => item.id === annotationId && isLabelAnnotation(item),
     );
-    selectedPathIdRef.current = undefined;
-    editingPathPointsRef.current = undefined;
-    selectedLabelIdRef.current = annotation?.id;
-    editingLabelRef.current = annotation;
-    setSelectedPathId(undefined);
-    setEditingPathPoints(undefined);
-    setSelectedLabelId(annotation?.id);
-    setEditingLabel(annotation);
-    draftKindRef.current = undefined;
-    draftPointsRef.current = [];
-    setDraftPoints([]);
+    selectLabelSnapshot(annotation);
+    clearDraftState();
   }
 
   function moveSelectedPathPoint(
@@ -337,7 +349,7 @@ export default function EditorScreen() {
     const annotationId = selectedPathIdRef.current;
     const points = editingPathPointsRef.current;
     const annotation = savedAnnotations.find((item) => item.id === annotationId);
-    if (!annotation || !points || !('points' in annotation)) {
+    if (!annotation || !points || !isPathAnnotation(annotation)) {
       return;
     }
 
@@ -419,17 +431,8 @@ export default function EditorScreen() {
           onSelectTool={(tool) => {
             void commitEditingLabelSnapshot();
             setActiveTool(tool);
-            setDraftPoints([]);
-            draftKindRef.current = undefined;
-            draftPointsRef.current = [];
-            selectedPathIdRef.current = undefined;
-            editingPathPointsRef.current = undefined;
-            selectedLabelIdRef.current = undefined;
-            editingLabelRef.current = undefined;
-            setSelectedPathId(undefined);
-            setEditingPathPoints(undefined);
-            setSelectedLabelId(undefined);
-            setEditingLabel(undefined);
+            clearDraftState();
+            clearSelectionState();
           }}
           selectedTool={activeTool}
         />

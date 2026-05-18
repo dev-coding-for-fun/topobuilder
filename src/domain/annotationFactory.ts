@@ -1,8 +1,10 @@
 import type {
   Annotation,
   AnnotationKind,
+  MarkerAnnotation,
   MarkerAnnotationKind,
   NormalizedPoint,
+  PathAnnotation,
   PathAnnotationKind,
 } from './types';
 import { DEFAULT_LABEL_FONT_SIZE, clampLabelFontSize } from './textLabels';
@@ -15,6 +17,22 @@ export function isPathKind(kind: AnnotationKind): kind is PathAnnotationKind {
 
 export function isMarkerKind(kind: AnnotationKind): kind is MarkerAnnotationKind {
   return !isPathKind(kind);
+}
+
+export function isPathAnnotation(annotation: Annotation): annotation is PathAnnotation {
+  return isPathKind(annotation.kind);
+}
+
+export function isMarkerAnnotation(annotation: Annotation): annotation is MarkerAnnotation {
+  return isMarkerKind(annotation.kind);
+}
+
+export function isLabelAnnotation(annotation: Annotation): annotation is MarkerAnnotation {
+  return isMarkerAnnotation(annotation) && annotation.kind === 'label';
+}
+
+export function annotationsForPhoto(annotations: Annotation[], photoId?: string) {
+  return annotations.filter((annotation) => annotation.photoId === photoId);
 }
 
 export function defaultColorForKind(kind: AnnotationKind) {
