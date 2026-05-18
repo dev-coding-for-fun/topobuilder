@@ -1,6 +1,6 @@
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { defaultColorForKind, isPathKind } from '@/domain/annotationFactory';
@@ -364,14 +364,7 @@ export default function EditorScreen() {
     if (savedAnnotations.length === 0) {
       return;
     }
-    Alert.alert(
-      'Delete last annotation?',
-      'This removes the most recent mark from this photo.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: deleteLastAnnotation },
-      ],
-    );
+    void deleteLastAnnotation();
   }
 
   if (!project || !photo) {
