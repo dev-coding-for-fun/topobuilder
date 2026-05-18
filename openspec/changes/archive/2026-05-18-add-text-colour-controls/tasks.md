@@ -26,7 +26,7 @@
 
 - [x] 4.1 Render a padded semi-transparent rectangle behind text labels according to the backdrop policy helper.
 - [x] 4.2 Keep backdrop rendering aligned with measured label bounds, explicit line breaks, and current font size.
-- [x] 4.3 Use photo-aware local background samples when practical in the editor rendering path.
+- [x] 4.3 Avoid live photo pixel sampling in the editor render path because Skia readback causes selection flashes.
 - [x] 4.4 Use the deterministic fallback backdrop policy when local samples are unavailable.
 - [x] 4.5 Do not draw or update the automatic backdrop while the native text input overlay is focused; recompute after text commit.
 - [x] 4.6 Ensure the native text input overlay remains legible while editing selected text.

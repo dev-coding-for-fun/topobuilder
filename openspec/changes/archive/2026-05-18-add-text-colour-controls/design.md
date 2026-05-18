@@ -56,8 +56,8 @@ The target users will mostly annotate photos of limestone, quartzite, and granit
   - alpha blending,
   - background sample summarization,
   - choosing the least visible backdrop that reaches the target contrast.
-- Prefer photo-aware backdrop selection when local background samples are available. Use the label bounds plus padding, sample a small bounded grid from the underlying photo region, summarize luminance with a median or robust representative colour, then evaluate black and white backdrop candidates across increasing alpha levels.
-- If background sampling is unavailable, use a deterministic fallback: assume a typical pale rock background, allow no backdrop for dark colours that already contrast well, and otherwise choose the black or white backdrop that contrasts better with the text colour at a modest default opacity.
+- Do not perform live photo pixel sampling in the editor render path. Skia image readback can cause visible black flashes during selection changes, so this version uses the deterministic fallback policy in the live editor.
+- Use a deterministic fallback: assume a typical pale rock background, allow no backdrop for dark colours that already contrast well, and otherwise choose the black or white backdrop that contrasts better with the text colour at a modest default opacity.
 - Allow no backdrop when text already reaches the target contrast against the sampled background.
 - Render the backdrop as a padded rounded rectangle behind the full text label bounds. The backdrop should be semi-transparent, not a shadow.
 - Do not draw the automatic backdrop while the native text input overlay is focused. During typing the final text bounds are still changing, so local background sampling can be inaccurate. Recompute and draw the backdrop after the text edit is committed.
@@ -77,7 +77,7 @@ The helper should blend each candidate backdrop over the sampled background, com
 
 ## Risks / Trade-offs
 
-- Reading photo pixels directly from the current rendering path may be awkward or expensive -> Keep sampling behind a small interface and provide a deterministic fallback policy.
+- Reading photo pixels directly from the current rendering path can cause visible flashing -> Do not sample pixels during live editor rendering; use the deterministic fallback policy.
 - Backdrops may make annotations look visually heavy -> Include alpha `0`, choose the minimum passing opacity, and cap the maximum opacity.
 - Local background under a label may be highly varied -> Use bounded grid sampling and median/robust summaries rather than a raw average.
 - Editor and PDF export may diverge if they cannot use identical photo samples -> Exact pixel parity is not required. Share the same helper policy and equivalent sampling inputs so the results are substantively the same.
