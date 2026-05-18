@@ -7,18 +7,20 @@ Route lines are already modeled as `PathAnnotation.points` and rendered as Skia 
 **Goals:**
 - Make `climbLine` drawing a one-finger freehand gesture.
 - Store the result as sampled normalized polyline points.
+- Render route lines with light visual smoothing based on those points.
 - Keep points far enough apart to be practical touch control handles.
 - Allow saved path control points to be edited from Select mode.
 - Preserve two-finger pan/zoom while drawing.
 
 **Non-Goals:**
-- Do not introduce Bezier curves, spline interpolation, or new path storage.
+- Do not introduce persisted Bezier curves, spline control objects, or new path storage.
 - Do not add full multi-select, point insertion/deletion, or route styling changes.
 - Do not migrate existing annotations.
 
 ## Decisions
 
-- Use polylines as the only route line shape. This keeps rendering, PDF export, and persistence compatible with existing `points_json`.
+- Use sampled points as the only route line data model. This keeps editing, PDF export, and persistence compatible with existing `points_json`.
+- Render a lightly smoothed path from sampled points. The smoothing is presentation-only; control handles and storage remain the sampled point list.
 - Sample freehand input with a minimum screen-space spacing. This lets close-up zoom capture more detail while preventing overlapping handles at normal touch sizes.
 - Use Select mode for editing saved lines. This keeps drawing and editing gestures separate: one-finger drag draws only in the line tool, while Select owns hit testing and handle dragging.
 - Add an annotation update path in the store/repository layer. Updating the existing row preserves annotation identity and avoids delete/reinsert side effects.

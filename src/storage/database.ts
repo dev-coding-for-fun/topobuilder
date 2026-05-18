@@ -59,4 +59,9 @@ export async function migrateDatabase(db: TopoDatabase) {
       FOREIGN KEY (route_id) REFERENCES routes(id) ON DELETE SET NULL
     );
   `);
+
+  const annotationColumns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(annotations)');
+  if (!annotationColumns.some((column) => column.name === 'metadata_json')) {
+    await db.execAsync('ALTER TABLE annotations ADD COLUMN metadata_json TEXT;');
+  }
 }

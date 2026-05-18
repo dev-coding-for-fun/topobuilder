@@ -5,6 +5,7 @@ import type {
   NormalizedPoint,
   PathAnnotationKind,
 } from './types';
+import { DEFAULT_LABEL_FONT_SIZE, clampLabelFontSize } from './textLabels';
 
 const pathKinds = new Set<AnnotationKind>(['climbLine', 'walkoff', 'scramble']);
 
@@ -45,6 +46,7 @@ type CreateAnnotationInput = {
   point: NormalizedPoint;
   now: string;
   label?: string;
+  labelFontSize?: number;
 };
 
 export function createAnnotation(input: CreateAnnotationInput): Annotation {
@@ -56,6 +58,10 @@ export function createAnnotation(input: CreateAnnotationInput): Annotation {
     kind: input.kind,
     color: defaultColorForKind(input.kind),
     label: input.label,
+    labelFontSize:
+      input.kind === 'label'
+        ? clampLabelFontSize(input.labelFontSize ?? DEFAULT_LABEL_FONT_SIZE)
+        : undefined,
     createdAt: input.now,
     updatedAt: input.now,
   };

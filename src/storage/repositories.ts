@@ -37,6 +37,7 @@ type AnnotationRow = {
   kind: Annotation['kind'];
   color: string;
   label: string | null;
+  metadata_json: string | null;
   point_json: string | null;
   points_json: string | null;
   created_at: string;
@@ -137,11 +138,12 @@ export async function insertRoute(db: TopoDatabase, route: Route) {
 }
 
 export async function upsertAnnotation(db: TopoDatabase, annotation: Annotation) {
+  const metadata = annotation.labelFontSize ? { labelFontSize: annotation.labelFontSize } : undefined;
   await db.runAsync(
     `
     INSERT OR REPLACE INTO annotations (
-      id, topo_id, photo_id, route_id, kind, color, label, point_json, points_json, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      id, topo_id, photo_id, route_id, kind, color, label, metadata_json, point_json, points_json, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `,
     annotation.id,
     annotation.topoId,
@@ -150,6 +152,7 @@ export async function upsertAnnotation(db: TopoDatabase, annotation: Annotation)
     annotation.kind,
     annotation.color,
     annotation.label ?? null,
+    metadata ? JSON.stringify(metadata) : null,
     'point' in annotation ? JSON.stringify(annotation.point) : null,
     'points' in annotation ? JSON.stringify(annotation.points) : null,
     annotation.createdAt,
@@ -191,6 +194,7 @@ function mapRoute(row: RouteRow): Route {
 }
 
 function mapAnnotation(row: AnnotationRow): Annotation {
+  const metadata = parseAnnotationMetadata(row.metadata_json);
   const base = {
     id: row.id,
     topoId: row.topo_id,
@@ -199,6 +203,7 @@ function mapAnnotation(row: AnnotationRow): Annotation {
     kind: row.kind,
     color: row.color,
     label: row.label ?? undefined,
+    labelFontSize: metadata.labelFontSize,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -216,4 +221,22 @@ function mapAnnotation(row: AnnotationRow): Annotation {
     kind: row.kind as Annotation['kind'] & 'bolt',
     point: row.point_json ? JSON.parse(row.point_json) : { x: 0, y: 0 },
   };
+}
+
+function parseAnnotationMetadata(value: string | null): { labelFontSize?: number } {
+  if (!value) {
+    return {};
+  }
+
+  try {
+    const metadata = JSON.parse(value) as { labelFontSize?: unknown };
+    return {
+      labelFontSize:
+        typeof metadata.labelFontSize === 'number' && Number.isFinite(metadata.labelFontSize)
+          ? metadata.labelFontSize
+          : undefined,
+    };
+  } catch {
+    return {};
+  }
 }

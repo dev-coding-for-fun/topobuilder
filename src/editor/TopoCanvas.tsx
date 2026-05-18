@@ -12,7 +12,7 @@ import {
   useImage,
 } from '@shopify/react-native-skia';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
+import { LayoutChangeEvent, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { runOnJS, useDerivedValue, useSharedValue } from 'react-native-reanimated';
 
@@ -23,12 +23,27 @@ import {
   findNearestPointIndex,
   findNearestPolylineSegment,
   minContainScale,
+  pointDistance,
   screenToNormalizedImagePoint,
 } from '@/domain/geometry';
 import { isPathKind } from '@/domain/annotationFactory';
+import {
+  DEFAULT_SCREEN_LABEL_FONT_SIZE,
+  displayFontSize,
+  findNearestLabelHandle,
+  labelFontSize,
+  labelHandlePoints,
+  labelText,
+  measureLabelBounds,
+  measureLabelText,
+  moveLabelPoint,
+  photoFontSizeFromScreen,
+  splitLabelLines,
+} from '@/domain/textLabels';
 import type {
   Annotation,
   MarkerAnnotationKind,
+  MarkerAnnotation,
   PathAnnotation,
   PathAnnotationKind,
   EditorTool,
@@ -43,8 +58,11 @@ const HANDLE_HIT_RADIUS = 32;
 const HANDLE_RADIUS = 9;
 const STAMP_RED = '#C91F37';
 const STAMP_WHITE = '#F8FAFC';
+const LABEL_HANDLE_HIT_RADIUS = 34;
+const LABEL_HANDLE_RADIUS = 8;
 
-type GestureMode = 'draw' | 'editPath' | 'pan';
+type GestureMode = 'draw' | 'editPath' | 'editLabel' | 'pan';
+type LabelDragMode = 'move' | 'resize' | 'none';
 
 type TopoCanvasProps = {
   photo: PhotoAsset;
@@ -60,8 +78,18 @@ type TopoCanvasProps = {
     point: NormalizedPoint,
     sampleSize: { width: number; height: number },
   ) => void;
-  onPlaceAnnotation: (kind: MarkerAnnotationKind, point: NormalizedPoint) => void;
+  onChangeSelectedLabelText: (text: string) => void;
+  onCommitSelectedLabelEdit: () => void;
+  onMoveSelectedLabel: (point: NormalizedPoint) => void;
+  onPlaceAnnotation: (
+    kind: MarkerAnnotationKind,
+    point: NormalizedPoint,
+    context: { labelFontSize?: number },
+  ) => void;
+  onResizeSelectedLabel: (fontSize: number) => void;
+  onSelectLabel: (annotationId?: string) => void;
   onSelectPath: (annotationId?: string, points?: NormalizedPoint[]) => void;
+  selectedLabelId?: string;
 };
 
 export function TopoCanvas({
@@ -73,9 +101,15 @@ export function TopoCanvas({
   onCommitSelectedPathEdit,
   onExtendPathDraft,
   onFinishPathDraft,
+  onChangeSelectedLabelText,
+  onCommitSelectedLabelEdit,
+  onMoveSelectedLabel,
   onMoveSelectedPathPoint,
   onPlaceAnnotation,
+  onResizeSelectedLabel,
+  onSelectLabel,
   onSelectPath,
+  selectedLabelId,
 }: TopoCanvasProps) {
   const image = useImage(photo.uri);
   const routeMarkerFont = useFont(null, 16);
@@ -115,6 +149,10 @@ export function TopoCanvas({
   // since 2.16+), so we count touches via the raw onTouchesDown/onTouchesUp callbacks.
   const activePointers = useSharedValue(0);
   const dragHandleIndexRef = useRef(-1);
+  const labelDragModeRef = useRef<LabelDragMode>('none');
+  const labelMoveOffsetRef = useRef({ x: 0, y: 0 });
+  const labelResizeStartRef = useRef({ distance: 1, fontSize: 1 });
+  const [viewport, setViewport] = useState({ scale: 1, tx: 0, ty: 0 });
   const activePathTool = activeTool !== 'select' && isPathKind(activeTool);
   const pathAnnotations = useMemo(
     () =>
@@ -123,18 +161,30 @@ export function TopoCanvas({
       ),
     [annotations],
   );
+  const labelAnnotations = useMemo(
+    () =>
+      annotations.filter(
+        (annotation): annotation is MarkerAnnotation =>
+          'point' in annotation && annotation.kind === 'label' && annotation.id !== 'draft',
+      ),
+    [annotations],
+  );
   const selectedPath = pathAnnotations.find((annotation) => annotation.id === selectedPathId);
+  const selectedLabel = labelAnnotations.find((annotation) => annotation.id === selectedLabelId);
   const gestureMode: GestureMode = activePathTool
     ? 'draw'
     : activeTool === 'select' && selectedPath
       ? 'editPath'
-      : 'pan';
+      : activeTool === 'select' && selectedLabel
+        ? 'editLabel'
+        : 'pan';
 
   // Reset zoom/pan whenever the photo changes so each topo opens at the cover view.
   useEffect(() => {
     scale.value = 1;
     tx.value = 0;
     ty.value = 0;
+    setViewport({ scale: 1, tx: 0, ty: 0 });
   }, [photo.id, scale, tx, ty]);
 
   function handleLayout(event: LayoutChangeEvent) {
@@ -173,10 +223,43 @@ export function TopoCanvas({
       return;
     }
 
+    setViewport({ scale: viewScale, tx: viewTx, ty: viewTy });
     const point = normalizedPointAt(screenX, screenY, viewTx, viewTy, viewScale);
     const displaySize = sampleSizeFor(viewScale);
 
     if (activeTool === 'select') {
+      const target = denormalizePoint(point, displaySize);
+      const labelHit = [...labelAnnotations]
+        .reverse()
+        .map((annotation) => {
+          const bounds = measureLabelBounds({
+            point: annotation.point,
+            text: labelText(annotation),
+            fontSize: labelFontSize(annotation) * imageFit.scale * viewScale,
+            size: displaySize,
+          });
+          return { annotation, bounds };
+        })
+        .find((item) => {
+          const paddedBounds = {
+            x: item.bounds.x - LABEL_HANDLE_RADIUS,
+            y: item.bounds.y - LABEL_HANDLE_RADIUS,
+            width: item.bounds.width + LABEL_HANDLE_RADIUS * 2,
+            height: item.bounds.height + LABEL_HANDLE_RADIUS * 2,
+          };
+          return (
+            target.x >= paddedBounds.x &&
+            target.x <= paddedBounds.x + paddedBounds.width &&
+            target.y >= paddedBounds.y &&
+            target.y <= paddedBounds.y + paddedBounds.height
+          );
+        });
+      if (labelHit) {
+        onSelectLabel(labelHit.annotation.id);
+        onSelectPath(undefined);
+        return;
+      }
+
       const hit = pathAnnotations
         .map((annotation) => ({
           annotation,
@@ -188,11 +271,21 @@ export function TopoCanvas({
         .sort((a, b) => a.hit.distance - b.hit.distance)[0];
 
       onSelectPath(hit?.annotation.id, hit?.annotation.points);
+      onSelectLabel(undefined);
       return;
     }
 
     if (!isPathKind(activeTool)) {
-      onPlaceAnnotation(activeTool, point);
+      onPlaceAnnotation(activeTool, point, {
+        labelFontSize:
+          activeTool === 'label'
+            ? photoFontSizeFromScreen({
+                imageFit,
+                screenFontSize: DEFAULT_SCREEN_LABEL_FONT_SIZE,
+                viewScale,
+              })
+            : undefined,
+      });
     }
   };
 
@@ -264,6 +357,81 @@ export function TopoCanvas({
     );
   };
 
+  const beginLabelDragRef = useRef<
+    (screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) => void
+  >(() => undefined);
+  beginLabelDragRef.current = (screenX, screenY, viewTx, viewTy, viewScale) => {
+    if (!selectedLabel || imageFit.width <= 0 || imageFit.height <= 0) {
+      labelDragModeRef.current = 'none';
+      return;
+    }
+
+    setViewport({ scale: viewScale, tx: viewTx, ty: viewTy });
+    const displaySize = sampleSizeFor(viewScale);
+    const point = normalizedPointAt(screenX, screenY, viewTx, viewTy, viewScale);
+    const target = denormalizePoint(point, displaySize);
+    const fontSize = labelFontSize(selectedLabel) * imageFit.scale * viewScale;
+    const bounds = measureLabelBounds({
+      point: selectedLabel.point,
+      text: labelText(selectedLabel),
+      fontSize,
+      size: displaySize,
+    });
+    const handle = findNearestLabelHandle(bounds, target, LABEL_HANDLE_HIT_RADIUS);
+
+    if (handle) {
+      labelDragModeRef.current = 'resize';
+      const center = {
+        x: bounds.x + bounds.width / 2,
+        y: bounds.y + bounds.height / 2,
+      };
+      labelResizeStartRef.current = {
+        distance: Math.max(1, pointDistance(target, center)),
+        fontSize: labelFontSize(selectedLabel),
+      };
+      return;
+    }
+
+    const anchor = denormalizePoint(selectedLabel.point, displaySize);
+    labelDragModeRef.current = 'move';
+    labelMoveOffsetRef.current = {
+      x: target.x - anchor.x,
+      y: target.y - anchor.y,
+    };
+  };
+
+  const moveLabelRef = useRef<
+    (screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) => void
+  >(() => undefined);
+  moveLabelRef.current = (screenX, screenY, viewTx, viewTy, viewScale) => {
+    if (!selectedLabel || labelDragModeRef.current === 'none' || imageFit.width <= 0 || imageFit.height <= 0) {
+      return;
+    }
+
+    const displaySize = sampleSizeFor(viewScale);
+    const point = normalizedPointAt(screenX, screenY, viewTx, viewTy, viewScale);
+    if (labelDragModeRef.current === 'move') {
+      onMoveSelectedLabel(moveLabelPoint({ currentPointer: point, pointerOffset: labelMoveOffsetRef.current, size: displaySize }));
+      return;
+    }
+
+    const target = denormalizePoint(point, displaySize);
+    const fontSize = labelFontSize(selectedLabel) * imageFit.scale * viewScale;
+    const bounds = measureLabelBounds({
+      point: selectedLabel.point,
+      text: labelText(selectedLabel),
+      fontSize,
+      size: displaySize,
+    });
+    const center = {
+      x: bounds.x + bounds.width / 2,
+      y: bounds.y + bounds.height / 2,
+    };
+    const nextDistance = Math.max(1, pointDistance(target, center));
+    const start = labelResizeStartRef.current;
+    onResizeSelectedLabel(start.fontSize * (nextDistance / start.distance));
+  };
+
   function dispatchTap(screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) {
     placeRef.current(screenX, screenY, viewTx, viewTy, viewScale);
   }
@@ -307,6 +475,33 @@ export function TopoCanvas({
     dragHandleIndexRef.current = -1;
   }
 
+  function dispatchBeginLabelDrag(
+    screenX: number,
+    screenY: number,
+    viewTx: number,
+    viewTy: number,
+    viewScale: number,
+  ) {
+    beginLabelDragRef.current(screenX, screenY, viewTx, viewTy, viewScale);
+  }
+
+  function dispatchMoveLabel(
+    screenX: number,
+    screenY: number,
+    viewTx: number,
+    viewTy: number,
+    viewScale: number,
+  ) {
+    moveLabelRef.current(screenX, screenY, viewTx, viewTy, viewScale);
+  }
+
+  function dispatchFinishLabelDrag() {
+    if (labelDragModeRef.current !== 'none') {
+      onCommitSelectedLabelEdit();
+    }
+    labelDragModeRef.current = 'none';
+  }
+
   const panGesture = useMemo(
     () =>
       Gesture.Pan()
@@ -325,6 +520,9 @@ export function TopoCanvas({
           );
           tx.value = next.x;
           ty.value = next.y;
+        })
+        .onEnd(() => {
+          runOnJS(setViewport)({ scale: scale.value, tx: tx.value, ty: ty.value });
         }),
     [canvasSize, imageFit, scale, startTx, startTy, tx, ty],
   );
@@ -363,6 +561,26 @@ export function TopoCanvas({
         })
         .onEnd(() => {
           runOnJS(dispatchFinishControlPointDrag)();
+        }),
+    // Dispatch functions are refreshed through render closures and only read JS state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [scale, tx, ty],
+  );
+
+  const labelGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .minPointers(1)
+        .maxPointers(1)
+        .minDistance(3)
+        .onStart((event) => {
+          runOnJS(dispatchBeginLabelDrag)(event.x, event.y, tx.value, ty.value, scale.value);
+        })
+        .onChange((event) => {
+          runOnJS(dispatchMoveLabel)(event.x, event.y, tx.value, ty.value, scale.value);
+        })
+        .onEnd(() => {
+          runOnJS(dispatchFinishLabelDrag)();
         }),
     // Dispatch functions are refreshed through render closures and only read JS state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -413,6 +631,9 @@ export function TopoCanvas({
           scale.value = next;
           tx.value = clamped.x;
           ty.value = clamped.y;
+        })
+        .onEnd(() => {
+          runOnJS(setViewport)({ scale: scale.value, tx: tx.value, ty: ty.value });
         }),
     [
       activePointers,
@@ -451,9 +672,12 @@ export function TopoCanvas({
       if (gestureMode === 'editPath') {
         return Gesture.Race(tapGesture, Gesture.Simultaneous(controlPointGesture, pinchGesture));
       }
+      if (gestureMode === 'editLabel') {
+        return Gesture.Race(tapGesture, Gesture.Simultaneous(labelGesture, pinchGesture));
+      }
       return Gesture.Race(tapGesture, Gesture.Simultaneous(panGesture, pinchGesture));
     },
-    [controlPointGesture, drawGesture, gestureMode, panGesture, pinchGesture, tapGesture],
+    [controlPointGesture, drawGesture, gestureMode, labelGesture, panGesture, pinchGesture, tapGesture],
   );
 
   const groupTransform = useDerivedValue(
@@ -469,6 +693,13 @@ export function TopoCanvas({
     width: imageFit.width,
     height: imageFit.height,
   };
+  const selectedLabelFrame = selectedLabel
+    ? screenFrameForLabel({
+        annotation: selectedLabel,
+        imageFit,
+        transform: viewport,
+      })
+    : undefined;
 
   return (
     <GestureDetector gesture={composedGesture} key={gestureMode}>
@@ -493,13 +724,43 @@ export function TopoCanvas({
                   annotation={annotation}
                   key={annotation.id}
                   routeMarkerFont={routeMarkerFont}
+                  imageScale={imageFit.scale}
                   size={renderableSize}
                 />
               ))}
               {selectedPath ? <SelectedPathHandles points={selectedPath.points} size={renderableSize} /> : null}
+              {selectedLabel ? (
+                <SelectedLabelHandles
+                  annotation={selectedLabel}
+                  imageScale={imageFit.scale}
+                  size={renderableSize}
+                />
+              ) : null}
             </Group>
           </Group>
         </Canvas>
+        {selectedLabel && selectedLabelFrame ? (
+          <TextInput
+            autoFocus
+            multiline
+            onBlur={onCommitSelectedLabelEdit}
+            onChangeText={onChangeSelectedLabelText}
+            pointerEvents="none"
+            style={[
+              styles.labelInput,
+              {
+                color: selectedLabel.color,
+                fontSize: selectedLabelFrame.fontSize,
+                left: selectedLabelFrame.x,
+                lineHeight: selectedLabelFrame.lineHeight,
+                minHeight: selectedLabelFrame.height,
+                minWidth: selectedLabelFrame.width,
+                top: selectedLabelFrame.y,
+              },
+            ]}
+            value={labelText(selectedLabel)}
+          />
+        ) : null}
         {!image && (
           <View pointerEvents="none" style={styles.loading}>
             <Text style={styles.loadingText}>Loading topo photo...</Text>
@@ -533,12 +794,55 @@ function SelectedPathHandles({
   );
 }
 
+function SelectedLabelHandles({
+  annotation,
+  imageScale,
+  size,
+}: {
+  annotation: MarkerAnnotation;
+  imageScale: number;
+  size: { width: number; height: number };
+}) {
+  const bounds = measureLabelBounds({
+    point: annotation.point,
+    text: labelText(annotation),
+    fontSize: displayFontSize(labelFontSize(annotation), { scale: imageScale }),
+    size,
+  });
+  const handles = labelHandlePoints(bounds);
+
+  return (
+    <Group>
+      <Rect
+        color="#1D4ED8"
+        height={bounds.height}
+        style="stroke"
+        strokeWidth={2}
+        width={bounds.width}
+        x={bounds.x}
+        y={bounds.y}
+      />
+      {(Object.keys(handles) as Array<keyof typeof handles>).map((handle) => (
+        <Circle
+          color="#1D4ED8"
+          cx={handles[handle].x}
+          cy={handles[handle].y}
+          key={handle}
+          r={LABEL_HANDLE_RADIUS}
+        />
+      ))}
+    </Group>
+  );
+}
+
 function AnnotationShape({
   annotation,
+  imageScale,
   routeMarkerFont,
   size,
 }: {
   annotation: Annotation;
+  imageScale: number;
   routeMarkerFont: ReturnType<typeof useFont>;
   size: { width: number; height: number };
 }) {
@@ -558,6 +862,10 @@ function AnnotationShape({
   }
 
   const point = denormalizePoint(annotation.point, size);
+
+  if (annotation.kind === 'label') {
+    return <LabelAnnotationShape annotation={annotation} imageScale={imageScale} size={size} />;
+  }
 
   if (annotation.kind === 'bolt') {
     return (
@@ -711,6 +1019,72 @@ function AnnotationShape({
   );
 }
 
+function LabelAnnotationShape({
+  annotation,
+  imageScale,
+  size,
+}: {
+  annotation: MarkerAnnotation;
+  imageScale: number;
+  size: { width: number; height: number };
+}) {
+  const fontSize = Math.max(1, Math.round(displayFontSize(labelFontSize(annotation), { scale: imageScale })));
+  const font = useFont(null, fontSize);
+  const point = denormalizePoint(annotation.point, size);
+  const measured = measureLabelText(labelText(annotation) || ' ', fontSize);
+
+  if (!font) {
+    return null;
+  }
+
+  return (
+    <Group>
+      {splitLabelLines(labelText(annotation)).map((line, index) => (
+        <SkiaText
+          color={annotation.color}
+          font={font}
+          key={`${annotation.id}-${index}`}
+          text={line}
+          x={point.x}
+          y={point.y + fontSize + measured.lineHeight * index}
+        />
+      ))}
+    </Group>
+  );
+}
+
+function screenFrameForLabel({
+  annotation,
+  imageFit,
+  transform,
+}: {
+  annotation: MarkerAnnotation;
+  imageFit: { offsetX: number; offsetY: number; scale: number; width: number; height: number };
+  transform: { scale: number; tx: number; ty: number };
+}) {
+  const fontSize = labelFontSize(annotation) * imageFit.scale * transform.scale;
+  const bounds = measureLabelBounds({
+    point: annotation.point,
+    text: labelText(annotation),
+    fontSize,
+    size: {
+      width: imageFit.width * transform.scale,
+      height: imageFit.height * transform.scale,
+    },
+  });
+  const x = transform.scale * (imageFit.offsetX + annotation.point.x * imageFit.width) + transform.tx;
+  const y = transform.scale * (imageFit.offsetY + annotation.point.y * imageFit.height) + transform.ty;
+
+  return {
+    fontSize,
+    height: bounds.height,
+    lineHeight: fontSize * 1.2,
+    width: bounds.width,
+    x,
+    y,
+  };
+}
+
 function makeSmoothedPath(points: NormalizedPoint[], size: { width: number; height: number }) {
   const path = Skia.Path.Make();
   const drawingPoints = points.map((point) => denormalizePoint(point, size));
@@ -764,5 +1138,13 @@ const styles = StyleSheet.create({
   loadingText: {
     color: '#F8FAFC',
     fontWeight: '700',
+  },
+  labelInput: {
+    backgroundColor: 'rgba(248, 250, 252, 0.18)',
+    borderColor: '#1D4ED8',
+    borderWidth: 1,
+    fontWeight: '700',
+    padding: 0,
+    position: 'absolute',
   },
 });

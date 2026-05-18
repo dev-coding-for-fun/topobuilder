@@ -2,6 +2,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
 import type { Annotation, NormalizedPoint, PhotoAsset, TopoProject } from '@/domain/types';
+import { labelFontSize, labelText, measureLabelText, splitLabelLines } from '@/domain/textLabels';
 
 function escapeHtml(value: string) {
   return value
@@ -22,7 +23,15 @@ function annotationSvg(annotation: Annotation, photo: PhotoAsset) {
   const y = annotation.point.y * photo.height;
 
   if (annotation.kind === 'label') {
-    return `<text x="${x}" y="${y}" fill="${annotation.color}" font-size="42" font-weight="700">${escapeHtml(annotation.label ?? 'Label')}</text>`;
+    const fontSize = labelFontSize(annotation);
+    const measured = measureLabelText(labelText(annotation), fontSize);
+    const lines = splitLabelLines(labelText(annotation));
+    return lines
+      .map(
+        (line, index) =>
+          `<text x="${x}" y="${y + fontSize + measured.lineHeight * index}" fill="${annotation.color}" font-size="${fontSize}" font-weight="700">${escapeHtml(line)}</text>`,
+      )
+      .join('');
   }
 
   return `<circle cx="${x}" cy="${y}" r="20" fill="#fff" /><circle cx="${x}" cy="${y}" r="14" fill="${annotation.color}" />`;

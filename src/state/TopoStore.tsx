@@ -35,6 +35,7 @@ type TopoStoreValue = {
     kind: AnnotationKind;
     point: NormalizedPoint;
     label?: string;
+    labelFontSize?: number;
   }) => Promise<Annotation>;
   addPathAnnotation: (input: {
     topoId: string;
@@ -185,6 +186,7 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
       kind: AnnotationKind;
       point: NormalizedPoint;
       label?: string;
+      labelFontSize?: number;
     }) => {
       if (!db) {
         throw new Error('Database is not ready');

@@ -54,6 +54,7 @@ export type BaseAnnotation = {
   kind: AnnotationKind;
   color: string;
   label?: string;
+  labelFontSize?: number;
   createdAt: string;
   updatedAt: string;
 };

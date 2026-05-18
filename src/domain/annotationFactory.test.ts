@@ -47,4 +47,20 @@ describe('annotation factory', () => {
 
     expect(annotation.color).toBe(defaultColorForKind('climbLine'));
   });
+
+  it('assigns label font size metadata to text annotations', () => {
+    const annotation = createAnnotation({
+      id: 'a4',
+      topoId: 't1',
+      photoId: 'p1',
+      kind: 'label',
+      point: { x: 0.25, y: 0.5 },
+      now: '2026-01-01T00:00:00.000Z',
+      label: 'Pitch 1',
+      labelFontSize: 36,
+    });
+
+    expect(annotation.kind).toBe('label');
+    expect(annotation.labelFontSize).toBe(36);
+  });
 });

@@ -37,9 +37,9 @@ The route editor SHALL allow users to edit saved route line control points from 
 - **WHEN** the user finishes dragging a selected route line control point
 - **THEN** the editor persists the updated point list to the existing annotation
 
-### Requirement: Polyline-Only Route Lines
-The route editor SHALL model route lines as straight polyline segments between sampled control points.
+### Requirement: Point-Based Route Lines
+The route editor SHALL model route lines as sampled control points and MAY render those points with light visual smoothing.
 
 #### Scenario: Rendering a route line
 - **WHEN** a route line is displayed in the editor or exported
-- **THEN** it is rendered from its stored points without Bezier or spline conversion
+- **THEN** it is rendered from its stored points without changing the persisted control point model
