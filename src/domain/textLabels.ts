@@ -16,7 +16,7 @@ export type LabelBounds = {
   height: number;
 };
 
-export type LabelResizeHandle = 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight';
+export type LabelResizeHandle = 'topRight';
 
 export function clampLabelFontSize(fontSize: number) {
   return clamp(fontSize, MIN_LABEL_FONT_SIZE, MAX_LABEL_FONT_SIZE);
@@ -83,10 +83,7 @@ export function labelBoundsCenter(bounds: LabelBounds) {
 
 export function labelHandlePoints(bounds: LabelBounds): Record<LabelResizeHandle, { x: number; y: number }> {
   return {
-    topLeft: { x: bounds.x, y: bounds.y },
     topRight: { x: bounds.x + bounds.width, y: bounds.y },
-    bottomLeft: { x: bounds.x, y: bounds.y + bounds.height },
-    bottomRight: { x: bounds.x + bounds.width, y: bounds.y + bounds.height },
   };
 }
 

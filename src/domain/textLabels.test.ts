@@ -53,10 +53,10 @@ describe('text label helpers', () => {
 
   it('finds corner handles within tolerance', () => {
     expect(
-      findNearestLabelHandle({ x: 10, y: 20, width: 100, height: 40 }, { x: 108, y: 58 }, 8),
-    ).toMatchObject({ handle: 'bottomRight' });
+      findNearestLabelHandle({ x: 10, y: 20, width: 100, height: 40 }, { x: 108, y: 22 }, 8),
+    ).toMatchObject({ handle: 'topRight' });
     expect(
-      findNearestLabelHandle({ x: 10, y: 20, width: 100, height: 40 }, { x: 60, y: 40 }, 8),
+      findNearestLabelHandle({ x: 10, y: 20, width: 100, height: 40 }, { x: 108, y: 58 }, 8),
     ).toBeUndefined();
   });
 });

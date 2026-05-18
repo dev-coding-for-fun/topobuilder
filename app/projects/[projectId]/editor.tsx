@@ -234,6 +234,7 @@ export default function EditorScreen() {
   }
 
   function selectPath(annotationId?: string, points?: NormalizedPoint[]) {
+    void commitEditingLabelSnapshot();
     selectedPathIdRef.current = annotationId;
     editingPathPointsRef.current = points ? [...points] : undefined;
     selectedLabelIdRef.current = undefined;
@@ -280,14 +281,13 @@ export default function EditorScreen() {
   }
 
   function changeSelectedLabelText(label: string) {
-    setEditingLabel((annotation) => {
-      if (!annotation) {
-        return annotation;
-      }
-      const next = { ...annotation, label };
-      editingLabelRef.current = next;
-      return next;
-    });
+    const annotation = editingLabelRef.current;
+    if (!annotation) {
+      return;
+    }
+    const next = { ...annotation, label };
+    editingLabelRef.current = next;
+    setEditingLabel(next);
   }
 
   function moveSelectedLabel(point: NormalizedPoint) {
@@ -313,19 +313,7 @@ export default function EditorScreen() {
     });
   }
 
-  async function commitSelectedPathEdit() {
-    const annotationId = selectedPathIdRef.current;
-    const points = editingPathPointsRef.current;
-    const annotation = savedAnnotations.find((item) => item.id === annotationId);
-    if (!annotation || !points || !('points' in annotation)) {
-      return;
-    }
-
-    await updateAnnotation({ ...annotation, points });
-    await refresh();
-  }
-
-  async function commitSelectedLabelEdit() {
+  async function commitEditingLabelSnapshot() {
     const annotation = editingLabelRef.current;
     if (!annotation) {
       return;
@@ -343,6 +331,22 @@ export default function EditorScreen() {
 
     await updateAnnotation(annotation);
     await refresh();
+  }
+
+  async function commitSelectedPathEdit() {
+    const annotationId = selectedPathIdRef.current;
+    const points = editingPathPointsRef.current;
+    const annotation = savedAnnotations.find((item) => item.id === annotationId);
+    if (!annotation || !points || !('points' in annotation)) {
+      return;
+    }
+
+    await updateAnnotation({ ...annotation, points });
+    await refresh();
+  }
+
+  async function commitSelectedLabelEdit() {
+    await commitEditingLabelSnapshot();
   }
 
   async function deleteLastAnnotation() {
@@ -413,6 +417,7 @@ export default function EditorScreen() {
       <SafeAreaView edges={['bottom']} pointerEvents="box-none" style={styles.bottomOverlay}>
         <ToolPalette
           onSelectTool={(tool) => {
+            void commitEditingLabelSnapshot();
             setActiveTool(tool);
             setDraftPoints([]);
             draftKindRef.current = undefined;

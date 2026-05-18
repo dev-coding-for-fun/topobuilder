@@ -29,16 +29,15 @@ import {
 import { isPathKind } from '@/domain/annotationFactory';
 import {
   DEFAULT_SCREEN_LABEL_FONT_SIZE,
+  containsPoint,
   displayFontSize,
   findNearestLabelHandle,
   labelFontSize,
   labelHandlePoints,
   labelText,
   measureLabelBounds,
-  measureLabelText,
   moveLabelPoint,
   photoFontSizeFromScreen,
-  splitLabelLines,
 } from '@/domain/textLabels';
 import type {
   Annotation,
@@ -392,6 +391,11 @@ export function TopoCanvas({
       return;
     }
 
+    if (!containsPoint(bounds, target)) {
+      labelDragModeRef.current = 'none';
+      return;
+    }
+
     const anchor = denormalizePoint(selectedLabel.point, displaySize);
     labelDragModeRef.current = 'move';
     labelMoveOffsetRef.current = {
@@ -495,10 +499,35 @@ export function TopoCanvas({
     moveLabelRef.current(screenX, screenY, viewTx, viewTy, viewScale);
   }
 
+  function dispatchMoveLabelOrPan(
+    screenX: number,
+    screenY: number,
+    translationX: number,
+    translationY: number,
+    viewTx: number,
+    viewTy: number,
+    viewScale: number,
+  ) {
+    if (labelDragModeRef.current === 'none') {
+      const next = clampPan(
+        { x: startTx.value + translationX, y: startTy.value + translationY },
+        viewScale,
+        imageFit,
+        canvasSize,
+      );
+      tx.value = next.x;
+      ty.value = next.y;
+      return;
+    }
+
+    moveLabelRef.current(screenX, screenY, viewTx, viewTy, viewScale);
+  }
+
   function dispatchFinishLabelDrag() {
     if (labelDragModeRef.current !== 'none') {
       onCommitSelectedLabelEdit();
     }
+    setViewport({ scale: scale.value, tx: tx.value, ty: ty.value });
     labelDragModeRef.current = 'none';
   }
 
@@ -574,17 +603,27 @@ export function TopoCanvas({
         .maxPointers(1)
         .minDistance(3)
         .onStart((event) => {
+          startTx.value = tx.value;
+          startTy.value = ty.value;
           runOnJS(dispatchBeginLabelDrag)(event.x, event.y, tx.value, ty.value, scale.value);
         })
         .onChange((event) => {
-          runOnJS(dispatchMoveLabel)(event.x, event.y, tx.value, ty.value, scale.value);
+          runOnJS(dispatchMoveLabelOrPan)(
+            event.x,
+            event.y,
+            event.translationX,
+            event.translationY,
+            tx.value,
+            ty.value,
+            scale.value,
+          );
         })
         .onEnd(() => {
           runOnJS(dispatchFinishLabelDrag)();
         }),
     // Dispatch functions are refreshed through render closures and only read JS state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [scale, tx, ty],
+    [canvasSize, imageFit, scale, startTx, startTy, tx, ty],
   );
 
   const pinchGesture = useMemo(
@@ -719,7 +758,7 @@ export function TopoCanvas({
               ) : (
                 <Rect x={0} y={0} width={imageFit.width} height={imageFit.height} color="#CBD5E1" />
               )}
-              {annotations.map((annotation) => (
+              {annotations.filter((annotation) => !('point' in annotation && annotation.kind === 'label')).map((annotation) => (
                 <AnnotationShape
                   annotation={annotation}
                   key={annotation.id}
@@ -739,6 +778,16 @@ export function TopoCanvas({
             </Group>
           </Group>
         </Canvas>
+        {labelAnnotations
+          .filter((annotation) => annotation.id !== selectedLabel?.id)
+          .map((annotation) => (
+            <NativeLabel
+              annotation={annotation}
+              imageFit={imageFit}
+              key={annotation.id}
+              transform={viewport}
+            />
+          ))}
         {selectedLabel && selectedLabelFrame ? (
           <TextInput
             autoFocus
@@ -864,7 +913,7 @@ function AnnotationShape({
   const point = denormalizePoint(annotation.point, size);
 
   if (annotation.kind === 'label') {
-    return <LabelAnnotationShape annotation={annotation} imageScale={imageScale} size={size} />;
+    return null;
   }
 
   if (annotation.kind === 'bolt') {
@@ -1019,40 +1068,6 @@ function AnnotationShape({
   );
 }
 
-function LabelAnnotationShape({
-  annotation,
-  imageScale,
-  size,
-}: {
-  annotation: MarkerAnnotation;
-  imageScale: number;
-  size: { width: number; height: number };
-}) {
-  const fontSize = Math.max(1, Math.round(displayFontSize(labelFontSize(annotation), { scale: imageScale })));
-  const font = useFont(null, fontSize);
-  const point = denormalizePoint(annotation.point, size);
-  const measured = measureLabelText(labelText(annotation) || ' ', fontSize);
-
-  if (!font) {
-    return null;
-  }
-
-  return (
-    <Group>
-      {splitLabelLines(labelText(annotation)).map((line, index) => (
-        <SkiaText
-          color={annotation.color}
-          font={font}
-          key={`${annotation.id}-${index}`}
-          text={line}
-          x={point.x}
-          y={point.y + fontSize + measured.lineHeight * index}
-        />
-      ))}
-    </Group>
-  );
-}
-
 function screenFrameForLabel({
   annotation,
   imageFit,
@@ -1083,6 +1098,37 @@ function screenFrameForLabel({
     x,
     y,
   };
+}
+
+function NativeLabel({
+  annotation,
+  imageFit,
+  transform,
+}: {
+  annotation: MarkerAnnotation;
+  imageFit: { offsetX: number; offsetY: number; scale: number; width: number; height: number };
+  transform: { scale: number; tx: number; ty: number };
+}) {
+  const frame = screenFrameForLabel({ annotation, imageFit, transform });
+
+  return (
+    <Text
+      pointerEvents="none"
+      style={[
+        styles.nativeLabel,
+        {
+          color: annotation.color,
+          fontSize: frame.fontSize,
+          left: frame.x,
+          lineHeight: frame.lineHeight,
+          minWidth: frame.width,
+          top: frame.y,
+        },
+      ]}
+    >
+      {labelText(annotation)}
+    </Text>
+  );
 }
 
 function makeSmoothedPath(points: NormalizedPoint[], size: { width: number; height: number }) {
@@ -1143,6 +1189,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(248, 250, 252, 0.18)',
     borderColor: '#1D4ED8',
     borderWidth: 1,
+    fontWeight: '700',
+    padding: 0,
+    position: 'absolute',
+  },
+  nativeLabel: {
     fontWeight: '700',
     padding: 0,
     position: 'absolute',
