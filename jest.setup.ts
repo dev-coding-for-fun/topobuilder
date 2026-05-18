@@ -4,8 +4,12 @@ jest.mock('@shopify/react-native-skia', () => ({
   Group: 'Group',
   Image: 'Image',
   Line: 'Line',
+  matchFont: jest.fn(() => ({
+    measureText: jest.fn(() => ({ width: 0 })),
+  })),
   Path: 'Path',
   Rect: 'Rect',
+  Text: 'Text',
   Skia: {
     Path: {
       Make: () => ({
