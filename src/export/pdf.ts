@@ -1,8 +1,9 @@
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
-import { annotationsForPhoto, isPathAnnotation } from '@/domain/annotationFactory';
+import { annotationsForPhoto, isPathAnnotation, isStampAnnotation } from '@/domain/annotationFactory';
 import { chooseTextBackdrop } from '@/domain/annotationColours';
+import { stampScaleForSize, stampSizeForAnnotation } from '@/domain/stampSizes';
 import type { Annotation, NormalizedPoint, PhotoAsset, TopoProject } from '@/domain/types';
 import { labelFontSize, labelText, measureLabelText, splitLabelLines } from '@/domain/textLabels';
 
@@ -43,7 +44,8 @@ function annotationSvg(annotation: Annotation, photo: PhotoAsset) {
     return `${backdropSvg}${textSvg}`;
   }
 
-  return `<circle cx="${x}" cy="${y}" r="20" fill="#fff" /><circle cx="${x}" cy="${y}" r="14" fill="${annotation.color}" />`;
+  const stampScale = isStampAnnotation(annotation) ? stampScaleForSize(stampSizeForAnnotation(annotation)) : 1;
+  return `<circle cx="${x}" cy="${y}" r="${20 * stampScale}" fill="#fff" /><circle cx="${x}" cy="${y}" r="${14 * stampScale}" fill="${annotation.color}" />`;
 }
 
 function smoothedPathData(points: NormalizedPoint[], photo: PhotoAsset) {

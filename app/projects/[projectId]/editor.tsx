@@ -32,13 +32,17 @@ import type {
   TopoProject,
 } from '@/domain/types';
 import { AnnotationColorControl } from '@/editor/AnnotationColorControl';
+import { DEFAULT_STAMP_SIZE, type StampSize, stampSizeForAnnotation } from '@/domain/stampSizes';
 import { DEFAULT_LABEL_FONT_SIZE, clampLabelFontSize } from '@/domain/textLabels';
 import { EditorTopBar } from '@/editor/EditorTopBar';
+import { StampSizeControl } from '@/editor/StampSizeControl';
 import { ToolPalette } from '@/editor/ToolPalette';
 import { TopoCanvas } from '@/editor/TopoCanvas';
 import { useTopoStore } from '@/state/TopoStore';
 
 const CONTROL_POINT_MIN_DISTANCE = 44;
+
+type ContextControl = 'colour' | 'stampSize';
 
 export default function EditorScreen() {
   const { projectId, photoId } = useLocalSearchParams<{ projectId: string; photoId: string }>();
@@ -57,6 +61,8 @@ export default function EditorScreen() {
   const [lastLabelColorByPhoto, setLastLabelColorByPhoto] = useState<Record<string, string>>({});
   const [lastLineColorByPhoto, setLastLineColorByPhoto] = useState<Record<string, string>>({});
   const [lastStampColorByPhoto, setLastStampColorByPhoto] = useState<Record<string, Partial<Record<StampAnnotationKind, string>>>>({});
+  const [stampSizeByPhoto, setStampSizeByPhoto] = useState<Record<string, StampSize>>({});
+  const [openContextControl, setOpenContextControl] = useState<ContextControl>();
   const draftPointsRef = useRef<NormalizedPoint[]>([]);
   const draftKindRef = useRef<PathAnnotationKind | undefined>(undefined);
   const selectedPathIdRef = useRef<string | undefined>(undefined);
@@ -69,6 +75,7 @@ export default function EditorScreen() {
   const lastLabelColorByPhotoRef = useRef<Record<string, string>>({});
   const lastLineColorByPhotoRef = useRef<Record<string, string>>({});
   const lastStampColorByPhotoRef = useRef<Record<string, Partial<Record<StampAnnotationKind, string>>>>({});
+  const stampSizeByPhotoRef = useRef<Record<string, StampSize>>({});
 
   useEffect(() => {
     selectedPathIdRef.current = selectedPathId;
@@ -129,6 +136,11 @@ export default function EditorScreen() {
     () => annotationsForPhoto(project?.annotations ?? [], photoId),
     [photoId, project?.annotations],
   );
+  const savedStampSize = useMemo(() => {
+    const stamp = savedAnnotations.find(isStampAnnotation);
+    return stamp ? stampSizeForAnnotation(stamp) : DEFAULT_STAMP_SIZE;
+  }, [savedAnnotations]);
+  const currentStampSize = photo ? (stampSizeByPhoto[photo.id] ?? savedStampSize) : DEFAULT_STAMP_SIZE;
   const annotations = useMemo(() => {
     const hasPathEdit = Boolean(selectedPathId && editingPathPoints);
     const hasLabelEdit = Boolean(selectedLabelId && editingLabel);
@@ -265,6 +277,10 @@ export default function EditorScreen() {
     return lastStampColorByPhotoRef.current[photoId]?.[kind] ?? defaultAnnotationColourForTarget(kind);
   }
 
+  function currentStampSizeForPhoto(photoId: string) {
+    return stampSizeByPhotoRef.current[photoId] ?? savedStampSize;
+  }
+
   async function handlePlace(
     kind: MarkerAnnotationKind,
     point: NormalizedPoint,
@@ -287,6 +303,7 @@ export default function EditorScreen() {
         : isStampKind(kind)
           ? currentStampColorForPhoto(photo.id, kind)
         : undefined;
+    const stampSize = isStampKind(kind) ? currentStampSizeForPhoto(photo.id) : undefined;
 
     const annotation = await addAnnotation({
       topoId: project.id,
@@ -297,6 +314,7 @@ export default function EditorScreen() {
       color,
       label: kind === 'label' ? '' : undefined,
       labelFontSize,
+      stampSize,
     });
     if (isLabelAnnotation(annotation)) {
       lastLabelFontSizeByPhotoRef.current[photo.id] =
@@ -535,6 +553,38 @@ export default function EditorScreen() {
     await refresh();
   }
 
+  async function changeStampSize(size: StampSize) {
+    if (!project || !photo) {
+      return;
+    }
+
+    stampSizeByPhotoRef.current[photo.id] = size;
+    setStampSizeByPhoto((sizes) => ({ ...sizes, [photo.id]: size }));
+
+    const stampAnnotations = savedAnnotations.filter(isStampAnnotation);
+    const updatedStamps = stampAnnotations.map((annotation) => ({ ...annotation, stampSize: size }));
+    const selectedUpdate = updatedStamps.find((annotation) => annotation.id === selectedStampIdRef.current);
+    if (selectedUpdate) {
+      editingStampRef.current = selectedUpdate;
+      setEditingStamp(selectedUpdate);
+    }
+
+    setProject((current) =>
+      current && current.id === project.id
+        ? {
+            ...current,
+            annotations: current.annotations.map((annotation) => {
+              const updated = updatedStamps.find((stamp) => stamp.id === annotation.id);
+              return updated ?? annotation;
+            }),
+          }
+        : current,
+    );
+
+    await Promise.all(updatedStamps.map((annotation) => updateAnnotation(annotation)));
+    await refresh();
+  }
+
   async function commitEditingLabelSnapshot() {
     const annotation = editingLabelRef.current;
     if (!annotation) {
@@ -625,6 +675,7 @@ export default function EditorScreen() {
           ? (editingStamp?.color ?? lastStampColorByPhoto[photo.id]?.[activeColourTarget] ?? defaultAnnotationColourForTarget(activeColourTarget))
           : undefined;
   const canChooseAnnotationColor = Boolean(activeColourTarget && currentAnnotationColor);
+  const canChooseStampSize = activeTool !== 'select' && isStampKind(activeTool);
   const isKeyboardEditingLabel = Boolean(selectedLabelId && keyboardHeight > 0);
 
   return (
@@ -674,42 +725,57 @@ export default function EditorScreen() {
         style={[styles.bottomOverlay, isKeyboardEditingLabel ? styles.hiddenBottomOverlay : null]}
         testID="editor-bottom-overlay"
       >
-        {canChooseAnnotationColor ? (
-          <AnnotationColorControl
-            currentColor={currentAnnotationColor ?? defaultAnnotationColourForTarget('label')}
-            onSelectColor={(color) => {
-              if (activeColourTarget === 'label') {
-                void changeSelectedLabelColor(color);
-              } else if (activeColourTarget === 'line') {
-                void changeSelectedPathColor(color);
-              } else if (activeColourTarget) {
-                void changeSelectedStampColor(color);
+        <View style={styles.contextControls}>
+          {canChooseAnnotationColor ? (
+            <AnnotationColorControl
+              currentColor={currentAnnotationColor ?? defaultAnnotationColourForTarget('label')}
+              expanded={openContextControl === 'colour'}
+              onExpandedChange={(expanded) => setOpenContextControl(expanded ? 'colour' : undefined)}
+              onSelectColor={(color) => {
+                if (activeColourTarget === 'label') {
+                  void changeSelectedLabelColor(color);
+                } else if (activeColourTarget === 'line') {
+                  void changeSelectedPathColor(color);
+                } else if (activeColourTarget) {
+                  void changeSelectedStampColor(color);
+                }
+              }}
+              swatches={ANNOTATION_COLOUR_PALETTE}
+              targetLabel={
+                activeColourTarget === 'label'
+                  ? 'Text colour'
+                  : activeColourTarget === 'line'
+                    ? 'Line colour'
+                    : 'Stamp colour'
               }
-            }}
-            swatches={ANNOTATION_COLOUR_PALETTE}
-            targetLabel={
-              activeColourTarget === 'label'
-                ? 'Text colour'
-                : activeColourTarget === 'line'
-                  ? 'Line colour'
-                  : 'Stamp colour'
-            }
-          />
-        ) : null}
+            />
+          ) : null}
+          {canChooseStampSize ? (
+            <StampSizeControl
+              currentSize={currentStampSize}
+              expanded={openContextControl === 'stampSize'}
+              onExpandedChange={(expanded) => setOpenContextControl(expanded ? 'stampSize' : undefined)}
+              onSelectSize={(size) => {
+                void changeStampSize(size);
+              }}
+            />
+          ) : null}
+        </View>
         <ToolPalette
           onSelectTool={(tool) => {
             void commitEditingLabelSnapshot();
+            setOpenContextControl(undefined);
             setActiveTool(tool);
             clearDraftState();
             clearSelectionState();
           }}
           selectedTool={activeTool}
-            stampColors={{
-              belay: lastStampColorByPhoto[photo.id]?.belay ?? defaultAnnotationColourForTarget('belay'),
-              bolt: lastStampColorByPhoto[photo.id]?.bolt ?? defaultAnnotationColourForTarget('bolt'),
-              rappel: lastStampColorByPhoto[photo.id]?.rappel ?? defaultAnnotationColourForTarget('rappel'),
-              start: lastStampColorByPhoto[photo.id]?.start ?? defaultAnnotationColourForTarget('start'),
-            }}
+          stampColors={{
+            belay: lastStampColorByPhoto[photo.id]?.belay ?? defaultAnnotationColourForTarget('belay'),
+            bolt: lastStampColorByPhoto[photo.id]?.bolt ?? defaultAnnotationColourForTarget('bolt'),
+            rappel: lastStampColorByPhoto[photo.id]?.rappel ?? defaultAnnotationColourForTarget('rappel'),
+            start: lastStampColorByPhoto[photo.id]?.start ?? defaultAnnotationColourForTarget('start'),
+          }}
         />
       </SafeAreaView>
     </View>
@@ -728,6 +794,12 @@ const styles = StyleSheet.create({
   },
   center: {
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  contextControls: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
     justifyContent: 'center',
   },
   hiddenBottomOverlay: {

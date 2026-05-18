@@ -42,6 +42,22 @@ jest.mock('@/editor/ToolPalette', () => ({
   },
 }));
 
+jest.mock('@/editor/StampSizeControl', () => ({
+  StampSizeControl: ({ onSelectSize }: { onSelectSize: (size: string) => void }) => {
+    const React = require('react');
+    const { Pressable, Text } = require('react-native');
+    return React.createElement(
+      React.Fragment,
+      null,
+      React.createElement(
+        Pressable,
+        { accessibilityLabel: 'Large stamp size', onPress: () => onSelectSize('large') },
+        React.createElement(Text, null, 'Large'),
+      ),
+    );
+  },
+}));
+
 jest.mock('@/editor/TopoCanvas', () => ({
   TopoCanvas: jest.fn(() => null),
 }));
@@ -272,6 +288,90 @@ describe('EditorScreen label editing', () => {
 
     expect(addAnnotation).toHaveBeenCalledWith(expect.objectContaining({ kind: 'bolt', color: '#EC4899' }));
     expect(addAnnotation).toHaveBeenCalledWith(expect.objectContaining({ kind: 'rappel', color: '#FACC15' }));
+  });
+
+  it('applies stamp size changes to all stamps and not lines or text', async () => {
+    const projectWithAnnotations: TopoProject = {
+      ...project,
+      annotations: [
+        {
+          id: 'bolt-1',
+          topoId: 'project-1',
+          photoId: 'photo-1',
+          kind: 'bolt',
+          color: '#FACC15',
+          point: { x: 0.2, y: 0.3 },
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'rappel-1',
+          topoId: 'project-1',
+          photoId: 'photo-1',
+          kind: 'rappel',
+          color: '#2563EB',
+          point: { x: 0.4, y: 0.5 },
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'label-1',
+          topoId: 'project-1',
+          photoId: 'photo-1',
+          kind: 'label',
+          color: '#111827',
+          label: 'Pitch 1',
+          labelFontSize: 24,
+          point: { x: 0.6, y: 0.7 },
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'line-1',
+          topoId: 'project-1',
+          photoId: 'photo-1',
+          kind: 'climbLine',
+          color: '#FACC15',
+          points: [
+            { x: 0.1, y: 0.1 },
+            { x: 0.8, y: 0.8 },
+          ],
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    };
+    loadProject.mockResolvedValue(projectWithAnnotations);
+
+    render(<EditorScreen />);
+    await waitFor(() => expect(TopoCanvas).toHaveBeenCalled());
+
+    fireEvent.press(screen.getByLabelText('Bolt'));
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Large stamp size'));
+    });
+
+    await waitFor(() => {
+      expect(updateAnnotation).toHaveBeenCalledWith(expect.objectContaining({ id: 'bolt-1', stampSize: 'large' }));
+      expect(updateAnnotation).toHaveBeenCalledWith(expect.objectContaining({ id: 'rappel-1', stampSize: 'large' }));
+    });
+    expect(updateAnnotation).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'label-1', stampSize: 'large' }));
+    expect(updateAnnotation).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'line-1', stampSize: 'large' }));
+  });
+
+  it('uses selected stamp size for new stamps', async () => {
+    render(<EditorScreen />);
+    await waitFor(() => expect(TopoCanvas).toHaveBeenCalled());
+
+    fireEvent.press(screen.getByLabelText('Bolt'));
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Large stamp size'));
+    });
+    await act(async () => {
+      await latestCanvasProps().onPlaceAnnotation('bolt', { x: 0.2, y: 0.3 }, {});
+    });
+
+    expect(addAnnotation).toHaveBeenCalledWith(expect.objectContaining({ kind: 'bolt', stampSize: 'large' }));
   });
 
   it('resizes the canvas region and hides bottom controls while editing text with the keyboard open', async () => {

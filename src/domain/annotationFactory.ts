@@ -8,6 +8,7 @@ import type {
   PathAnnotationKind,
 } from './types';
 import { defaultAnnotationColourForTarget, type StampAnnotationKind } from './annotationColours';
+import { DEFAULT_STAMP_SIZE, type StampSize } from './stampSizes';
 import { DEFAULT_LABEL_FONT_SIZE, clampLabelFontSize } from './textLabels';
 
 const pathKinds = new Set<AnnotationKind>(['climbLine', 'walkoff', 'scramble']);
@@ -74,6 +75,7 @@ type CreateAnnotationInput = {
   color?: string;
   label?: string;
   labelFontSize?: number;
+  stampSize?: StampSize;
 };
 
 export function createAnnotation(input: CreateAnnotationInput): Annotation {
@@ -89,6 +91,7 @@ export function createAnnotation(input: CreateAnnotationInput): Annotation {
       input.kind === 'label'
         ? clampLabelFontSize(input.labelFontSize ?? DEFAULT_LABEL_FONT_SIZE)
         : undefined,
+    stampSize: isStampKind(input.kind) ? (input.stampSize ?? DEFAULT_STAMP_SIZE) : undefined,
     createdAt: input.now,
     updatedAt: input.now,
   };

@@ -55,6 +55,7 @@ export type BaseAnnotation = {
   color: string;
   label?: string;
   labelFontSize?: number;
+  stampSize?: 'small' | 'medium' | 'large';
   createdAt: string;
   updatedAt: string;
 };

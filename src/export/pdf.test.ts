@@ -50,6 +50,7 @@ const project: TopoProject = {
       photoId: 'photo-1',
       kind: 'bolt',
       color: '#EC4899',
+      stampSize: 'large',
       point: { x: 0.4, y: 0.5 },
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
@@ -68,6 +69,8 @@ describe('exportTopoPdf', () => {
     const html = (Print.printToFileAsync as jest.Mock).mock.calls[0][0].html as string;
     expect(html).toContain('stroke="#2563EB"');
     expect(html).toContain('fill="#EC4899"');
+    expect(html).toContain('r="24" fill="#fff"');
+    expect(html).toContain('r="16.8" fill="#EC4899"');
     expect(html).not.toContain('opacity="0.34"');
     expect(Sharing.shareAsync).not.toHaveBeenCalled();
   });

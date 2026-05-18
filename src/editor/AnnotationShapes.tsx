@@ -15,6 +15,7 @@ import { memo } from 'react';
 import { isPathAnnotation } from '@/domain/annotationFactory';
 import { chooseTextBackdrop, rgbaString } from '@/domain/annotationColours';
 import { denormalizePoint, normalizedToScreenPoint } from '@/domain/geometry';
+import { stampScaleForSize, stampSizeForAnnotation } from '@/domain/stampSizes';
 import {
   displayFontSize,
   labelFontSize,
@@ -183,37 +184,39 @@ export const AnnotationShape = memo(function AnnotationShape({
   }
 
   const point = denormalizePoint(annotation.point, size);
+  const stampScale = stampScaleForSize(stampSizeForAnnotation(annotation));
+  const stamp = (value: number) => value * stampScale;
 
   if (annotation.kind === 'bolt') {
     return (
       <Group>
         <Line
           color={STAMP_WHITE}
-          p1={{ x: point.x - 8, y: point.y - 8 }}
-          p2={{ x: point.x + 8, y: point.y + 8 }}
+          p1={{ x: point.x - stamp(8), y: point.y - stamp(8) }}
+          p2={{ x: point.x + stamp(8), y: point.y + stamp(8) }}
           strokeCap="round"
-          strokeWidth={5}
+          strokeWidth={stamp(5)}
         />
         <Line
           color={STAMP_WHITE}
-          p1={{ x: point.x + 8, y: point.y - 8 }}
-          p2={{ x: point.x - 8, y: point.y + 8 }}
+          p1={{ x: point.x + stamp(8), y: point.y - stamp(8) }}
+          p2={{ x: point.x - stamp(8), y: point.y + stamp(8) }}
           strokeCap="round"
-          strokeWidth={5}
+          strokeWidth={stamp(5)}
         />
         <Line
           color={annotation.color}
-          p1={{ x: point.x - 8, y: point.y - 8 }}
-          p2={{ x: point.x + 8, y: point.y + 8 }}
+          p1={{ x: point.x - stamp(8), y: point.y - stamp(8) }}
+          p2={{ x: point.x + stamp(8), y: point.y + stamp(8) }}
           strokeCap="round"
-          strokeWidth={3}
+          strokeWidth={stamp(3)}
         />
         <Line
           color={annotation.color}
-          p1={{ x: point.x + 8, y: point.y - 8 }}
-          p2={{ x: point.x - 8, y: point.y + 8 }}
+          p1={{ x: point.x + stamp(8), y: point.y - stamp(8) }}
+          p2={{ x: point.x - stamp(8), y: point.y + stamp(8) }}
           strokeCap="round"
-          strokeWidth={3}
+          strokeWidth={stamp(3)}
         />
       </Group>
     );
@@ -222,58 +225,58 @@ export const AnnotationShape = memo(function AnnotationShape({
   if (annotation.kind === 'rappel' || annotation.kind === 'belay') {
     return (
       <Group>
-        <Circle color={annotation.color} cx={point.x} cy={point.y} r={10} />
+        <Circle color={annotation.color} cx={point.x} cy={point.y} r={stamp(10)} />
         <Circle
           color={STAMP_WHITE}
           cx={point.x}
           cy={point.y}
-          r={10}
-          strokeWidth={3}
+          r={stamp(10)}
+          strokeWidth={stamp(3)}
           style="stroke"
         />
         {annotation.kind === 'rappel' ? (
           <Group>
             <Line
               color={STAMP_WHITE}
-              p1={{ x: point.x, y: point.y + 10 }}
-              p2={{ x: point.x, y: point.y + 24 }}
+              p1={{ x: point.x, y: point.y + stamp(10) }}
+              p2={{ x: point.x, y: point.y + stamp(24) }}
               strokeCap="round"
-              strokeWidth={5}
+              strokeWidth={stamp(5)}
             />
             <Line
               color={STAMP_WHITE}
-              p1={{ x: point.x, y: point.y + 24 }}
-              p2={{ x: point.x - 5, y: point.y + 18 }}
+              p1={{ x: point.x, y: point.y + stamp(24) }}
+              p2={{ x: point.x - stamp(5), y: point.y + stamp(18) }}
               strokeCap="round"
-              strokeWidth={5}
+              strokeWidth={stamp(5)}
             />
             <Line
               color={STAMP_WHITE}
-              p1={{ x: point.x, y: point.y + 24 }}
-              p2={{ x: point.x + 5, y: point.y + 18 }}
+              p1={{ x: point.x, y: point.y + stamp(24) }}
+              p2={{ x: point.x + stamp(5), y: point.y + stamp(18) }}
               strokeCap="round"
-              strokeWidth={5}
+              strokeWidth={stamp(5)}
             />
             <Line
               color={annotation.color}
-              p1={{ x: point.x, y: point.y + 10 }}
-              p2={{ x: point.x, y: point.y + 24 }}
+              p1={{ x: point.x, y: point.y + stamp(10) }}
+              p2={{ x: point.x, y: point.y + stamp(24) }}
               strokeCap="round"
-              strokeWidth={3}
+              strokeWidth={stamp(3)}
             />
             <Line
               color={annotation.color}
-              p1={{ x: point.x, y: point.y + 24 }}
-              p2={{ x: point.x - 5, y: point.y + 18 }}
+              p1={{ x: point.x, y: point.y + stamp(24) }}
+              p2={{ x: point.x - stamp(5), y: point.y + stamp(18) }}
               strokeCap="round"
-              strokeWidth={3}
+              strokeWidth={stamp(3)}
             />
             <Line
               color={annotation.color}
-              p1={{ x: point.x, y: point.y + 24 }}
-              p2={{ x: point.x + 5, y: point.y + 18 }}
+              p1={{ x: point.x, y: point.y + stamp(24) }}
+              p2={{ x: point.x + stamp(5), y: point.y + stamp(18) }}
               strokeCap="round"
-              strokeWidth={3}
+              strokeWidth={stamp(3)}
             />
           </Group>
         ) : null}
@@ -287,23 +290,33 @@ export const AnnotationShape = memo(function AnnotationShape({
 
     return (
       <Group>
-        <Circle color={annotation.color} cx={point.x} cy={point.y} r={15} />
+        <Circle color={annotation.color} cx={point.x} cy={point.y} r={stamp(15)} />
         <Circle
           color={STAMP_WHITE}
           cx={point.x}
           cy={point.y}
-          r={15}
-          strokeWidth={3}
+          r={stamp(15)}
+          strokeWidth={stamp(3)}
           style="stroke"
         />
         {routeMarkerFont ? (
-          <SkiaText
-            color={STAMP_WHITE}
-            font={routeMarkerFont}
-            text={label}
-            x={point.x - textWidth / 2}
-            y={point.y + 6}
-          />
+          <Group
+            transform={[
+              { translateX: point.x },
+              { translateY: point.y },
+              { scale: stampScale },
+              { translateX: -point.x },
+              { translateY: -point.y },
+            ]}
+          >
+            <SkiaText
+              color={STAMP_WHITE}
+              font={routeMarkerFont}
+              text={label}
+              x={point.x - textWidth / 2}
+              y={point.y + 6}
+            />
+          </Group>
         ) : null}
       </Group>
     );

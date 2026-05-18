@@ -64,4 +64,27 @@ describe('annotation factory', () => {
     expect(annotation.kind).toBe('label');
     expect(annotation.labelFontSize).toBe(36);
   });
+
+  it('assigns medium stamp size by default and accepts explicit stamp size', () => {
+    const defaultStamp = createAnnotation({
+      id: 'a5',
+      topoId: 't1',
+      photoId: 'p1',
+      kind: 'bolt',
+      point: { x: 0.25, y: 0.5 },
+      now: '2026-01-01T00:00:00.000Z',
+    });
+    const largeStamp = createAnnotation({
+      id: 'a6',
+      topoId: 't1',
+      photoId: 'p1',
+      kind: 'rappel',
+      point: { x: 0.25, y: 0.5 },
+      now: '2026-01-01T00:00:00.000Z',
+      stampSize: 'large',
+    });
+
+    expect(defaultStamp.stampSize).toBe('medium');
+    expect(largeStamp.stampSize).toBe('large');
+  });
 });

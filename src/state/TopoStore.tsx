@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 
 import { createAnnotation } from '@/domain/annotationFactory';
 import { createId, nowIso } from '@/domain/ids';
+import type { StampSize } from '@/domain/stampSizes';
 import type { Annotation, AnnotationKind, NormalizedPoint, PhotoAsset, TopoProject, TopoSummary } from '@/domain/types';
 import { pickPhotoFromLibrary } from '@/camera/photoCapture';
 import { copyPhotoIntoLibrary } from '@/storage/assetStorage';
@@ -37,6 +38,7 @@ type TopoStoreValue = {
     color?: string;
     label?: string;
     labelFontSize?: number;
+    stampSize?: StampSize;
   }) => Promise<Annotation>;
   addPathAnnotation: (input: {
     topoId: string;
@@ -190,6 +192,7 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
       color?: string;
       label?: string;
       labelFontSize?: number;
+      stampSize?: StampSize;
     }) => {
       if (!db) {
         throw new Error('Database is not ready');

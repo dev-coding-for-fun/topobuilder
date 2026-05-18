@@ -1,26 +1,22 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import type { AnnotationColourSwatch } from '@/domain/annotationColours';
+import { STAMP_SIZE_OPTIONS, type StampSize } from '@/domain/stampSizes';
 
-export function AnnotationColorControl({
-  currentColor,
+export function StampSizeControl({
+  currentSize,
   expanded,
   onExpandedChange,
-  onSelectColor,
-  swatches,
-  targetLabel = 'Annotation colour',
+  onSelectSize,
 }: {
-  currentColor: string;
+  currentSize: StampSize;
   expanded?: boolean;
   onExpandedChange?: (expanded: boolean) => void;
-  onSelectColor: (color: string) => void;
-  swatches: AnnotationColourSwatch[];
-  targetLabel?: string;
+  onSelectSize: (size: StampSize) => void;
 }) {
   const [internalExpanded, setInternalExpanded] = useState(false);
   const isExpanded = expanded ?? internalExpanded;
-  const currentSwatch = swatches.find((swatch) => swatch.value.toUpperCase() === currentColor.toUpperCase());
+  const currentLabel = stampSizeLabel(currentSize);
 
   function setExpanded(next: boolean) {
     if (onExpandedChange) {
@@ -32,32 +28,29 @@ export function AnnotationColorControl({
 
   if (isExpanded) {
     return (
-      <View accessibilityLabel={`${targetLabel} choices`} style={styles.expanded}>
-        {swatches.map((swatch) => {
-          const isSelected = swatch.value.toUpperCase() === currentColor.toUpperCase();
+      <View accessibilityLabel="Stamp size choices" style={styles.expanded}>
+        {STAMP_SIZE_OPTIONS.map((size) => {
+          const isSelected = currentSize === size;
+          const label = stampSizeLabel(size);
           return (
             <Pressable
-              accessibilityLabel={`${swatch.label} ${targetLabel.toLowerCase()}`}
+              accessibilityLabel={`${label} stamp size`}
               accessibilityRole="button"
               accessibilityState={{ selected: isSelected }}
-              key={swatch.id}
+              key={size}
               onPress={() => {
-                onSelectColor(swatch.value);
+                onSelectSize(size);
                 setExpanded(false);
               }}
               style={({ pressed }) => [
-                styles.swatchButton,
-                isSelected && styles.selectedSwatchButton,
+                styles.sizeButton,
+                isSelected && styles.selectedSizeButton,
                 pressed && styles.pressed,
               ]}
             >
-              <View
-                style={[
-                  styles.swatch,
-                  { backgroundColor: swatch.value },
-                  swatch.value.toUpperCase() === '#F8FAFC' && styles.lightSwatch,
-                ]}
-              />
+              <Text style={[styles.sizeButtonText, isSelected && styles.selectedSizeButtonText]}>
+                {label[0]}
+              </Text>
             </Pressable>
           );
         })}
@@ -67,25 +60,36 @@ export function AnnotationColorControl({
 
   return (
     <Pressable
-      accessibilityLabel={`${targetLabel}${currentSwatch ? `: ${currentSwatch.label}` : ''}`}
+      accessibilityLabel={`Stamp size: ${currentLabel}`}
       accessibilityRole="button"
       onPress={() => setExpanded(true)}
       style={({ pressed }) => [styles.collapsed, pressed && styles.pressed]}
     >
-      <View
-        style={[
-          styles.currentSwatch,
-          { backgroundColor: currentColor },
-          currentColor.toUpperCase() === '#F8FAFC' && styles.lightSwatch,
-        ]}
-      />
-      <Text style={styles.collapsedLabel}>{targetLabel}</Text>
+      <Text style={styles.currentSize}>{currentLabel[0]}</Text>
+      <Text style={styles.collapsedLabel}>Stamp size</Text>
       <Text style={styles.chevron}>^</Text>
     </Pressable>
   );
 }
 
+function stampSizeLabel(size: StampSize) {
+  switch (size) {
+    case 'small':
+      return 'Small';
+    case 'medium':
+      return 'Medium';
+    case 'large':
+      return 'Large';
+  }
+}
+
 const styles = StyleSheet.create({
+  chevron: {
+    color: '#F8FAFC',
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 14,
+  },
   collapsed: {
     alignItems: 'center',
     alignSelf: 'center',
@@ -104,18 +108,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
-  chevron: {
+  currentSize: {
     color: '#F8FAFC',
-    fontSize: 13,
-    fontWeight: '800',
-    lineHeight: 14,
-  },
-  currentSwatch: {
-    borderColor: 'rgba(255, 255, 255, 0.72)',
-    borderRadius: 8,
-    borderWidth: 1,
-    height: 16,
-    width: 16,
+    fontSize: 14,
+    fontWeight: '900',
+    minWidth: 14,
+    textAlign: 'center',
   },
   expanded: {
     alignItems: 'center',
@@ -130,28 +128,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 6,
   },
-  lightSwatch: {
-    borderColor: '#94A3B8',
-    borderWidth: 1,
-  },
   pressed: {
     opacity: 0.75,
   },
-  selectedSwatchButton: {
+  selectedSizeButton: {
     backgroundColor: '#F2B58F',
   },
-  swatch: {
-    borderColor: 'rgba(255, 255, 255, 0.72)',
-    borderRadius: 10,
-    borderWidth: 1,
-    height: 20,
-    width: 20,
+  selectedSizeButtonText: {
+    color: '#1B1B1F',
   },
-  swatchButton: {
+  sizeButton: {
     alignItems: 'center',
     borderRadius: 14,
     height: 32,
     justifyContent: 'center',
     width: 32,
+  },
+  sizeButtonText: {
+    color: '#F8FAFC',
+    fontSize: 13,
+    fontWeight: '900',
   },
 });
