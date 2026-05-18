@@ -32,6 +32,8 @@ export default function EditorScreen() {
   const [draftPoints, setDraftPoints] = useState<NormalizedPoint[]>([]);
   const [selectedPathId, setSelectedPathId] = useState<string>();
   const [editingPathPoints, setEditingPathPoints] = useState<NormalizedPoint[]>();
+  const draftPointsRef = useRef<NormalizedPoint[]>([]);
+  const draftKindRef = useRef<PathAnnotationKind | undefined>(undefined);
   const selectedPathIdRef = useRef<string | undefined>(undefined);
   const editingPathPointsRef = useRef<NormalizedPoint[] | undefined>(undefined);
 
@@ -122,19 +124,54 @@ export default function EditorScreen() {
     editingPathPointsRef.current = undefined;
     setSelectedPathId(undefined);
     setEditingPathPoints(undefined);
+    draftKindRef.current = kind;
+    draftPointsRef.current = [point];
     setDraftPoints([point]);
   }
 
   function extendPathDraft(point: NormalizedPoint, sampleSize: { width: number; height: number }) {
-    setDraftPoints((points) =>
-      appendSampledPoint(points, point, sampleSize, CONTROL_POINT_MIN_DISTANCE),
+    const next = appendSampledPoint(
+      draftPointsRef.current,
+      point,
+      sampleSize,
+      CONTROL_POINT_MIN_DISTANCE,
     );
+    draftPointsRef.current = next;
+    setDraftPoints(next);
   }
 
-  function finishPathDraft(point: NormalizedPoint, sampleSize: { width: number; height: number }) {
-    setDraftPoints((points) =>
-      finalizeSampledPoints(points, point, sampleSize, CONTROL_POINT_MIN_DISTANCE),
+  async function finishPathDraft(point: NormalizedPoint, sampleSize: { width: number; height: number }) {
+    const kind = draftKindRef.current;
+    const finalizedPoints = finalizeSampledPoints(
+      draftPointsRef.current,
+      point,
+      sampleSize,
+      CONTROL_POINT_MIN_DISTANCE,
     );
+    draftPointsRef.current = finalizedPoints;
+    setDraftPoints(finalizedPoints);
+
+    if (!project || !photo || !kind || finalizedPoints.length < 2) {
+      return;
+    }
+
+    const annotation = await addPathAnnotation({
+      topoId: project.id,
+      photoId: photo.id,
+      routeId: route?.id,
+      kind,
+      points: finalizedPoints,
+    });
+    const selectedPoints = 'points' in annotation ? annotation.points : finalizedPoints;
+    draftKindRef.current = undefined;
+    draftPointsRef.current = [];
+    setDraftPoints([]);
+    selectedPathIdRef.current = annotation.id;
+    editingPathPointsRef.current = selectedPoints;
+    setActiveTool('select');
+    setSelectedPathId(annotation.id);
+    setEditingPathPoints(selectedPoints);
+    await refresh();
   }
 
   function selectPath(annotationId?: string, points?: NormalizedPoint[]) {
@@ -142,6 +179,8 @@ export default function EditorScreen() {
     editingPathPointsRef.current = points ? [...points] : undefined;
     setSelectedPathId(annotationId);
     setEditingPathPoints(points ? [...points] : undefined);
+    draftKindRef.current = undefined;
+    draftPointsRef.current = [];
     setDraftPoints([]);
   }
 
@@ -172,32 +211,6 @@ export default function EditorScreen() {
     await refresh();
   }
 
-  const isDraftableTool = activeTool !== 'select' && isPathKind(activeTool);
-  const canSavePath = isDraftableTool && draftPoints.length >= 2;
-
-  async function saveDraftPath() {
-    if (!project || !photo || activeTool === 'select' || !isPathKind(activeTool)) {
-      return;
-    }
-    if (draftPoints.length < 2) {
-      return;
-    }
-
-    await addPathAnnotation({
-      topoId: project.id,
-      photoId: photo.id,
-      routeId: route?.id,
-      kind: activeTool,
-      points: draftPoints,
-    });
-    setDraftPoints([]);
-    selectedPathIdRef.current = undefined;
-    editingPathPointsRef.current = undefined;
-    setSelectedPathId(undefined);
-    setEditingPathPoints(undefined);
-    await refresh();
-  }
-
   async function deleteLastAnnotation() {
     const last = savedAnnotations.at(-1);
     if (!last) {
@@ -211,6 +224,7 @@ export default function EditorScreen() {
   function handleUndo() {
     if (draftPoints.length > 0) {
       setDraftPoints((points) => points.slice(0, -1));
+      draftPointsRef.current = draftPointsRef.current.slice(0, -1);
       return;
     }
     if (savedAnnotations.length === 0) {
@@ -255,11 +269,11 @@ export default function EditorScreen() {
       <SafeAreaView edges={['top']} pointerEvents="box-none" style={styles.topOverlay}>
         <EditorTopBar
           canRedo={false}
-          canSave={canSavePath}
+          canSave
           canUndo={draftPoints.length > 0 || savedAnnotations.length > 0}
           onBack={() => router.back()}
           onRedo={() => undefined}
-          onSave={saveDraftPath}
+          onSave={() => router.back()}
           onUndo={handleUndo}
         />
       </SafeAreaView>
@@ -268,6 +282,8 @@ export default function EditorScreen() {
           onSelectTool={(tool) => {
             setActiveTool(tool);
             setDraftPoints([]);
+            draftKindRef.current = undefined;
+            draftPointsRef.current = [];
             selectedPathIdRef.current = undefined;
             editingPathPointsRef.current = undefined;
             setSelectedPathId(undefined);

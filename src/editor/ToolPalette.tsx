@@ -1,17 +1,25 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import Octicons from '@expo/vector-icons/Octicons';
 import type { ComponentProps } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { EditorTool } from '@/domain/types';
 
 type IoniconName = ComponentProps<typeof Ionicons>['name'];
+type MaterialCommunityIconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
+type OcticonName = ComponentProps<typeof Octicons>['name'];
+type ToolbarIcon =
+  | { family: 'ionicons'; name: IoniconName }
+  | { family: 'materialCommunity'; name: MaterialCommunityIconName }
+  | { family: 'octicons'; name: OcticonName };
 
 type ToolGroupId = 'select' | 'stamps' | 'line' | 'label' | 'arrow';
 
 type ToolGroup = {
   id: ToolGroupId;
   label: string;
-  icon: IoniconName;
+  icon: ToolbarIcon;
   tool?: EditorTool;
   tools?: EditorTool[];
   submenu?: SubmenuTool[];
@@ -20,15 +28,15 @@ type ToolGroup = {
 type SubmenuTool = {
   id?: EditorTool;
   label: string;
-  icon: 'bolt' | 'rappelAnchor' | 'belayAnchor' | 'routeMarker' | 'curvedLine' | 'straightLine';
+  icon: 'bolt' | 'rappelAnchor' | 'belayAnchor' | 'routeMarker';
 };
 
 const toolGroups: ToolGroup[] = [
-  { id: 'select', label: 'Select', icon: 'navigate-outline', tool: 'select' },
+  { id: 'select', label: 'Select', icon: { family: 'ionicons', name: 'navigate-outline' }, tool: 'select' },
   {
     id: 'stamps',
     label: 'Stamps',
-    icon: 'hammer-outline',
+    icon: { family: 'ionicons', name: 'hammer-outline' },
     tool: 'bolt',
     tools: ['bolt', 'rappel', 'belay', 'start'],
     submenu: [
@@ -41,16 +49,12 @@ const toolGroups: ToolGroup[] = [
   {
     id: 'line',
     label: 'Line tool',
-    icon: 'trending-up-outline',
+    icon: { family: 'materialCommunity', name: 'draw' },
     tool: 'climbLine',
     tools: ['climbLine'],
-    submenu: [
-      { id: 'climbLine', label: 'Curved line', icon: 'curvedLine' },
-      { label: 'Straight line', icon: 'straightLine' },
-    ],
   },
-  { id: 'label', label: 'Text tool', icon: 'text-outline', tool: 'label' },
-  { id: 'arrow', label: 'Arrow tool', icon: 'arrow-forward-outline', tool: 'arrow' },
+  { id: 'label', label: 'Text tool', icon: { family: 'ionicons', name: 'text-outline' }, tool: 'label' },
+  { id: 'arrow', label: 'Arrow tool', icon: { family: 'octicons', name: 'arrow-up-right' }, tool: 'arrow' },
 ];
 
 export function ToolPalette({
@@ -123,11 +127,7 @@ export function ToolPalette({
                   pressed && !isSelected && styles.pressed,
                 ]}
               >
-                <Ionicons
-                  name={group.icon}
-                  size={22}
-                  color={isSelected ? '#1B1B1F' : '#F8FAFC'}
-                />
+                <ToolbarIcon icon={group.icon} selected={isSelected} />
               </Pressable>
             );
           })}
@@ -135,6 +135,20 @@ export function ToolPalette({
       </View>
     </View>
   );
+}
+
+function ToolbarIcon({ icon, selected }: { icon: ToolbarIcon; selected: boolean }) {
+  const foreground = selected ? '#1B1B1F' : '#F8FAFC';
+
+  if (icon.family === 'materialCommunity') {
+    return <MaterialCommunityIcons color={foreground} name={icon.name} size={22} />;
+  }
+
+  if (icon.family === 'octicons') {
+    return <Octicons color={foreground} name={icon.name} size={22} />;
+  }
+
+  return <Ionicons color={foreground} name={icon.name} size={22} />;
 }
 
 function SubmenuIcon({ icon, selected }: { icon: SubmenuTool['icon']; selected: boolean }) {
@@ -160,10 +174,6 @@ function SubmenuIcon({ icon, selected }: { icon: SubmenuTool['icon']; selected: 
           </Text>
         </View>
       );
-    case 'curvedLine':
-      return <Ionicons color={foreground} name="trending-up-outline" size={22} />;
-    case 'straightLine':
-      return <Ionicons color={foreground} name="remove-outline" size={24} />;
   }
 }
 

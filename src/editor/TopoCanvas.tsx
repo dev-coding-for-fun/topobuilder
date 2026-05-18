@@ -44,6 +44,8 @@ const HANDLE_RADIUS = 9;
 const STAMP_RED = '#C91F37';
 const STAMP_WHITE = '#F8FAFC';
 
+type GestureMode = 'draw' | 'editPath' | 'pan';
+
 type TopoCanvasProps = {
   photo: PhotoAsset;
   annotations: Annotation[];
@@ -122,6 +124,11 @@ export function TopoCanvas({
     [annotations],
   );
   const selectedPath = pathAnnotations.find((annotation) => annotation.id === selectedPathId);
+  const gestureMode: GestureMode = activePathTool
+    ? 'draw'
+    : activeTool === 'select' && selectedPath
+      ? 'editPath'
+      : 'pan';
 
   // Reset zoom/pan whenever the photo changes so each topo opens at the cover view.
   useEffect(() => {
@@ -189,39 +196,47 @@ export function TopoCanvas({
     }
   };
 
-  function dispatchTap(screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) {
-    placeRef.current(screenX, screenY, viewTx, viewTy, viewScale);
-  }
-
-  function dispatchBeginPath(screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) {
-    if (activeTool === 'select' || !isPathKind(activeTool)) {
+  const beginPathRef = useRef<
+    (screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) => void
+  >(() => undefined);
+  beginPathRef.current = (screenX, screenY, viewTx, viewTy, viewScale) => {
+    if (activeTool === 'select' || !isPathKind(activeTool) || imageFit.width <= 0 || imageFit.height <= 0) {
       return;
     }
     onBeginPathDraft(activeTool, normalizedPointAt(screenX, screenY, viewTx, viewTy, viewScale));
-  }
+  };
 
-  function dispatchExtendPath(screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) {
+  const extendPathRef = useRef<
+    (screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) => void
+  >(() => undefined);
+  extendPathRef.current = (screenX, screenY, viewTx, viewTy, viewScale) => {
+    if (imageFit.width <= 0 || imageFit.height <= 0) {
+      return;
+    }
     onExtendPathDraft(
       normalizedPointAt(screenX, screenY, viewTx, viewTy, viewScale),
       sampleSizeFor(viewScale),
     );
-  }
+  };
 
-  function dispatchFinishPath(screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) {
+  const finishPathRef = useRef<
+    (screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) => void
+  >(() => undefined);
+  finishPathRef.current = (screenX, screenY, viewTx, viewTy, viewScale) => {
+    if (imageFit.width <= 0 || imageFit.height <= 0) {
+      return;
+    }
     onFinishPathDraft(
       normalizedPointAt(screenX, screenY, viewTx, viewTy, viewScale),
       sampleSizeFor(viewScale),
     );
-  }
+  };
 
-  function dispatchBeginControlPointDrag(
-    screenX: number,
-    screenY: number,
-    viewTx: number,
-    viewTy: number,
-    viewScale: number,
-  ) {
-    if (!selectedPath) {
+  const beginControlPointDragRef = useRef<
+    (screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) => void
+  >(() => undefined);
+  beginControlPointDragRef.current = (screenX, screenY, viewTx, viewTy, viewScale) => {
+    if (!selectedPath || imageFit.width <= 0 || imageFit.height <= 0) {
       dragHandleIndexRef.current = -1;
       return;
     }
@@ -233,6 +248,46 @@ export function TopoCanvas({
       HANDLE_HIT_RADIUS,
     );
     dragHandleIndexRef.current = hit?.index ?? -1;
+  };
+
+  const moveControlPointRef = useRef<
+    (screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) => void
+  >(() => undefined);
+  moveControlPointRef.current = (screenX, screenY, viewTx, viewTy, viewScale) => {
+    if (dragHandleIndexRef.current < 0 || imageFit.width <= 0 || imageFit.height <= 0) {
+      return;
+    }
+    onMoveSelectedPathPoint(
+      dragHandleIndexRef.current,
+      normalizedPointAt(screenX, screenY, viewTx, viewTy, viewScale),
+      sampleSizeFor(viewScale),
+    );
+  };
+
+  function dispatchTap(screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) {
+    placeRef.current(screenX, screenY, viewTx, viewTy, viewScale);
+  }
+
+  function dispatchBeginPath(screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) {
+    beginPathRef.current(screenX, screenY, viewTx, viewTy, viewScale);
+  }
+
+  function dispatchExtendPath(screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) {
+    extendPathRef.current(screenX, screenY, viewTx, viewTy, viewScale);
+  }
+
+  function dispatchFinishPath(screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) {
+    finishPathRef.current(screenX, screenY, viewTx, viewTy, viewScale);
+  }
+
+  function dispatchBeginControlPointDrag(
+    screenX: number,
+    screenY: number,
+    viewTx: number,
+    viewTy: number,
+    viewScale: number,
+  ) {
+    beginControlPointDragRef.current(screenX, screenY, viewTx, viewTy, viewScale);
   }
 
   function dispatchMoveControlPoint(
@@ -242,14 +297,7 @@ export function TopoCanvas({
     viewTy: number,
     viewScale: number,
   ) {
-    if (dragHandleIndexRef.current < 0) {
-      return;
-    }
-    onMoveSelectedPathPoint(
-      dragHandleIndexRef.current,
-      normalizedPointAt(screenX, screenY, viewTx, viewTy, viewScale),
-      sampleSizeFor(viewScale),
-    );
+    moveControlPointRef.current(screenX, screenY, viewTx, viewTy, viewScale);
   }
 
   function dispatchFinishControlPointDrag() {
@@ -288,26 +336,17 @@ export function TopoCanvas({
         .maxPointers(1)
         .minDistance(3)
         .onStart((event) => {
-          if (activePointers.value > 1) {
-            return;
-          }
           runOnJS(dispatchBeginPath)(event.x, event.y, tx.value, ty.value, scale.value);
         })
         .onChange((event) => {
-          if (activePointers.value > 1) {
-            return;
-          }
           runOnJS(dispatchExtendPath)(event.x, event.y, tx.value, ty.value, scale.value);
         })
         .onEnd((event) => {
-          if (activePointers.value > 1) {
-            return;
-          }
           runOnJS(dispatchFinishPath)(event.x, event.y, tx.value, ty.value, scale.value);
         }),
     // Dispatch functions are refreshed through render closures and only read JS state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [activePointers, scale, tx, ty],
+    [scale, tx, ty],
   );
 
   const controlPointGesture = useMemo(
@@ -406,20 +445,15 @@ export function TopoCanvas({
 
   const composedGesture = useMemo(
     () => {
-      const oneFingerGesture =
-        activeTool === 'select' && selectedPath ? controlPointGesture : activePathTool ? drawGesture : panGesture;
-      return Gesture.Race(tapGesture, Gesture.Simultaneous(oneFingerGesture, pinchGesture));
+      if (gestureMode === 'draw') {
+        return Gesture.Simultaneous(drawGesture, pinchGesture);
+      }
+      if (gestureMode === 'editPath') {
+        return Gesture.Race(tapGesture, Gesture.Simultaneous(controlPointGesture, pinchGesture));
+      }
+      return Gesture.Race(tapGesture, Gesture.Simultaneous(panGesture, pinchGesture));
     },
-    [
-      activePathTool,
-      activeTool,
-      controlPointGesture,
-      drawGesture,
-      panGesture,
-      pinchGesture,
-      selectedPath,
-      tapGesture,
-    ],
+    [controlPointGesture, drawGesture, gestureMode, panGesture, pinchGesture, tapGesture],
   );
 
   const groupTransform = useDerivedValue(
@@ -437,7 +471,7 @@ export function TopoCanvas({
   };
 
   return (
-    <GestureDetector gesture={composedGesture}>
+    <GestureDetector gesture={composedGesture} key={gestureMode}>
       <Animated.View onLayout={handleLayout} style={styles.container}>
         <Canvas style={StyleSheet.absoluteFill}>
           <Group transform={groupTransform}>
@@ -509,15 +543,7 @@ function AnnotationShape({
   size: { width: number; height: number };
 }) {
   if ('points' in annotation) {
-    const path = Skia.Path.Make();
-    annotation.points.forEach((point, index) => {
-      const next = denormalizePoint(point, size);
-      if (index === 0) {
-        path.moveTo(next.x, next.y);
-      } else {
-        path.lineTo(next.x, next.y);
-      }
-    });
+    const path = makeSmoothedPath(annotation.points, size);
 
     return (
       <Path
@@ -683,6 +709,41 @@ function AnnotationShape({
       <Circle color={annotation.color} cx={point.x} cy={point.y} r={8} />
     </Group>
   );
+}
+
+function makeSmoothedPath(points: NormalizedPoint[], size: { width: number; height: number }) {
+  const path = Skia.Path.Make();
+  const drawingPoints = points.map((point) => denormalizePoint(point, size));
+  const first = drawingPoints[0];
+
+  if (!first) {
+    return path;
+  }
+
+  path.moveTo(first.x, first.y);
+
+  if (drawingPoints.length === 2) {
+    const last = drawingPoints[1];
+    path.lineTo(last.x, last.y);
+    return path;
+  }
+
+  for (let index = 1; index < drawingPoints.length - 1; index += 1) {
+    const control = drawingPoints[index];
+    const next = drawingPoints[index + 1];
+    const midpoint = {
+      x: (control.x + next.x) / 2,
+      y: (control.y + next.y) / 2,
+    };
+    path.quadTo(control.x, control.y, midpoint.x, midpoint.y);
+  }
+
+  const last = drawingPoints.at(-1);
+  if (last) {
+    path.lineTo(last.x, last.y);
+  }
+
+  return path;
 }
 
 const styles = StyleSheet.create({

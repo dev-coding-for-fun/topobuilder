@@ -1,7 +1,7 @@
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
-import type { Annotation, PhotoAsset, TopoProject } from '@/domain/types';
+import type { Annotation, NormalizedPoint, PhotoAsset, TopoProject } from '@/domain/types';
 
 function escapeHtml(value: string) {
   return value
@@ -13,11 +13,9 @@ function escapeHtml(value: string) {
 
 function annotationSvg(annotation: Annotation, photo: PhotoAsset) {
   if ('points' in annotation) {
-    const points = annotation.points
-      .map((point) => `${point.x * photo.width},${point.y * photo.height}`)
-      .join(' ');
+    const path = smoothedPathData(annotation.points, photo);
     const dash = annotation.kind === 'walkoff' ? 'stroke-dasharray="8 10"' : annotation.kind === 'scramble' ? 'stroke-dasharray="16 8"' : '';
-    return `<polyline points="${points}" fill="none" stroke="${annotation.color}" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" ${dash} />`;
+    return `<path d="${path}" fill="none" stroke="${annotation.color}" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" ${dash} />`;
   }
 
   const x = annotation.point.x * photo.width;
@@ -28,6 +26,39 @@ function annotationSvg(annotation: Annotation, photo: PhotoAsset) {
   }
 
   return `<circle cx="${x}" cy="${y}" r="20" fill="#fff" /><circle cx="${x}" cy="${y}" r="14" fill="${annotation.color}" />`;
+}
+
+function smoothedPathData(points: NormalizedPoint[], photo: PhotoAsset) {
+  const drawingPoints = points.map((point) => ({
+    x: point.x * photo.width,
+    y: point.y * photo.height,
+  }));
+  const first = drawingPoints[0];
+
+  if (!first) {
+    return '';
+  }
+
+  const commands = [`M ${first.x} ${first.y}`];
+
+  if (drawingPoints.length === 2) {
+    const last = drawingPoints[1];
+    commands.push(`L ${last.x} ${last.y}`);
+    return commands.join(' ');
+  }
+
+  for (let index = 1; index < drawingPoints.length - 1; index += 1) {
+    const control = drawingPoints[index];
+    const next = drawingPoints[index + 1];
+    commands.push(`Q ${control.x} ${control.y} ${(control.x + next.x) / 2} ${(control.y + next.y) / 2}`);
+  }
+
+  const last = drawingPoints.at(-1);
+  if (last) {
+    commands.push(`L ${last.x} ${last.y}`);
+  }
+
+  return commands.join(' ');
 }
 
 export async function exportTopoPdf(project: TopoProject, photo: PhotoAsset) {
