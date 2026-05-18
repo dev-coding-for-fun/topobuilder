@@ -354,14 +354,17 @@ function LabelAnnotationShape({
   });
   const point = denormalizePoint(annotation.point, size);
   const measured = measureLabelText(labelText(annotation) || ' ', fontSize);
-  const bounds = measureLabelBounds({
-    point: annotation.point,
-    text: labelText(annotation),
+  const bounds = measureLabelBoundsWithFont({
+    annotation,
+    font,
     fontSize,
     size,
   });
-  const backdrop = chooseTextBackdrop({ textColour: annotation.color });
   const backdropPadding = Math.max(4, fontSize * 0.18);
+  const backdropTrailingPadding = backdropPadding + Math.max(2, fontSize * 0.06);
+  const backdrop = chooseTextBackdrop({
+    textColour: annotation.color,
+  });
 
   return (
     <Group>
@@ -370,7 +373,7 @@ function LabelAnnotationShape({
           color={rgbaString(backdrop.color, backdrop.opacity)}
           height={bounds.height + backdropPadding * 2}
           r={LABEL_BACKDROP_RADIUS}
-          width={bounds.width + backdropPadding * 2}
+          width={bounds.width + backdropPadding + backdropTrailingPadding}
           x={bounds.x - backdropPadding}
           y={bounds.y - backdropPadding}
         />
@@ -387,6 +390,32 @@ function LabelAnnotationShape({
       ))}
     </Group>
   );
+}
+
+function measureLabelBoundsWithFont({
+  annotation,
+  font,
+  fontSize,
+  size,
+}: {
+  annotation: MarkerAnnotation;
+  font: ReturnType<typeof matchFont>;
+  fontSize: number;
+  size: { width: number; height: number };
+}) {
+  const anchor = denormalizePoint(annotation.point, size);
+  const measured = measureLabelText(labelText(annotation) || ' ', fontSize);
+  const width = Math.max(
+    fontSize,
+    ...splitLabelLines(labelText(annotation) || ' ').map((line) => font.measureText(line || ' ').width),
+  );
+
+  return {
+    height: measured.height,
+    width,
+    x: anchor.x,
+    y: anchor.y,
+  };
 }
 
 export function screenFrameForLabel({
