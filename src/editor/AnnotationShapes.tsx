@@ -2,6 +2,7 @@ import {
   Circle,
   Group,
   Line,
+  matchFont,
   Path,
   Rect,
   Skia,
@@ -9,7 +10,6 @@ import {
 } from '@shopify/react-native-skia';
 import type { useFont } from '@shopify/react-native-skia';
 import { memo } from 'react';
-import { StyleSheet, Text } from 'react-native';
 
 import { isPathAnnotation } from '@/domain/annotationFactory';
 import { denormalizePoint, normalizedToScreenPoint } from '@/domain/geometry';
@@ -19,6 +19,8 @@ import {
   labelHandlePoints,
   labelText,
   measureLabelBounds,
+  measureLabelText,
+  splitLabelLines,
 } from '@/domain/textLabels';
 import type { Annotation, MarkerAnnotation, NormalizedPoint } from '@/domain/types';
 
@@ -107,6 +109,7 @@ export function SelectedLabelHandles({
 
 export const AnnotationShape = memo(function AnnotationShape({
   annotation,
+  imageScale,
   routeMarkerFont,
   size,
 }: {
@@ -131,7 +134,7 @@ export const AnnotationShape = memo(function AnnotationShape({
   }
 
   if (annotation.kind === 'label') {
-    return null;
+    return <LabelAnnotationShape annotation={annotation} imageScale={imageScale} size={size} />;
   }
 
   const point = denormalizePoint(annotation.point, size);
@@ -288,6 +291,40 @@ export const AnnotationShape = memo(function AnnotationShape({
   );
 });
 
+function LabelAnnotationShape({
+  annotation,
+  imageScale,
+  size,
+}: {
+  annotation: MarkerAnnotation;
+  imageScale: number;
+  size: { width: number; height: number };
+}) {
+  const fontSize = Math.max(1, Math.round(displayFontSize(labelFontSize(annotation), { scale: imageScale })));
+  const font = matchFont({
+    fontFamily: 'sans-serif',
+    fontSize,
+    fontWeight: '700',
+  });
+  const point = denormalizePoint(annotation.point, size);
+  const measured = measureLabelText(labelText(annotation) || ' ', fontSize);
+
+  return (
+    <Group>
+      {splitLabelLines(labelText(annotation)).map((line, index) => (
+        <SkiaText
+          color={annotation.color}
+          font={font}
+          key={`${annotation.id}-${index}`}
+          text={line}
+          x={point.x}
+          y={point.y + fontSize + measured.lineHeight * index}
+        />
+      ))}
+    </Group>
+  );
+}
+
 export function screenFrameForLabel({
   annotation,
   imageFit,
@@ -317,37 +354,6 @@ export function screenFrameForLabel({
     x: point.x,
     y: point.y,
   };
-}
-
-export function NativeLabel({
-  annotation,
-  imageFit,
-  transform,
-}: {
-  annotation: MarkerAnnotation;
-  imageFit: ImageFit;
-  transform: Viewport;
-}) {
-  const frame = screenFrameForLabel({ annotation, imageFit, transform });
-
-  return (
-    <Text
-      pointerEvents="none"
-      style={[
-        styles.nativeLabel,
-        {
-          color: annotation.color,
-          fontSize: frame.fontSize,
-          left: frame.x,
-          lineHeight: frame.lineHeight,
-          minWidth: frame.width,
-          top: frame.y,
-        },
-      ]}
-    >
-      {labelText(annotation)}
-    </Text>
-  );
 }
 
 function makeSmoothedPath(points: NormalizedPoint[], size: { width: number; height: number }) {
@@ -385,10 +391,3 @@ function makeSmoothedPath(points: NormalizedPoint[], size: { width: number; heig
   return path;
 }
 
-const styles = StyleSheet.create({
-  nativeLabel: {
-    fontWeight: '700',
-    padding: 0,
-    position: 'absolute',
-  },
-});

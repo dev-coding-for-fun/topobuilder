@@ -45,7 +45,6 @@ import type {
 } from '@/domain/types';
 import {
   AnnotationShape,
-  NativeLabel,
   screenFrameForLabel,
   SelectedLabelHandles,
   SelectedPathHandles,
@@ -250,7 +249,6 @@ export function TopoCanvas({
 
       if (labelHit) {
         onSelectLabel(labelHit.id);
-        onSelectPath(undefined);
         return;
       }
 
@@ -262,7 +260,12 @@ export function TopoCanvas({
         }
       }
 
-      onSelectPath(bestPathHit?.annotation.id, bestPathHit?.annotation.points);
+      if (bestPathHit) {
+        onSelectPath(bestPathHit.annotation.id, bestPathHit.annotation.points);
+        return;
+      }
+
+      onSelectPath(undefined);
       onSelectLabel(undefined);
       return;
     }
@@ -748,7 +751,7 @@ export function TopoCanvas({
               ) : (
                 <Rect x={0} y={0} width={imageFit.width} height={imageFit.height} color="#CBD5E1" />
               )}
-              {annotations.filter((annotation) => !isLabelAnnotation(annotation)).map((annotation) => (
+              {annotations.map((annotation) => (
                 <AnnotationShape
                   annotation={annotation}
                   key={annotation.id}
@@ -768,16 +771,6 @@ export function TopoCanvas({
             </Group>
           </Group>
         </Canvas>
-        {labelAnnotations
-          .filter((annotation) => annotation.id !== selectedLabel?.id)
-          .map((annotation) => (
-            <NativeLabel
-              annotation={annotation}
-              imageFit={imageFit}
-              key={annotation.id}
-              transform={viewport}
-            />
-          ))}
         {selectedLabel && selectedLabelFrame ? (
           <TextInput
             autoFocus
