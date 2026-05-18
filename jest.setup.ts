@@ -9,6 +9,7 @@ jest.mock('@shopify/react-native-skia', () => ({
   })),
   Path: 'Path',
   Rect: 'Rect',
+  RoundedRect: 'RoundedRect',
   Text: 'Text',
   Skia: {
     Path: {
@@ -22,4 +23,16 @@ jest.mock('@shopify/react-native-skia', () => ({
     measureText: jest.fn(() => ({ width: 0 })),
   }),
   useImage: () => null,
+}));
+
+jest.mock('react-native-reanimated', () => ({
+  __esModule: true,
+  default: { View: require('react-native').View },
+  getUseOfValueInStyleWarning: () => undefined,
+  runOnJS: (callback: (...args: unknown[]) => unknown) => callback,
+  useDerivedValue: (factory: () => unknown) => factory(),
+  useSharedValue: (value: unknown) => {
+    const React = require('react');
+    return React.useRef({ value }).current;
+  },
 }));

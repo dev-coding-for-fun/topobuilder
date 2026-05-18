@@ -5,6 +5,7 @@ import {
   matchFont,
   Path,
   Rect,
+  RoundedRect,
   Skia,
   Text as SkiaText,
 } from '@shopify/react-native-skia';
@@ -12,6 +13,7 @@ import type { useFont } from '@shopify/react-native-skia';
 import { memo } from 'react';
 
 import { isPathAnnotation } from '@/domain/annotationFactory';
+import { chooseTextBackdrop, rgbaString } from '@/domain/annotationColours';
 import { denormalizePoint, normalizedToScreenPoint } from '@/domain/geometry';
 import {
   displayFontSize,
@@ -28,6 +30,7 @@ const HANDLE_RADIUS = 9;
 const STAMP_RED = '#C91F37';
 const STAMP_WHITE = '#F8FAFC';
 const LABEL_HANDLE_RADIUS = 8;
+const LABEL_BACKDROP_RADIUS = 6;
 
 type ImageFit = {
   offsetX: number;
@@ -351,9 +354,27 @@ function LabelAnnotationShape({
   });
   const point = denormalizePoint(annotation.point, size);
   const measured = measureLabelText(labelText(annotation) || ' ', fontSize);
+  const bounds = measureLabelBounds({
+    point: annotation.point,
+    text: labelText(annotation),
+    fontSize,
+    size,
+  });
+  const backdrop = chooseTextBackdrop({ textColour: annotation.color });
+  const backdropPadding = Math.max(4, fontSize * 0.18);
 
   return (
     <Group>
+      {backdrop.opacity > 0 ? (
+        <RoundedRect
+          color={rgbaString(backdrop.color, backdrop.opacity)}
+          height={bounds.height + backdropPadding * 2}
+          r={LABEL_BACKDROP_RADIUS}
+          width={bounds.width + backdropPadding * 2}
+          x={bounds.x - backdropPadding}
+          y={bounds.y - backdropPadding}
+        />
+      ) : null}
       {splitLabelLines(labelText(annotation)).map((line, index) => (
         <SkiaText
           color={annotation.color}

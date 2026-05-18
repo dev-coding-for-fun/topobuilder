@@ -7,6 +7,7 @@ import type {
   PathAnnotation,
   PathAnnotationKind,
 } from './types';
+import { defaultAnnotationColourForTarget } from './annotationColours';
 import { DEFAULT_LABEL_FONT_SIZE, clampLabelFontSize } from './textLabels';
 
 const pathKinds = new Set<AnnotationKind>(['climbLine', 'walkoff', 'scramble']);
@@ -44,7 +45,7 @@ export function defaultColorForKind(kind: AnnotationKind) {
     case 'scramble':
       return '#F2994A';
     case 'label':
-      return '#111827';
+      return defaultAnnotationColourForTarget('label');
     case 'anchor':
     case 'rappel':
       return '#9B51E0';
@@ -63,6 +64,7 @@ type CreateAnnotationInput = {
   kind: AnnotationKind;
   point: NormalizedPoint;
   now: string;
+  color?: string;
   label?: string;
   labelFontSize?: number;
 };
@@ -74,7 +76,7 @@ export function createAnnotation(input: CreateAnnotationInput): Annotation {
     photoId: input.photoId,
     routeId: input.routeId,
     kind: input.kind,
-    color: defaultColorForKind(input.kind),
+    color: input.color ?? defaultColorForKind(input.kind),
     label: input.label,
     labelFontSize:
       input.kind === 'label'

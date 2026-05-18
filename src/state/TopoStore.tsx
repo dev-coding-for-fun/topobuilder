@@ -34,6 +34,7 @@ type TopoStoreValue = {
     routeId?: string;
     kind: AnnotationKind;
     point: NormalizedPoint;
+    color?: string;
     label?: string;
     labelFontSize?: number;
   }) => Promise<Annotation>;
@@ -185,6 +186,7 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
       routeId?: string;
       kind: AnnotationKind;
       point: NormalizedPoint;
+      color?: string;
       label?: string;
       labelFontSize?: number;
     }) => {

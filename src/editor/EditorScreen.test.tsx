@@ -1,4 +1,4 @@
-import { act, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import type { NormalizedPoint, TopoProject } from '@/domain/types';
 import { TopoCanvas } from '@/editor/TopoCanvas';
@@ -67,12 +67,12 @@ describe('EditorScreen label editing', () => {
     jest.clearAllMocks();
     loadProject.mockResolvedValue(project);
     addAnnotation.mockImplementation(
-      async (input: { labelFontSize?: number; point?: NormalizedPoint }) => ({
+      async (input: { color?: string; labelFontSize?: number; point?: NormalizedPoint }) => ({
         id: 'label-1',
         topoId: 'project-1',
         photoId: 'photo-1',
         kind: 'label',
-        color: '#111827',
+        color: input.color ?? '#111827',
         label: '',
         labelFontSize: input.labelFontSize,
         point: input.point,
@@ -80,7 +80,7 @@ describe('EditorScreen label editing', () => {
         updatedAt: '2026-01-01T00:00:00.000Z',
       }),
     );
-    updateAnnotation.mockResolvedValue(undefined);
+    updateAnnotation.mockImplementation(async (annotation) => annotation);
     removeAnnotation.mockResolvedValue(undefined);
     (useTopoStore as jest.Mock).mockReturnValue({
       addAnnotation,
@@ -144,5 +144,30 @@ describe('EditorScreen label editing', () => {
 
     await waitFor(() => expect(removeAnnotation).toHaveBeenCalledWith(expect.objectContaining({ id: 'label-1' })));
     expect(updateAnnotation).not.toHaveBeenCalled();
+  });
+
+  it('uses selected swatch colour for new labels and persists selected-label colour immediately', async () => {
+    render(<EditorScreen />);
+    await waitFor(() => expect(TopoCanvas).toHaveBeenCalled());
+
+    await act(async () => {
+      await latestCanvasProps().onPlaceAnnotation('label', { x: 0.2, y: 0.3 }, { labelFontSize: 24 });
+    });
+
+    fireEvent.press(screen.getByLabelText('Annotation colour: Ink'));
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Red annotation colour'));
+    });
+
+    await waitFor(() =>
+      expect(updateAnnotation).toHaveBeenCalledWith(expect.objectContaining({ id: 'label-1', color: '#DC2626' })),
+    );
+
+    await act(async () => {
+      latestCanvasProps().onSelectLabel(undefined);
+      await latestCanvasProps().onPlaceAnnotation('label', { x: 0.4, y: 0.5 }, { labelFontSize: 24 });
+    });
+
+    expect(addAnnotation).toHaveBeenLastCalledWith(expect.objectContaining({ color: '#DC2626' }));
   });
 });

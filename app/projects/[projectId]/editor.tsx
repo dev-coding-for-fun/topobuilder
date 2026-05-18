@@ -4,6 +4,10 @@ import { StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
+  ANNOTATION_COLOUR_PALETTE,
+  defaultAnnotationColourForTarget,
+} from '@/domain/annotationColours';
+import {
   annotationsForPhoto,
   defaultColorForKind,
   isLabelAnnotation,
@@ -24,6 +28,7 @@ import type {
   PathAnnotationKind,
   TopoProject,
 } from '@/domain/types';
+import { AnnotationColorControl } from '@/editor/AnnotationColorControl';
 import { DEFAULT_LABEL_FONT_SIZE, clampLabelFontSize } from '@/domain/textLabels';
 import { EditorTopBar } from '@/editor/EditorTopBar';
 import { ToolPalette } from '@/editor/ToolPalette';
@@ -42,6 +47,7 @@ export default function EditorScreen() {
   const [editingPathPoints, setEditingPathPoints] = useState<NormalizedPoint[]>();
   const [selectedLabelId, setSelectedLabelId] = useState<string>();
   const [editingLabel, setEditingLabel] = useState<MarkerAnnotation>();
+  const [lastLabelColorByPhoto, setLastLabelColorByPhoto] = useState<Record<string, string>>({});
   const draftPointsRef = useRef<NormalizedPoint[]>([]);
   const draftKindRef = useRef<PathAnnotationKind | undefined>(undefined);
   const selectedPathIdRef = useRef<string | undefined>(undefined);
@@ -49,6 +55,7 @@ export default function EditorScreen() {
   const selectedLabelIdRef = useRef<string | undefined>(undefined);
   const editingLabelRef = useRef<MarkerAnnotation | undefined>(undefined);
   const lastLabelFontSizeByPhotoRef = useRef<Record<string, number>>({});
+  const lastLabelColorByPhotoRef = useRef<Record<string, string>>({});
 
   useEffect(() => {
     selectedPathIdRef.current = selectedPathId;
@@ -188,9 +195,14 @@ export default function EditorScreen() {
     clearSelectionState();
 
     const rememberedFontSize = lastLabelFontSizeByPhotoRef.current[photo.id];
+    const rememberedColor = lastLabelColorByPhotoRef.current[photo.id];
     const labelFontSize =
       kind === 'label'
         ? clampLabelFontSize(rememberedFontSize ?? context.labelFontSize ?? DEFAULT_LABEL_FONT_SIZE)
+        : undefined;
+    const color =
+      kind === 'label'
+        ? (rememberedColor ?? defaultAnnotationColourForTarget('label'))
         : undefined;
 
     const annotation = await addAnnotation({
@@ -199,12 +211,15 @@ export default function EditorScreen() {
       routeId: route?.id,
       kind,
       point,
+      color,
       label: kind === 'label' ? '' : undefined,
       labelFontSize,
     });
     if (isLabelAnnotation(annotation)) {
       lastLabelFontSizeByPhotoRef.current[photo.id] =
         annotation.labelFontSize ?? labelFontSize ?? DEFAULT_LABEL_FONT_SIZE;
+      lastLabelColorByPhotoRef.current[photo.id] = annotation.color;
+      setLastLabelColorByPhoto((colors) => ({ ...colors, [photo.id]: annotation.color }));
       setActiveTool('select');
       selectLabelSnapshot(annotation);
     }
@@ -325,6 +340,29 @@ export default function EditorScreen() {
     });
   }
 
+  async function changeSelectedLabelColor(color: string) {
+    if (!photo) {
+      return;
+    }
+
+    lastLabelColorByPhotoRef.current[photo.id] = color;
+    setLastLabelColorByPhoto((colors) => ({ ...colors, [photo.id]: color }));
+    const annotation = editingLabelRef.current;
+    if (!annotation) {
+      return;
+    }
+
+    const next = { ...annotation, color };
+    editingLabelRef.current = next;
+    setEditingLabel(next);
+    const updated = await updateAnnotation(next);
+    if (isLabelAnnotation(updated)) {
+      editingLabelRef.current = updated;
+      setEditingLabel(updated);
+    }
+    await refresh();
+  }
+
   async function commitEditingLabelSnapshot() {
     const annotation = editingLabelRef.current;
     if (!annotation) {
@@ -392,6 +430,12 @@ export default function EditorScreen() {
     );
   }
 
+  const currentLabelColor =
+    editingLabel?.color ??
+    lastLabelColorByPhoto[photo.id] ??
+    defaultAnnotationColourForTarget('label');
+  const canChooseAnnotationColor = activeTool === 'label' || Boolean(selectedLabelId);
+
   return (
     <View style={styles.root}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -427,6 +471,15 @@ export default function EditorScreen() {
         />
       </SafeAreaView>
       <SafeAreaView edges={['bottom']} pointerEvents="box-none" style={styles.bottomOverlay}>
+        {canChooseAnnotationColor ? (
+          <AnnotationColorControl
+            currentColor={currentLabelColor}
+            onSelectColor={(color) => {
+              void changeSelectedLabelColor(color);
+            }}
+            swatches={ANNOTATION_COLOUR_PALETTE}
+          />
+        ) : null}
         <ToolPalette
           onSelectTool={(tool) => {
             void commitEditingLabelSnapshot();

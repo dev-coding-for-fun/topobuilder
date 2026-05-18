@@ -2,6 +2,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
 import { annotationsForPhoto, isPathAnnotation } from '@/domain/annotationFactory';
+import { chooseTextBackdrop } from '@/domain/annotationColours';
 import type { Annotation, NormalizedPoint, PhotoAsset, TopoProject } from '@/domain/types';
 import { labelFontSize, labelText, measureLabelText, splitLabelLines } from '@/domain/textLabels';
 
@@ -27,12 +28,19 @@ function annotationSvg(annotation: Annotation, photo: PhotoAsset) {
     const fontSize = labelFontSize(annotation);
     const measured = measureLabelText(labelText(annotation), fontSize);
     const lines = splitLabelLines(labelText(annotation));
-    return lines
+    const backdrop = chooseTextBackdrop({ textColour: annotation.color });
+    const padding = Math.max(4, fontSize * 0.18);
+    const backdropSvg =
+      backdrop.opacity > 0
+        ? `<rect x="${x - padding}" y="${y - padding}" width="${measured.width + padding * 2}" height="${measured.height + padding * 2}" rx="6" ry="6" fill="${backdrop.color}" opacity="${backdrop.opacity}" />`
+        : '';
+    const textSvg = lines
       .map(
         (line, index) =>
           `<text x="${x}" y="${y + fontSize + measured.lineHeight * index}" fill="${annotation.color}" font-size="${fontSize}" font-weight="700">${escapeHtml(line)}</text>`,
       )
       .join('');
+    return `${backdropSvg}${textSvg}`;
   }
 
   return `<circle cx="${x}" cy="${y}" r="20" fill="#fff" /><circle cx="${x}" cy="${y}" r="14" fill="${annotation.color}" />`;
