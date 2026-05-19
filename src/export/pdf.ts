@@ -1,5 +1,6 @@
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system/legacy';
 
 import { annotationsForPhoto, isPathAnnotation, isStampAnnotation } from '@/domain/annotationFactory';
 import { chooseContrastingTextColour, chooseTextBackdrop } from '@/domain/annotationColours';
@@ -7,12 +8,45 @@ import { stampScaleForSize, stampSizeForAnnotation } from '@/domain/stampSizes';
 import type { Annotation, NormalizedPoint, PhotoAsset, TopoProject } from '@/domain/types';
 import { labelFontSize, labelText, measureLabelText, splitLabelLines } from '@/domain/textLabels';
 
+const PDF_IMAGE_WIDTH = 900;
+const STAMP_WHITE = '#F8FAFC';
+
 function escapeHtml(value: string) {
   return value
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;');
+}
+
+function imageMimeType(uri: string) {
+  const path = uri.split('?')[0]?.toLowerCase() ?? uri.toLowerCase();
+  if (path.endsWith('.png')) {
+    return 'image/png';
+  }
+  if (path.endsWith('.webp')) {
+    return 'image/webp';
+  }
+  return 'image/jpeg';
+}
+
+async function printableImageUri(photo: PhotoAsset) {
+  if (photo.uri.startsWith('data:') || /^https?:\/\//i.test(photo.uri)) {
+    return photo.uri;
+  }
+
+  const base64 = await FileSystem.readAsStringAsync(photo.uri, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+  return `data:${imageMimeType(photo.uri)};base64,${base64}`;
+}
+
+function printableScale(photo: PhotoAsset) {
+  return Math.max(1, photo.width / PDF_IMAGE_WIDTH);
+}
+
+function stampSvgValue(value: number, stampScale: number, printScale: number) {
+  return value * stampScale * printScale;
 }
 
 function annotationSvg(annotation: Annotation, photo: PhotoAsset) {
@@ -45,16 +79,43 @@ function annotationSvg(annotation: Annotation, photo: PhotoAsset) {
   }
 
   const stampScale = isStampAnnotation(annotation) ? stampScaleForSize(stampSizeForAnnotation(annotation)) : 1;
+  const printScale = printableScale(photo);
+  const stamp = (value: number) => stampSvgValue(value, stampScale, printScale);
+
+  if (annotation.kind === 'bolt') {
+    return [
+      `<line x1="${x - stamp(8)}" y1="${y - stamp(8)}" x2="${x + stamp(8)}" y2="${y + stamp(8)}" stroke="${STAMP_WHITE}" stroke-width="${stamp(5)}" stroke-linecap="round" />`,
+      `<line x1="${x + stamp(8)}" y1="${y - stamp(8)}" x2="${x - stamp(8)}" y2="${y + stamp(8)}" stroke="${STAMP_WHITE}" stroke-width="${stamp(5)}" stroke-linecap="round" />`,
+      `<line x1="${x - stamp(8)}" y1="${y - stamp(8)}" x2="${x + stamp(8)}" y2="${y + stamp(8)}" stroke="${annotation.color}" stroke-width="${stamp(3)}" stroke-linecap="round" />`,
+      `<line x1="${x + stamp(8)}" y1="${y - stamp(8)}" x2="${x - stamp(8)}" y2="${y + stamp(8)}" stroke="${annotation.color}" stroke-width="${stamp(3)}" stroke-linecap="round" />`,
+    ].join('');
+  }
+
+  if (annotation.kind === 'rappel' || annotation.kind === 'belay') {
+    const rappelArrow =
+      annotation.kind === 'rappel'
+        ? [
+            `<line x1="${x}" y1="${y + stamp(10)}" x2="${x}" y2="${y + stamp(24)}" stroke="${STAMP_WHITE}" stroke-width="${stamp(5)}" stroke-linecap="round" />`,
+            `<line x1="${x}" y1="${y + stamp(24)}" x2="${x - stamp(5)}" y2="${y + stamp(18)}" stroke="${STAMP_WHITE}" stroke-width="${stamp(5)}" stroke-linecap="round" />`,
+            `<line x1="${x}" y1="${y + stamp(24)}" x2="${x + stamp(5)}" y2="${y + stamp(18)}" stroke="${STAMP_WHITE}" stroke-width="${stamp(5)}" stroke-linecap="round" />`,
+            `<line x1="${x}" y1="${y + stamp(10)}" x2="${x}" y2="${y + stamp(24)}" stroke="${annotation.color}" stroke-width="${stamp(3)}" stroke-linecap="round" />`,
+            `<line x1="${x}" y1="${y + stamp(24)}" x2="${x - stamp(5)}" y2="${y + stamp(18)}" stroke="${annotation.color}" stroke-width="${stamp(3)}" stroke-linecap="round" />`,
+            `<line x1="${x}" y1="${y + stamp(24)}" x2="${x + stamp(5)}" y2="${y + stamp(18)}" stroke="${annotation.color}" stroke-width="${stamp(3)}" stroke-linecap="round" />`,
+          ].join('')
+        : '';
+    return `<circle cx="${x}" cy="${y}" r="${stamp(10)}" fill="${annotation.color}" /><circle cx="${x}" cy="${y}" r="${stamp(10)}" fill="none" stroke="${STAMP_WHITE}" stroke-width="${stamp(3)}" />${rappelArrow}`;
+  }
+
   if (annotation.kind === 'start') {
     const label = annotation.label?.slice(0, 2) ?? '';
     const textColour = chooseContrastingTextColour(annotation.color);
     const textSvg =
       label.length > 0
-        ? `<text x="${x}" y="${y + 6 * stampScale}" fill="${textColour}" font-size="${16 * stampScale}" font-weight="700" text-anchor="middle">${escapeHtml(label)}</text>`
+        ? `<text x="${x}" y="${y + stamp(6)}" fill="${textColour}" font-size="${stamp(16)}" font-weight="700" text-anchor="middle">${escapeHtml(label)}</text>`
         : '';
-    return `<circle cx="${x}" cy="${y}" r="${20 * stampScale}" fill="#fff" /><circle cx="${x}" cy="${y}" r="${14 * stampScale}" fill="${annotation.color}" />${textSvg}`;
+    return `<circle cx="${x}" cy="${y}" r="${stamp(15)}" fill="${annotation.color}" /><circle cx="${x}" cy="${y}" r="${stamp(15)}" fill="none" stroke="${STAMP_WHITE}" stroke-width="${stamp(3)}" />${textSvg}`;
   }
-  return `<circle cx="${x}" cy="${y}" r="${20 * stampScale}" fill="#fff" /><circle cx="${x}" cy="${y}" r="${14 * stampScale}" fill="${annotation.color}" />`;
+  return `<circle cx="${x}" cy="${y}" r="${stamp(12)}" fill="#FFFFFF" /><circle cx="${x}" cy="${y}" r="${stamp(8)}" fill="${annotation.color}" />`;
 }
 
 function smoothedPathData(points: NormalizedPoint[], photo: PhotoAsset) {
@@ -93,6 +154,7 @@ function smoothedPathData(points: NormalizedPoint[], photo: PhotoAsset) {
 export async function exportTopoPdf(project: TopoProject, photo: PhotoAsset) {
   const annotations = annotationsForPhoto(project.annotations, photo.id);
   const overlay = annotations.map((annotation) => annotationSvg(annotation, photo)).join('');
+  const imageUri = await printableImageUri(photo);
   const html = `
     <!doctype html>
     <html>
@@ -109,7 +171,7 @@ export async function exportTopoPdf(project: TopoProject, photo: PhotoAsset) {
       <body>
         <h1>${escapeHtml(project.name)}</h1>
         <section class="topo">
-          <img src="${photo.uri}" />
+          <img src="${escapeHtml(imageUri)}" />
           <svg viewBox="0 0 ${photo.width} ${photo.height}" xmlns="http://www.w3.org/2000/svg">${overlay}</svg>
         </section>
       </body>
