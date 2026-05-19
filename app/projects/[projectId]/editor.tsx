@@ -33,8 +33,17 @@ import type {
 } from '@/domain/types';
 import { AnnotationColorControl } from '@/editor/AnnotationColorControl';
 import { DEFAULT_STAMP_SIZE, type StampSize, stampSizeForAnnotation } from '@/domain/stampSizes';
+import {
+  decrementRouteMarkerNumber,
+  incrementRouteMarkerNumber,
+  nextUnusedRouteMarkerNumber,
+  parseRouteMarkerNumber,
+  routeMarkerNumberLabel,
+  type RouteMarkerNumber,
+} from '@/domain/routeMarkerNumbers';
 import { DEFAULT_LABEL_FONT_SIZE, clampLabelFontSize } from '@/domain/textLabels';
 import { EditorTopBar } from '@/editor/EditorTopBar';
+import { RouteMarkerNumberControl } from '@/editor/RouteMarkerNumberControl';
 import { StampSizeControl } from '@/editor/StampSizeControl';
 import { ToolPalette } from '@/editor/ToolPalette';
 import { TopoCanvas } from '@/editor/TopoCanvas';
@@ -57,10 +66,12 @@ export default function EditorScreen() {
   const [selectedStampId, setSelectedStampId] = useState<string>();
   const [editingLabel, setEditingLabel] = useState<MarkerAnnotation>();
   const [editingStamp, setEditingStamp] = useState<MarkerAnnotation & { kind: StampAnnotationKind }>();
+  const [isEditingRouteMarkerNumber, setIsEditingRouteMarkerNumber] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [lastLabelColorByPhoto, setLastLabelColorByPhoto] = useState<Record<string, string>>({});
   const [lastLineColorByPhoto, setLastLineColorByPhoto] = useState<Record<string, string>>({});
   const [lastStampColorByPhoto, setLastStampColorByPhoto] = useState<Record<string, Partial<Record<StampAnnotationKind, string>>>>({});
+  const [nextRouteMarkerNumberByPhoto, setNextRouteMarkerNumberByPhoto] = useState<Record<string, RouteMarkerNumber>>({});
   const [stampSizeByPhoto, setStampSizeByPhoto] = useState<Record<string, StampSize>>({});
   const [openContextControl, setOpenContextControl] = useState<ContextControl>();
   const draftPointsRef = useRef<NormalizedPoint[]>([]);
@@ -75,6 +86,7 @@ export default function EditorScreen() {
   const lastLabelColorByPhotoRef = useRef<Record<string, string>>({});
   const lastLineColorByPhotoRef = useRef<Record<string, string>>({});
   const lastStampColorByPhotoRef = useRef<Record<string, Partial<Record<StampAnnotationKind, string>>>>({});
+  const nextRouteMarkerNumberByPhotoRef = useRef<Record<string, RouteMarkerNumber>>({});
   const stampSizeByPhotoRef = useRef<Record<string, StampSize>>({});
 
   useEffect(() => {
@@ -102,6 +114,10 @@ export default function EditorScreen() {
   }, [editingStamp]);
 
   useEffect(() => {
+    nextRouteMarkerNumberByPhotoRef.current = nextRouteMarkerNumberByPhoto;
+  }, [nextRouteMarkerNumberByPhoto]);
+
+  useEffect(() => {
     function updateKeyboardHeight(event: KeyboardEvent) {
       const keyboardTop = event.endCoordinates.screenY;
       const heightFromScreenY = windowHeight > keyboardTop ? windowHeight - keyboardTop : 0;
@@ -112,7 +128,10 @@ export default function EditorScreen() {
     const subscriptions = [
       Keyboard.addListener('keyboardDidShow', updateKeyboardHeight),
       Keyboard.addListener('keyboardDidChangeFrame', updateKeyboardHeight),
-      Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0)),
+      Keyboard.addListener('keyboardDidHide', () => {
+        setKeyboardHeight(0);
+        setIsEditingRouteMarkerNumber(false);
+      }),
     ];
 
     return () => {
@@ -136,6 +155,19 @@ export default function EditorScreen() {
     () => annotationsForPhoto(project?.annotations ?? [], photoId),
     [photoId, project?.annotations],
   );
+  useEffect(() => {
+    if (!photo || nextRouteMarkerNumberByPhotoRef.current[photo.id] !== undefined) {
+      return;
+    }
+
+    const nextNumber = nextUnusedRouteMarkerNumber(savedAnnotations);
+    nextRouteMarkerNumberByPhotoRef.current = {
+      ...nextRouteMarkerNumberByPhotoRef.current,
+      [photo.id]: nextNumber,
+    };
+    setNextRouteMarkerNumberByPhoto((numbers) => ({ ...numbers, [photo.id]: nextNumber }));
+  }, [photo, savedAnnotations]);
+
   const savedStampSize = useMemo(() => {
     const stamp = savedAnnotations.find(isStampAnnotation);
     return stamp ? stampSizeForAnnotation(stamp) : DEFAULT_STAMP_SIZE;
@@ -281,6 +313,32 @@ export default function EditorScreen() {
     return stampSizeByPhotoRef.current[photoId] ?? savedStampSize;
   }
 
+  function currentRouteMarkerNumberForPhoto(photoId: string) {
+    return Object.prototype.hasOwnProperty.call(nextRouteMarkerNumberByPhotoRef.current, photoId)
+      ? nextRouteMarkerNumberByPhotoRef.current[photoId]
+      : nextUnusedRouteMarkerNumber(savedAnnotations);
+  }
+
+  function setNextRouteMarkerNumberForPhoto(photoId: string, value: RouteMarkerNumber) {
+    nextRouteMarkerNumberByPhotoRef.current = {
+      ...nextRouteMarkerNumberByPhotoRef.current,
+      [photoId]: value,
+    };
+    setNextRouteMarkerNumberByPhoto((numbers) => ({ ...numbers, [photoId]: value }));
+  }
+
+  function advanceNextRouteMarkerNumber(
+    photoId: string,
+    placedNumber: RouteMarkerNumber,
+    nextAnnotations: Annotation[],
+  ) {
+    const nextNumber =
+      placedNumber === null || placedNumber >= 99
+        ? null
+        : nextUnusedRouteMarkerNumber(nextAnnotations, placedNumber + 1);
+    setNextRouteMarkerNumberForPhoto(photoId, nextNumber);
+  }
+
   async function handlePlace(
     kind: MarkerAnnotationKind,
     point: NormalizedPoint,
@@ -304,6 +362,7 @@ export default function EditorScreen() {
           ? currentStampColorForPhoto(photo.id, kind)
         : undefined;
     const stampSize = isStampKind(kind) ? currentStampSizeForPhoto(photo.id) : undefined;
+    const routeMarkerNumber = kind === 'start' ? currentRouteMarkerNumberForPhoto(photo.id) : undefined;
 
     const annotation = await addAnnotation({
       topoId: project.id,
@@ -312,7 +371,7 @@ export default function EditorScreen() {
       kind,
       point,
       color,
-      label: kind === 'label' ? '' : undefined,
+      label: kind === 'label' ? '' : kind === 'start' ? routeMarkerNumberLabel(routeMarkerNumber ?? null) : undefined,
       labelFontSize,
       stampSize,
     });
@@ -336,6 +395,12 @@ export default function EditorScreen() {
           [kind]: placedStampColor,
         },
       }));
+      if (kind === 'start') {
+        advanceNextRouteMarkerNumber(photo.id, routeMarkerNumber ?? null, [
+          ...savedAnnotations.filter((item) => item.id !== annotation.id),
+          annotation,
+        ]);
+      }
     }
     await refresh();
   }
@@ -553,6 +618,53 @@ export default function EditorScreen() {
     await refresh();
   }
 
+  async function changeRouteMarkerNumber(value: RouteMarkerNumber) {
+    if (!photo) {
+      return;
+    }
+
+    const annotation = editingStampRef.current;
+    if (!annotation || annotation.kind !== 'start') {
+      setNextRouteMarkerNumberForPhoto(photo.id, value);
+      return;
+    }
+
+    const previousNumber = parseRouteMarkerNumber(annotation.label);
+    const next = { ...annotation, label: routeMarkerNumberLabel(value) };
+    editingStampRef.current = next;
+    setEditingStamp(next);
+    const updated = await updateAnnotation(next);
+    if (isStampAnnotation(updated)) {
+      editingStampRef.current = updated;
+      setEditingStamp(updated);
+    }
+
+    if (typeof previousNumber === 'number') {
+      const nextAnnotations = savedAnnotations.map((item) => (item.id === next.id ? next : item));
+      setNextRouteMarkerNumberForPhoto(
+        photo.id,
+        nextUnusedRouteMarkerNumber(nextAnnotations, Math.min(previousNumber, currentRouteMarkerNumberForPhoto(photo.id) ?? previousNumber)),
+      );
+    }
+    await refresh();
+  }
+
+  function changeRouteMarkerNumberByStep(direction: 'decrement' | 'increment') {
+    if (!photo) {
+      return;
+    }
+
+    const currentValue =
+      editingStamp?.kind === 'start'
+        ? (parseRouteMarkerNumber(editingStamp.label) ?? null)
+        : currentRouteMarkerNumberForPhoto(photo.id);
+    const nextValue =
+      direction === 'increment'
+        ? incrementRouteMarkerNumber(currentValue)
+        : decrementRouteMarkerNumber(currentValue);
+    void changeRouteMarkerNumber(nextValue);
+  }
+
   async function changeStampSize(size: StampSize) {
     if (!project || !photo) {
       return;
@@ -621,6 +733,22 @@ export default function EditorScreen() {
     await commitEditingLabelSnapshot();
   }
 
+  async function deleteSelectedAnnotation() {
+    const selectedAnnotation = savedAnnotations.find(
+      (annotation) =>
+        annotation.id === selectedLabelIdRef.current ||
+        annotation.id === selectedStampIdRef.current ||
+        annotation.id === selectedPathIdRef.current,
+    );
+    if (!selectedAnnotation) {
+      return;
+    }
+
+    clearSelectionState();
+    await removeAnnotation(selectedAnnotation);
+    await refresh();
+  }
+
   async function deleteLastAnnotation() {
     const last = savedAnnotations.at(-1);
     if (!last) {
@@ -653,6 +781,12 @@ export default function EditorScreen() {
   }
 
   const selectedPath = savedAnnotations.find((annotation) => annotation.id === selectedPathId);
+  const selectedAnnotation = savedAnnotations.find(
+    (annotation) =>
+      annotation.id === selectedLabelId ||
+      annotation.id === selectedStampId ||
+      annotation.id === selectedPathId,
+  );
   const activeColourTarget: AnnotationColourTarget | undefined = editingLabel
     ? 'label'
     : editingStamp
@@ -676,7 +810,15 @@ export default function EditorScreen() {
           : undefined;
   const canChooseAnnotationColor = Boolean(activeColourTarget && currentAnnotationColor);
   const canChooseStampSize = activeTool !== 'select' && isStampKind(activeTool);
+  const routeMarkerNumberControlValue =
+    editingStamp?.kind === 'start'
+      ? (parseRouteMarkerNumber(editingStamp.label) ?? null)
+      : activeTool === 'start'
+        ? currentRouteMarkerNumberForPhoto(photo.id)
+        : undefined;
   const isKeyboardEditingLabel = Boolean(selectedLabelId && keyboardHeight > 0);
+  const isKeyboardEditingRouteMarkerNumber = isEditingRouteMarkerNumber && keyboardHeight > 0;
+  const bottomOverlayKeyboardOffset = isKeyboardEditingRouteMarkerNumber ? keyboardHeight : 0;
 
   return (
     <View style={styles.root}>
@@ -711,21 +853,39 @@ export default function EditorScreen() {
       <SafeAreaView edges={['top']} pointerEvents="box-none" style={styles.topOverlay}>
         <EditorTopBar
           canRedo={false}
-          canSave
           canUndo={draftPoints.length > 0 || savedAnnotations.length > 0}
+          canDelete={Boolean(selectedAnnotation)}
           onBack={() => router.back()}
+          onDelete={() => {
+            void deleteSelectedAnnotation();
+          }}
           onRedo={() => undefined}
-          onSave={() => router.back()}
           onUndo={handleUndo}
         />
       </SafeAreaView>
       <SafeAreaView
         edges={['bottom']}
         pointerEvents="box-none"
-        style={[styles.bottomOverlay, isKeyboardEditingLabel ? styles.hiddenBottomOverlay : null]}
+        style={[
+          styles.bottomOverlay,
+          bottomOverlayKeyboardOffset > 0 ? { bottom: bottomOverlayKeyboardOffset } : null,
+          isKeyboardEditingLabel ? styles.hiddenBottomOverlay : null,
+        ]}
         testID="editor-bottom-overlay"
       >
         <View style={styles.contextControls}>
+          {routeMarkerNumberControlValue !== undefined ? (
+            <RouteMarkerNumberControl
+              accessibilityLabel={editingStamp?.kind === 'start' ? 'Route marker number' : 'Next route marker number'}
+              onChangeValue={(value) => {
+                void changeRouteMarkerNumber(value);
+              }}
+              onDecrement={() => changeRouteMarkerNumberByStep('decrement')}
+              onEditingChange={setIsEditingRouteMarkerNumber}
+              onIncrement={() => changeRouteMarkerNumberByStep('increment')}
+              value={routeMarkerNumberControlValue}
+            />
+          ) : null}
           {canChooseAnnotationColor ? (
             <AnnotationColorControl
               currentColor={currentAnnotationColor ?? defaultAnnotationColourForTarget('label')}
@@ -748,6 +908,7 @@ export default function EditorScreen() {
                     ? 'Line colour'
                     : 'Stamp colour'
               }
+              visibleLabel="Colour"
             />
           ) : null}
           {canChooseStampSize ? (
@@ -758,25 +919,30 @@ export default function EditorScreen() {
               onSelectSize={(size) => {
                 void changeStampSize(size);
               }}
+              visibleLabel="Size"
             />
           ) : null}
         </View>
-        <ToolPalette
-          onSelectTool={(tool) => {
-            void commitEditingLabelSnapshot();
-            setOpenContextControl(undefined);
-            setActiveTool(tool);
-            clearDraftState();
-            clearSelectionState();
-          }}
-          selectedTool={activeTool}
-          stampColors={{
-            belay: lastStampColorByPhoto[photo.id]?.belay ?? defaultAnnotationColourForTarget('belay'),
-            bolt: lastStampColorByPhoto[photo.id]?.bolt ?? defaultAnnotationColourForTarget('bolt'),
-            rappel: lastStampColorByPhoto[photo.id]?.rappel ?? defaultAnnotationColourForTarget('rappel'),
-            start: lastStampColorByPhoto[photo.id]?.start ?? defaultAnnotationColourForTarget('start'),
-          }}
-        />
+        {isKeyboardEditingRouteMarkerNumber ? null : (
+          <ToolPalette
+            onSelectTool={(tool) => {
+              void commitEditingLabelSnapshot();
+              setOpenContextControl(undefined);
+              setIsEditingRouteMarkerNumber(false);
+              setActiveTool(tool);
+              clearDraftState();
+              clearSelectionState();
+            }}
+            routeMarkerLabel={routeMarkerNumberLabel(currentRouteMarkerNumberForPhoto(photo.id))}
+            selectedTool={activeTool}
+            stampColors={{
+              belay: lastStampColorByPhoto[photo.id]?.belay ?? defaultAnnotationColourForTarget('belay'),
+              bolt: lastStampColorByPhoto[photo.id]?.bolt ?? defaultAnnotationColourForTarget('bolt'),
+              rappel: lastStampColorByPhoto[photo.id]?.rappel ?? defaultAnnotationColourForTarget('rappel'),
+              start: lastStampColorByPhoto[photo.id]?.start ?? defaultAnnotationColourForTarget('start'),
+            }}
+          />
+        )}
       </SafeAreaView>
     </View>
   );

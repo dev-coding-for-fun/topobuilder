@@ -74,4 +74,77 @@ describe('exportTopoPdf', () => {
     expect(html).not.toContain('opacity="0.34"');
     expect(Sharing.shareAsync).not.toHaveBeenCalled();
   });
+
+  it('exports route marker numbers and leaves blank route markers unnumbered', async () => {
+    await exportTopoPdf(
+      {
+        ...project,
+        annotations: [
+          {
+            id: 'start-1',
+            topoId: 'project-1',
+            photoId: 'photo-1',
+            kind: 'start',
+            color: '#FACC15',
+            label: '12',
+            point: { x: 0.2, y: 0.3 },
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+          {
+            id: 'start-blank',
+            topoId: 'project-1',
+            photoId: 'photo-1',
+            kind: 'start',
+            color: '#FACC15',
+            point: { x: 0.4, y: 0.5 },
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      },
+      project.photos[0],
+    );
+
+    const html = (Print.printToFileAsync as jest.Mock).mock.calls[0][0].html as string;
+    expect(html).toContain('>12</text>');
+    expect(html.match(/<text/g)).toHaveLength(1);
+  });
+
+  it('exports route marker numbers with contrasting text colours', async () => {
+    await exportTopoPdf(
+      {
+        ...project,
+        annotations: [
+          {
+            id: 'start-light',
+            topoId: 'project-1',
+            photoId: 'photo-1',
+            kind: 'start',
+            color: '#FACC15',
+            label: '1',
+            point: { x: 0.2, y: 0.3 },
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+          {
+            id: 'start-dark',
+            topoId: 'project-1',
+            photoId: 'photo-1',
+            kind: 'start',
+            color: '#1E3A8A',
+            label: '2',
+            point: { x: 0.4, y: 0.5 },
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      },
+      project.photos[0],
+    );
+
+    const html = (Print.printToFileAsync as jest.Mock).mock.calls[0][0].html as string;
+    expect(html).toContain('fill="#111827"');
+    expect(html).toContain('fill="#F8FAFC"');
+  });
 });

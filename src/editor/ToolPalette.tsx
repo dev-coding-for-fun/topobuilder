@@ -4,7 +4,7 @@ import Octicons from '@expo/vector-icons/Octicons';
 import type { ComponentProps } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { defaultAnnotationColourForTarget, type StampAnnotationKind } from '@/domain/annotationColours';
+import { chooseContrastingTextColour, defaultAnnotationColourForTarget, type StampAnnotationKind } from '@/domain/annotationColours';
 import type { EditorTool } from '@/domain/types';
 
 type IoniconName = ComponentProps<typeof Ionicons>['name'];
@@ -59,10 +59,12 @@ const toolGroups: ToolGroup[] = [
 ];
 
 export function ToolPalette({
+  routeMarkerLabel,
   stampColors,
   selectedTool,
   onSelectTool,
 }: {
+  routeMarkerLabel?: string;
   stampColors?: Partial<Record<StampAnnotationKind, string>>;
   selectedTool: EditorTool;
   onSelectTool: (tool: EditorTool) => void;
@@ -100,6 +102,7 @@ export function ToolPalette({
                 <SubmenuIcon
                   color={tool.id && isStampTool(tool.id) ? stampColors?.[tool.id] : undefined}
                   icon={tool.icon}
+                  routeMarkerLabel={routeMarkerLabel}
                   selected={isSelected}
                 />
               </Pressable>
@@ -161,10 +164,12 @@ function ToolbarIcon({ icon, selected }: { icon: ToolbarIcon; selected: boolean 
 function SubmenuIcon({
   color = defaultAnnotationColourForTarget('bolt'),
   icon,
+  routeMarkerLabel,
   selected,
 }: {
   color?: string;
   icon: SubmenuTool['icon'];
+  routeMarkerLabel?: string;
   selected: boolean;
 }) {
   const foreground = selected ? '#1B1B1F' : '#F8FAFC';
@@ -187,9 +192,17 @@ function SubmenuIcon({
           style={[styles.routeMarker, { backgroundColor: color }, selected && styles.selectedRouteMarker]}
           testID="start-submenu-icon"
         >
-          <Text style={[styles.routeMarkerLabel, selected && styles.selectedRouteMarkerLabel]}>
-            12
-          </Text>
+          {routeMarkerLabel ? (
+            <Text
+              style={[
+                styles.routeMarkerLabel,
+                { color: chooseContrastingTextColour(color) },
+                selected && styles.selectedRouteMarkerLabel,
+              ]}
+            >
+              {routeMarkerLabel.slice(0, 2)}
+            </Text>
+          ) : null}
         </View>
       );
   }

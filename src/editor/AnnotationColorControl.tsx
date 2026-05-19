@@ -10,6 +10,7 @@ export function AnnotationColorControl({
   onSelectColor,
   swatches,
   targetLabel = 'Annotation colour',
+  visibleLabel = targetLabel,
 }: {
   currentColor: string;
   expanded?: boolean;
@@ -17,6 +18,7 @@ export function AnnotationColorControl({
   onSelectColor: (color: string) => void;
   swatches: AnnotationColourSwatch[];
   targetLabel?: string;
+  visibleLabel?: string;
 }) {
   const [internalExpanded, setInternalExpanded] = useState(false);
   const isExpanded = expanded ?? internalExpanded;
@@ -79,7 +81,7 @@ export function AnnotationColorControl({
           currentColor.toUpperCase() === '#F8FAFC' && styles.lightSwatch,
         ]}
       />
-      <Text style={styles.collapsedLabel}>{targetLabel}</Text>
+      <Text style={styles.collapsedLabel}>{visibleLabel}</Text>
       <Text style={styles.chevron}>^</Text>
     </Pressable>
   );
@@ -95,7 +97,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
@@ -126,7 +127,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     gap: 4,
-    marginBottom: 8,
     paddingHorizontal: 8,
     paddingVertical: 6,
   },

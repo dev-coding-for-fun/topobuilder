@@ -8,11 +8,13 @@ export function StampSizeControl({
   expanded,
   onExpandedChange,
   onSelectSize,
+  visibleLabel = 'Stamp size',
 }: {
   currentSize: StampSize;
   expanded?: boolean;
   onExpandedChange?: (expanded: boolean) => void;
   onSelectSize: (size: StampSize) => void;
+  visibleLabel?: string;
 }) {
   const [internalExpanded, setInternalExpanded] = useState(false);
   const isExpanded = expanded ?? internalExpanded;
@@ -66,7 +68,7 @@ export function StampSizeControl({
       style={({ pressed }) => [styles.collapsed, pressed && styles.pressed]}
     >
       <Text style={styles.currentSize}>{currentLabel[0]}</Text>
-      <Text style={styles.collapsedLabel}>Stamp size</Text>
+      <Text style={styles.collapsedLabel}>{visibleLabel}</Text>
       <Text style={styles.chevron}>^</Text>
     </Pressable>
   );
@@ -99,7 +101,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
@@ -124,7 +125,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     gap: 4,
-    marginBottom: 8,
     paddingHorizontal: 8,
     paddingVertical: 6,
   },

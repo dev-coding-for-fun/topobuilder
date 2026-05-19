@@ -8,20 +8,20 @@ type EditorTopBarProps = {
   onBack: () => void;
   onUndo: () => void;
   onRedo: () => void;
-  onSave: () => void;
+  onDelete?: () => void;
   canUndo?: boolean;
   canRedo?: boolean;
-  canSave?: boolean;
+  canDelete?: boolean;
 };
 
 export function EditorTopBar({
   onBack,
   onUndo,
   onRedo,
-  onSave,
+  onDelete,
   canUndo = true,
   canRedo = true,
-  canSave = true,
+  canDelete = false,
 }: EditorTopBarProps) {
   return (
     <View style={styles.wrapper} pointerEvents="box-none">
@@ -41,19 +41,18 @@ export function EditorTopBar({
           onPress={onRedo}
         />
       </View>
-      <Pressable
-        accessibilityLabel="Save"
-        accessibilityRole="button"
-        disabled={!canSave}
-        onPress={onSave}
-        style={({ pressed }) => [
-          styles.saveButton,
-          !canSave && styles.disabled,
-          pressed && canSave && styles.pressed,
-        ]}
-      >
-        <Ionicons color="#F2B58F" name="checkmark" size={22} />
-      </Pressable>
+      {canDelete && onDelete ? (
+        <Pressable
+          accessibilityLabel="Delete selected annotation"
+          accessibilityRole="button"
+          onPress={onDelete}
+          style={({ pressed }) => [styles.deleteButton, pressed && styles.pressed]}
+        >
+          <Ionicons color="#FEE2E2" name="trash" size={21} />
+        </Pressable>
+      ) : (
+        <View style={styles.contextSlot} />
+      )}
     </View>
   );
 }
@@ -149,10 +148,14 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.75,
   },
-  saveButton: {
+  contextSlot: {
+    height: 44,
+    width: 44,
+  },
+  deleteButton: {
     alignItems: 'center',
-    backgroundColor: 'rgba(75, 38, 24, 0.92)',
-    borderColor: 'rgba(255, 184, 138, 0.35)',
+    backgroundColor: 'rgba(127, 29, 29, 0.92)',
+    borderColor: 'rgba(254, 202, 202, 0.35)',
     borderRadius: 14,
     borderWidth: 1,
     height: 44,

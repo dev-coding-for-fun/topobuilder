@@ -13,7 +13,7 @@ import type { useFont } from '@shopify/react-native-skia';
 import { memo } from 'react';
 
 import { isPathAnnotation } from '@/domain/annotationFactory';
-import { chooseTextBackdrop, rgbaString } from '@/domain/annotationColours';
+import { chooseContrastingTextColour, chooseTextBackdrop, rgbaString } from '@/domain/annotationColours';
 import { denormalizePoint, normalizedToScreenPoint } from '@/domain/geometry';
 import { stampScaleForSize, stampSizeForAnnotation } from '@/domain/stampSizes';
 import {
@@ -285,8 +285,13 @@ export const AnnotationShape = memo(function AnnotationShape({
   }
 
   if (annotation.kind === 'start') {
-    const label = (annotation.label ?? '12').slice(0, 2);
-    const textWidth = routeMarkerFont?.measureText(label).width ?? 0;
+    const label = annotation.label?.slice(0, 2) ?? '';
+    const font = routeMarkerFont ?? matchFont({
+      fontFamily: 'sans-serif',
+      fontSize: 16,
+      fontWeight: '700',
+    });
+    const textWidth = font.measureText(label).width;
 
     return (
       <Group>
@@ -299,7 +304,7 @@ export const AnnotationShape = memo(function AnnotationShape({
           strokeWidth={stamp(3)}
           style="stroke"
         />
-        {routeMarkerFont ? (
+        {label.length > 0 ? (
           <Group
             transform={[
               { translateX: point.x },
@@ -310,8 +315,8 @@ export const AnnotationShape = memo(function AnnotationShape({
             ]}
           >
             <SkiaText
-              color={STAMP_WHITE}
-              font={routeMarkerFont}
+              color={chooseContrastingTextColour(annotation.color)}
+              font={font}
               text={label}
               x={point.x - textWidth / 2}
               y={point.y + 6}

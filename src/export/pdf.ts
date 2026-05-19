@@ -2,7 +2,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
 import { annotationsForPhoto, isPathAnnotation, isStampAnnotation } from '@/domain/annotationFactory';
-import { chooseTextBackdrop } from '@/domain/annotationColours';
+import { chooseContrastingTextColour, chooseTextBackdrop } from '@/domain/annotationColours';
 import { stampScaleForSize, stampSizeForAnnotation } from '@/domain/stampSizes';
 import type { Annotation, NormalizedPoint, PhotoAsset, TopoProject } from '@/domain/types';
 import { labelFontSize, labelText, measureLabelText, splitLabelLines } from '@/domain/textLabels';
@@ -45,6 +45,15 @@ function annotationSvg(annotation: Annotation, photo: PhotoAsset) {
   }
 
   const stampScale = isStampAnnotation(annotation) ? stampScaleForSize(stampSizeForAnnotation(annotation)) : 1;
+  if (annotation.kind === 'start') {
+    const label = annotation.label?.slice(0, 2) ?? '';
+    const textColour = chooseContrastingTextColour(annotation.color);
+    const textSvg =
+      label.length > 0
+        ? `<text x="${x}" y="${y + 6 * stampScale}" fill="${textColour}" font-size="${16 * stampScale}" font-weight="700" text-anchor="middle">${escapeHtml(label)}</text>`
+        : '';
+    return `<circle cx="${x}" cy="${y}" r="${20 * stampScale}" fill="#fff" /><circle cx="${x}" cy="${y}" r="${14 * stampScale}" fill="${annotation.color}" />${textSvg}`;
+  }
   return `<circle cx="${x}" cy="${y}" r="${20 * stampScale}" fill="#fff" /><circle cx="${x}" cy="${y}" r="${14 * stampScale}" fill="${annotation.color}" />`;
 }
 

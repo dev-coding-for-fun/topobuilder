@@ -37,4 +37,27 @@ describe('ToolPalette', () => {
       '#84CC16',
     );
   });
+
+  it('previews the current route marker number in the stamp submenu', () => {
+    render(
+      <ToolPalette
+        onSelectTool={jest.fn()}
+        routeMarkerLabel="7"
+        selectedTool="start"
+      />,
+    );
+
+    expect(screen.getByText('7')).toBeTruthy();
+  });
+
+  it('leaves the route marker submenu preview blank for blank route marker labels', () => {
+    render(
+      <ToolPalette
+        onSelectTool={jest.fn()}
+        selectedTool="start"
+      />,
+    );
+
+    expect(screen.queryByText('12')).toBeNull();
+  });
 });

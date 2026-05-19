@@ -173,6 +173,13 @@ export function chooseTextBackdrop(input: {
   return best?.decision ?? chooseFallbackBackdrop(text);
 }
 
+export function chooseContrastingTextColour(backgroundColour: string) {
+  const background = parseHexColour(backgroundColour);
+  const black = parseHexColour('#111827');
+  const white = parseHexColour('#F8FAFC');
+  return contrastRatio(background, black) >= contrastRatio(background, white) ? '#111827' : '#F8FAFC';
+}
+
 function chooseFallbackBackdrop(text: RgbColour): TextBackdropDecision {
   const assumedRockBackground = parseHexColour(TEXT_BACKDROP_FALLBACK_BACKGROUND);
   if (contrastRatio(text, assumedRockBackground) >= TEXT_BACKDROP_TARGET_CONTRAST) {
