@@ -55,7 +55,6 @@ const toolGroups: ToolGroup[] = [
     tools: ['climbLine'],
   },
   { id: 'label', label: 'Text tool', icon: { family: 'ionicons', name: 'text-outline' }, tool: 'label' },
-  { id: 'arrow', label: 'Arrow tool', icon: { family: 'octicons', name: 'arrow-up-right' }, tool: 'arrow' },
 ];
 
 export function ToolPalette({
