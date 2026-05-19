@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "TopoBuilder",
-    "slug": "topobuilder",
+    "slug": "topo-builder",
     "scheme": "topobuilder",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -39,6 +39,13 @@
       "expo-router",
       "expo-sqlite",
       "expo-asset"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "af515901-0cc7-42ee-98bd-be3f1de39aa1"
+      }
+    },
+    "owner": "bowvalleydev"
   }
 }
