@@ -82,6 +82,12 @@ Archive a completed change in the experimental workflow.
    mv openspec/changes/<name> openspec/changes/archive/YYYY-MM-DD-<name>
    ```
 
+   **Windows workspace note:** On Windows, moving recently-created change directories can fail with a transient access denied error if Cursor, Explorer, git, or indexing briefly holds a directory handle. Prefer a copy-verify-remove archive flow by default:
+   - Copy the change directory to `openspec/changes/archive/YYYY-MM-DD-<name>`
+   - Verify the copied archive contains `.openspec.yaml`
+   - Remove the original `openspec/changes/<name>` directory
+   This preserves the same end state as a move while avoiding common `Move-Item` directory-lock failures.
+
 6. **Display summary**
 
    Show archive completion summary including:
