@@ -30,7 +30,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.topobuilder"
+      "package": "com.bowvalleydev.topobuilder"
     },
     "web": {
       "favicon": "./assets/favicon.png"
