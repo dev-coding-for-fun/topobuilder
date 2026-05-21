@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 
 import { createAnnotation } from '@/domain/annotationFactory';
 import { createId, nowIso } from '@/domain/ids';
+import type { LineWeight } from '@/domain/lineWeights';
 import type { StampSize } from '@/domain/stampSizes';
 import type { Annotation, AnnotationKind, NormalizedPoint, PhotoAsset, TopoProject, TopoSummary } from '@/domain/types';
 import { pickPhotoFromLibrary } from '@/camera/photoCapture';
@@ -38,6 +39,7 @@ type TopoStoreValue = {
     color?: string;
     label?: string;
     labelFontSize?: number;
+    lineWeight?: LineWeight;
     stampSize?: StampSize;
   }) => Promise<Annotation>;
   addPathAnnotation: (input: {
@@ -47,6 +49,7 @@ type TopoStoreValue = {
     kind: Extract<AnnotationKind, 'climbLine' | 'walkoff' | 'scramble'>;
     points: NormalizedPoint[];
     color?: string;
+    lineWeight?: LineWeight;
   }) => Promise<Annotation>;
   updateAnnotation: (annotation: Annotation) => Promise<Annotation>;
   removeAnnotation: (annotation: Annotation) => Promise<void>;
@@ -192,6 +195,7 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
       color?: string;
       label?: string;
       labelFontSize?: number;
+      lineWeight?: LineWeight;
       stampSize?: StampSize;
     }) => {
       if (!db) {
@@ -219,6 +223,7 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
       kind: Extract<AnnotationKind, 'climbLine' | 'walkoff' | 'scramble'>;
       points: NormalizedPoint[];
       color?: string;
+      lineWeight?: LineWeight;
     }) => {
       if (!db) {
         throw new Error('Database is not ready');
@@ -233,6 +238,7 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
         kind: input.kind,
         point: input.points[0] ?? { x: 0, y: 0 },
         color: input.color,
+        lineWeight: input.lineWeight,
         now,
       });
 

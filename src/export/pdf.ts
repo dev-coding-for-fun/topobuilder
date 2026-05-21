@@ -4,6 +4,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 
 import { annotationsForPhoto, isPathAnnotation, isStampAnnotation } from '@/domain/annotationFactory';
 import { chooseContrastingTextColour, chooseTextBackdrop } from '@/domain/annotationColours';
+import { lineWeightForAnnotation, pdfLineStrokeWidthForWeight } from '@/domain/lineWeights';
 import { stampScaleForSize, stampSizeForAnnotation } from '@/domain/stampSizes';
 import type { Annotation, NormalizedPoint, PhotoAsset, TopoProject } from '@/domain/types';
 import { labelFontSize, labelText, measureLabelText, splitLabelLines } from '@/domain/textLabels';
@@ -53,7 +54,8 @@ function annotationSvg(annotation: Annotation, photo: PhotoAsset) {
   if (isPathAnnotation(annotation)) {
     const path = smoothedPathData(annotation.points, photo);
     const dash = annotation.kind === 'walkoff' ? 'stroke-dasharray="8 10"' : annotation.kind === 'scramble' ? 'stroke-dasharray="16 8"' : '';
-    return `<path d="${path}" fill="none" stroke="${annotation.color}" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" ${dash} />`;
+    const strokeWidth = pdfLineStrokeWidthForWeight(lineWeightForAnnotation(annotation));
+    return `<path d="${path}" fill="none" stroke="${annotation.color}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" ${dash} />`;
   }
 
   const x = annotation.point.x * photo.width;

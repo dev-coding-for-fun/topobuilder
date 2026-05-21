@@ -74,6 +74,22 @@ jest.mock('@/editor/StampSizeControl', () => ({
   },
 }));
 
+jest.mock('@/editor/LineWeightControl', () => ({
+  LineWeightControl: ({ onSelectWeight }: { onSelectWeight: (weight: string) => void }) => {
+    const React = require('react');
+    const { Pressable, Text } = require('react-native');
+    return React.createElement(
+      React.Fragment,
+      null,
+      React.createElement(
+        Pressable,
+        { accessibilityLabel: 'Large line weight', onPress: () => onSelectWeight('large') },
+        React.createElement(Text, null, 'Large'),
+      ),
+    );
+  },
+}));
+
 jest.mock('@/editor/TopoCanvas', () => ({
   TopoCanvas: jest.fn(() => null),
 }));
@@ -219,12 +235,13 @@ describe('EditorScreen label editing', () => {
       }),
     );
     addPathAnnotation.mockImplementation(
-      async (input: { color?: string; kind: string; points: NormalizedPoint[] }) => ({
+      async (input: { color?: string; kind: string; lineWeight?: string; points: NormalizedPoint[] }) => ({
         id: 'path-1',
         topoId: 'project-1',
         photoId: 'photo-1',
         kind: input.kind,
         color: input.color ?? '#FACC15',
+        lineWeight: input.lineWeight ?? 'medium',
         points: input.points,
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
@@ -346,6 +363,94 @@ describe('EditorScreen label editing', () => {
     });
 
     expect(addPathAnnotation).toHaveBeenCalledWith(expect.objectContaining({ color: '#2563EB' }));
+  });
+
+  it('shows line weight control only for active or selected route lines', async () => {
+    loadProject.mockResolvedValue(projectWithAnnotations());
+
+    render(<EditorScreen />);
+    await waitFor(() => expect(TopoCanvas).toHaveBeenCalled());
+
+    expect(screen.queryByLabelText('Large line weight')).toBeNull();
+
+    fireEvent.press(screen.getByLabelText('Line tool'));
+    expect(screen.getByLabelText('Large line weight')).toBeTruthy();
+
+    fireEvent.press(screen.getByLabelText('Bolt'));
+    expect(screen.queryByLabelText('Large line weight')).toBeNull();
+
+    act(() => {
+      latestCanvasProps().onSelectPath('path-1', [
+        { x: 0.1, y: 0.1 },
+        { x: 0.8, y: 0.8 },
+      ]);
+    });
+    expect(screen.getByLabelText('Large line weight')).toBeTruthy();
+  });
+
+  it('uses selected and default line weights for new route lines', async () => {
+    render(<EditorScreen />);
+    await waitFor(() => expect(TopoCanvas).toHaveBeenCalled());
+
+    fireEvent.press(screen.getByLabelText('Line tool'));
+    act(() => {
+      latestCanvasProps().onBeginPathDraft('climbLine', { x: 0.1, y: 0.1 });
+    });
+    await act(async () => {
+      await latestCanvasProps().onFinishPathDraft(
+        { x: 0.5, y: 0.5 },
+        { width: 1000, height: 1000 },
+      );
+    });
+
+    expect(addPathAnnotation).toHaveBeenLastCalledWith(expect.objectContaining({ lineWeight: 'medium' }));
+
+    fireEvent.press(screen.getByLabelText('Line tool'));
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Large line weight'));
+    });
+    act(() => {
+      latestCanvasProps().onBeginPathDraft('climbLine', { x: 0.2, y: 0.2 });
+    });
+    await act(async () => {
+      await latestCanvasProps().onFinishPathDraft(
+        { x: 0.6, y: 0.6 },
+        { width: 1000, height: 1000 },
+      );
+    });
+
+    expect(addPathAnnotation).toHaveBeenLastCalledWith(expect.objectContaining({ lineWeight: 'large' }));
+  });
+
+  it('updates selected route line weight while preserving colour and points', async () => {
+    loadProject.mockResolvedValue(projectWithAnnotations());
+
+    render(<EditorScreen />);
+    await waitFor(() => expect(TopoCanvas).toHaveBeenCalled());
+
+    act(() => {
+      latestCanvasProps().onSelectPath('path-1', [
+        { x: 0.1, y: 0.1 },
+        { x: 0.8, y: 0.8 },
+      ]);
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Large line weight'));
+    });
+
+    await waitFor(() =>
+      expect(updateAnnotation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'path-1',
+          color: '#2563EB',
+          lineWeight: 'large',
+          points: [
+            { x: 0.1, y: 0.1 },
+            { x: 0.8, y: 0.8 },
+          ],
+        }),
+      ),
+    );
   });
 
   it('keeps stamp colour defaults independent by stamp kind', async () => {

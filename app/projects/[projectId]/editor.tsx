@@ -22,6 +22,11 @@ import {
   finalizeSampledPoints,
   moveControlPoint,
 } from '@/domain/geometry';
+import {
+  DEFAULT_LINE_WEIGHT,
+  type LineWeight,
+  lineWeightForAnnotation,
+} from '@/domain/lineWeights';
 import type {
   Annotation,
   EditorTool,
@@ -43,6 +48,7 @@ import {
 } from '@/domain/routeMarkerNumbers';
 import { DEFAULT_LABEL_FONT_SIZE, clampLabelFontSize } from '@/domain/textLabels';
 import { EditorTopBar } from '@/editor/EditorTopBar';
+import { LineWeightControl } from '@/editor/LineWeightControl';
 import { RouteMarkerNumberControl } from '@/editor/RouteMarkerNumberControl';
 import { StampSizeControl } from '@/editor/StampSizeControl';
 import { ToolPalette } from '@/editor/ToolPalette';
@@ -51,7 +57,7 @@ import { useTopoStore } from '@/state/TopoStore';
 
 const CONTROL_POINT_MIN_DISTANCE = 44;
 
-type ContextControl = 'colour' | 'stampSize';
+type ContextControl = 'colour' | 'lineWeight' | 'stampSize';
 
 export default function EditorScreen() {
   const { projectId, photoId } = useLocalSearchParams<{ projectId: string; photoId: string }>();
@@ -70,6 +76,7 @@ export default function EditorScreen() {
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [lastLabelColorByPhoto, setLastLabelColorByPhoto] = useState<Record<string, string>>({});
   const [lastLineColorByPhoto, setLastLineColorByPhoto] = useState<Record<string, string>>({});
+  const [lastLineWeightByPhoto, setLastLineWeightByPhoto] = useState<Record<string, LineWeight>>({});
   const [lastStampColorByPhoto, setLastStampColorByPhoto] = useState<Record<string, Partial<Record<StampAnnotationKind, string>>>>({});
   const [nextRouteMarkerNumberByPhoto, setNextRouteMarkerNumberByPhoto] = useState<Record<string, RouteMarkerNumber>>({});
   const [stampSizeByPhoto, setStampSizeByPhoto] = useState<Record<string, StampSize>>({});
@@ -85,6 +92,7 @@ export default function EditorScreen() {
   const lastLabelFontSizeByPhotoRef = useRef<Record<string, number>>({});
   const lastLabelColorByPhotoRef = useRef<Record<string, string>>({});
   const lastLineColorByPhotoRef = useRef<Record<string, string>>({});
+  const lastLineWeightByPhotoRef = useRef<Record<string, LineWeight>>({});
   const lastStampColorByPhotoRef = useRef<Record<string, Partial<Record<StampAnnotationKind, string>>>>({});
   const nextRouteMarkerNumberByPhotoRef = useRef<Record<string, RouteMarkerNumber>>({});
   const stampSizeByPhotoRef = useRef<Record<string, StampSize>>({});
@@ -214,6 +222,7 @@ export default function EditorScreen() {
       routeId: route?.id,
       kind: activeTool,
       color: currentLineColorForPhoto(photo.id),
+      lineWeight: currentLineWeightForPhoto(photo.id),
       points: draftPoints,
       createdAt: now,
       updatedAt: now,
@@ -303,6 +312,10 @@ export default function EditorScreen() {
 
   function currentLineColorForPhoto(photoId: string) {
     return lastLineColorByPhotoRef.current[photoId] ?? defaultAnnotationColourForTarget('line');
+  }
+
+  function currentLineWeightForPhoto(photoId: string) {
+    return lastLineWeightByPhotoRef.current[photoId] ?? DEFAULT_LINE_WEIGHT;
   }
 
   function currentStampColorForPhoto(photoId: string, kind: StampAnnotationKind) {
@@ -448,10 +461,13 @@ export default function EditorScreen() {
       kind,
       points: finalizedPoints,
       color: currentLineColorForPhoto(photo.id),
+      lineWeight: currentLineWeightForPhoto(photo.id),
     });
     if (isPathAnnotation(annotation)) {
       lastLineColorByPhotoRef.current[photo.id] = annotation.color;
+      lastLineWeightByPhotoRef.current[photo.id] = lineWeightForAnnotation(annotation);
       setLastLineColorByPhoto((colors) => ({ ...colors, [photo.id]: annotation.color }));
+      setLastLineWeightByPhoto((weights) => ({ ...weights, [photo.id]: lineWeightForAnnotation(annotation) }));
     }
     const selectedPoints = 'points' in annotation ? annotation.points : finalizedPoints;
     draftKindRef.current = undefined;
@@ -582,6 +598,29 @@ export default function EditorScreen() {
     }
 
     const next = { ...annotation, points: points ?? annotation.points, color };
+    const updated = await updateAnnotation(next);
+    if (isPathAnnotation(updated)) {
+      editingPathPointsRef.current = updated.points;
+      setEditingPathPoints(updated.points);
+    }
+    await refresh();
+  }
+
+  async function changeSelectedPathWeight(lineWeight: LineWeight) {
+    if (!photo) {
+      return;
+    }
+
+    lastLineWeightByPhotoRef.current[photo.id] = lineWeight;
+    setLastLineWeightByPhoto((weights) => ({ ...weights, [photo.id]: lineWeight }));
+    const annotationId = selectedPathIdRef.current;
+    const points = editingPathPointsRef.current;
+    const annotation = savedAnnotations.find((item) => item.id === annotationId);
+    if (!annotation || !isPathAnnotation(annotation)) {
+      return;
+    }
+
+    const next = { ...annotation, points: points ?? annotation.points, lineWeight };
     const updated = await updateAnnotation(next);
     if (isPathAnnotation(updated)) {
       editingPathPointsRef.current = updated.points;
@@ -830,6 +869,13 @@ export default function EditorScreen() {
           ? (editingStamp?.color ?? lastStampColorByPhoto[photo.id]?.[activeColourTarget] ?? defaultAnnotationColourForTarget(activeColourTarget))
           : undefined;
   const canChooseAnnotationColor = Boolean(activeColourTarget && currentAnnotationColor);
+  const canChooseLineWeight =
+    (selectedPath && isPathAnnotation(selectedPath)) ||
+    (activeTool !== 'select' && isPathKind(activeTool));
+  const currentLineWeight =
+    selectedPath && isPathAnnotation(selectedPath)
+      ? lineWeightForAnnotation(selectedPath)
+      : lastLineWeightByPhoto[photo.id] ?? DEFAULT_LINE_WEIGHT;
   const canChooseStampSize = activeTool !== 'select' && isStampKind(activeTool);
   const routeMarkerNumberControlValue =
     editingStamp?.kind === 'start'
@@ -931,6 +977,17 @@ export default function EditorScreen() {
                     : 'Stamp colour'
               }
               visibleLabel="Colour"
+            />
+          ) : null}
+          {canChooseLineWeight ? (
+            <LineWeightControl
+              currentWeight={currentLineWeight}
+              expanded={openContextControl === 'lineWeight'}
+              onExpandedChange={(expanded) => setOpenContextControl(expanded ? 'lineWeight' : undefined)}
+              onSelectWeight={(weight) => {
+                void changeSelectedPathWeight(weight);
+              }}
+              visibleLabel="Weight"
             />
           ) : null}
           {canChooseStampSize ? (

@@ -1,4 +1,5 @@
 import type { Annotation, PathAnnotationKind, PhotoAsset, Route, TopoProject, TopoSummary } from '@/domain/types';
+import { isLineWeight } from '@/domain/lineWeights';
 import { isStampSize } from '@/domain/stampSizes';
 
 import type { TopoDatabase } from './database';
@@ -140,8 +141,12 @@ export async function insertRoute(db: TopoDatabase, route: Route) {
 
 export async function upsertAnnotation(db: TopoDatabase, annotation: Annotation) {
   const metadata =
-    annotation.labelFontSize || annotation.stampSize
-      ? { labelFontSize: annotation.labelFontSize, stampSize: annotation.stampSize }
+    annotation.labelFontSize || annotation.lineWeight || annotation.stampSize
+      ? {
+          labelFontSize: annotation.labelFontSize,
+          lineWeight: annotation.lineWeight,
+          stampSize: annotation.stampSize,
+        }
       : undefined;
   await db.runAsync(
     `
@@ -208,6 +213,7 @@ function mapAnnotation(row: AnnotationRow): Annotation {
     color: row.color,
     label: row.label ?? undefined,
     labelFontSize: metadata.labelFontSize,
+    lineWeight: metadata.lineWeight,
     stampSize: metadata.stampSize,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -228,18 +234,27 @@ function mapAnnotation(row: AnnotationRow): Annotation {
   };
 }
 
-function parseAnnotationMetadata(value: string | null): { labelFontSize?: number; stampSize?: Annotation['stampSize'] } {
+function parseAnnotationMetadata(value: string | null): {
+  labelFontSize?: number;
+  lineWeight?: Annotation['lineWeight'];
+  stampSize?: Annotation['stampSize'];
+} {
   if (!value) {
     return {};
   }
 
   try {
-    const metadata = JSON.parse(value) as { labelFontSize?: unknown; stampSize?: unknown };
+    const metadata = JSON.parse(value) as {
+      labelFontSize?: unknown;
+      lineWeight?: unknown;
+      stampSize?: unknown;
+    };
     return {
       labelFontSize:
         typeof metadata.labelFontSize === 'number' && Number.isFinite(metadata.labelFontSize)
           ? metadata.labelFontSize
           : undefined,
+      lineWeight: isLineWeight(metadata.lineWeight) ? metadata.lineWeight : undefined,
       stampSize: isStampSize(metadata.stampSize) ? metadata.stampSize : undefined,
     };
   } catch {

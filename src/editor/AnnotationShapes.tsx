@@ -15,6 +15,7 @@ import { memo } from 'react';
 import { isPathAnnotation } from '@/domain/annotationFactory';
 import { chooseContrastingTextColour, chooseTextBackdrop, rgbaString } from '@/domain/annotationColours';
 import { denormalizePoint, normalizedToScreenPoint } from '@/domain/geometry';
+import { lineStrokeWidthForWeight, lineWeightForAnnotation } from '@/domain/lineWeights';
 import { stampScaleForSize, stampSizeForAnnotation } from '@/domain/stampSizes';
 import {
   displayFontSize,
@@ -173,7 +174,7 @@ export const AnnotationShape = memo(function AnnotationShape({
         path={path}
         strokeCap="round"
         strokeJoin="round"
-        strokeWidth={annotation.kind === 'climbLine' ? 5 : 4}
+        strokeWidth={lineStrokeWidthForWeight(lineWeightForAnnotation(annotation))}
         style="stroke"
       />
     );

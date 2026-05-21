@@ -83,6 +83,36 @@ describe('exportTopoPdf', () => {
     expect(Sharing.shareAsync).not.toHaveBeenCalled();
   });
 
+  it('exports route line weight and keeps missing weight at medium thickness', async () => {
+    await exportTopoPdf(
+      {
+        ...project,
+        annotations: [
+          project.annotations[0],
+          {
+            id: 'line-large',
+            topoId: 'project-1',
+            photoId: 'photo-1',
+            kind: 'climbLine',
+            color: '#FACC15',
+            lineWeight: 'large',
+            points: [
+              { x: 0.2, y: 0.2 },
+              { x: 0.7, y: 0.7 },
+            ],
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      },
+      project.photos[0],
+    );
+
+    const html = (Print.printToFileAsync as jest.Mock).mock.calls[0][0].html as string;
+    expect(html).toContain('stroke="#2563EB" stroke-width="8"');
+    expect(html).toContain('stroke="#FACC15" stroke-width="10"');
+  });
+
   it('exports bolt, rappel, and belay stamp shapes instead of generic circles', async () => {
     await exportTopoPdf(
       {

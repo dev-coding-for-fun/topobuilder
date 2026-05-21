@@ -27,6 +27,21 @@ describe('annotation factory', () => {
 
     expect(isPathKind(annotation.kind)).toBe(true);
     expect('points' in annotation ? annotation.points : undefined).toEqual([{ x: 0.1, y: 0.2 }]);
+    expect(annotation.lineWeight).toBe('medium');
+  });
+
+  it('accepts explicit line weight for path annotations', () => {
+    const annotation = createAnnotation({
+      id: 'a7',
+      topoId: 't1',
+      photoId: 'p1',
+      kind: 'walkoff',
+      point: { x: 0.1, y: 0.2 },
+      now: '2026-01-01T00:00:00.000Z',
+      lineWeight: 'large',
+    });
+
+    expect(annotation.lineWeight).toBe('large');
   });
 
   it('uses a stable default color per annotation kind', () => {

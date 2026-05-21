@@ -8,6 +8,7 @@ import type {
   PathAnnotationKind,
 } from './types';
 import { defaultAnnotationColourForTarget, type StampAnnotationKind } from './annotationColours';
+import { DEFAULT_LINE_WEIGHT, type LineWeight } from './lineWeights';
 import { DEFAULT_STAMP_SIZE, type StampSize } from './stampSizes';
 import { DEFAULT_LABEL_FONT_SIZE, clampLabelFontSize } from './textLabels';
 
@@ -75,6 +76,7 @@ type CreateAnnotationInput = {
   color?: string;
   label?: string;
   labelFontSize?: number;
+  lineWeight?: LineWeight;
   stampSize?: StampSize;
 };
 
@@ -91,6 +93,7 @@ export function createAnnotation(input: CreateAnnotationInput): Annotation {
       input.kind === 'label'
         ? clampLabelFontSize(input.labelFontSize ?? DEFAULT_LABEL_FONT_SIZE)
         : undefined,
+    lineWeight: isPathKind(input.kind) ? (input.lineWeight ?? DEFAULT_LINE_WEIGHT) : undefined,
     stampSize: isStampKind(input.kind) ? (input.stampSize ?? DEFAULT_STAMP_SIZE) : undefined,
     createdAt: input.now,
     updatedAt: input.now,
