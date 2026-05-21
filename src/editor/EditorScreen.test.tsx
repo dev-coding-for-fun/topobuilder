@@ -659,7 +659,7 @@ describe('EditorScreen label editing', () => {
     expect(latestTopBarProps().canDelete).toBe(false);
   });
 
-  it('resizes the canvas region and hides bottom controls while editing text with the keyboard open', async () => {
+  it('resizes the canvas region and keeps text colour controls above the keyboard while editing text', async () => {
     render(<EditorScreen />);
     await waitFor(() => expect(TopoCanvas).toHaveBeenCalled());
 
@@ -667,17 +667,18 @@ describe('EditorScreen label editing', () => {
       await latestCanvasProps().onPlaceAnnotation('label', { x: 0.2, y: 0.8 }, { labelFontSize: 24 });
     });
 
-    emitKeyboardEvent('keyboardDidShow', 320, 480);
+    emitKeyboardEvent('keyboardDidShow', 320, 9999);
 
     expect(StyleSheet.flatten(screen.getByTestId('editor-canvas-region').props.style).marginBottom).toBeGreaterThan(0);
-    expect(
-      StyleSheet.flatten(screen.getByTestId('editor-bottom-overlay', { includeHiddenElements: true }).props.style)
-        .display,
-    ).toBe('none');
+    expect(StyleSheet.flatten(screen.getByTestId('editor-bottom-overlay').props.style).bottom).toBe(320);
+    expect(StyleSheet.flatten(screen.getByTestId('editor-bottom-overlay').props.style).display).toBeUndefined();
+    expect(screen.getByLabelText('Text colour: Ink')).toBeTruthy();
+    expect(screen.queryByLabelText('Route marker')).toBeNull();
 
     emitKeyboardEvent('keyboardDidHide', 0, 800);
 
     expect(StyleSheet.flatten(screen.getByTestId('editor-canvas-region').props.style).marginBottom).toBeUndefined();
+    expect(StyleSheet.flatten(screen.getByTestId('editor-bottom-overlay').props.style).bottom).toBe(0);
     expect(StyleSheet.flatten(screen.getByTestId('editor-bottom-overlay').props.style).display).toBeUndefined();
   });
 });

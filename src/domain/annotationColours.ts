@@ -42,7 +42,6 @@ export const DEFAULT_LINE_ANNOTATION_COLOUR = '#FACC15';
 export const DEFAULT_STAMP_ANNOTATION_COLOUR = '#FACC15';
 export const TEXT_BACKDROP_TARGET_CONTRAST = 4.5;
 export const TEXT_BACKDROP_FALLBACK_OPACITY = 0.34;
-export const TEXT_BACKDROP_FALLBACK_BACKGROUND = '#D1D5DB';
 export const TEXT_BACKDROP_CANDIDATE_ALPHAS = [0, 0.12, 0.18, 0.26, 0.34, 0.44, 0.56];
 export const TEXT_BACKDROP_COLOURS = ['#000000', '#FFFFFF'] as const;
 
@@ -181,11 +180,6 @@ export function chooseContrastingTextColour(backgroundColour: string) {
 }
 
 function chooseFallbackBackdrop(text: RgbColour): TextBackdropDecision {
-  const assumedRockBackground = parseHexColour(TEXT_BACKDROP_FALLBACK_BACKGROUND);
-  if (contrastRatio(text, assumedRockBackground) >= TEXT_BACKDROP_TARGET_CONTRAST) {
-    return { color: '#000000', opacity: 0 };
-  }
-
   const black = parseHexColour('#000000');
   const white = parseHexColour('#FFFFFF');
   return {

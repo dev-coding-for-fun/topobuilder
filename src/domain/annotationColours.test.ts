@@ -81,8 +81,8 @@ describe('annotation colour helpers', () => {
 
   it('uses deterministic fallback when background samples are unavailable', () => {
     expect(chooseTextBackdrop({ textColour: '#111827' })).toEqual({
-      color: '#000000',
-      opacity: 0,
+      color: '#FFFFFF',
+      opacity: 0.34,
     });
     expect(chooseTextBackdrop({ textColour: '#FACC15' })).toEqual({
       color: '#000000',

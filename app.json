@@ -30,7 +30,8 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.bowvalleydev.topobuilder"
+      "package": "com.bowvalleydev.topobuilder",
+      "versionCode": 1
     },
     "web": {
       "favicon": "./assets/favicon.png"

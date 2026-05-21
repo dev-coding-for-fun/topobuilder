@@ -533,6 +533,17 @@ export default function EditorScreen() {
     });
   }
 
+  function moveSelectedStamp(point: NormalizedPoint) {
+    setEditingStamp((annotation) => {
+      if (!annotation) {
+        return annotation;
+      }
+      const next = { ...annotation, point };
+      editingStampRef.current = next;
+      return next;
+    });
+  }
+
   async function changeSelectedLabelColor(color: string) {
     if (!photo) {
       return;
@@ -733,6 +744,16 @@ export default function EditorScreen() {
     await commitEditingLabelSnapshot();
   }
 
+  async function commitSelectedStampEdit() {
+    const annotation = editingStampRef.current;
+    if (!annotation) {
+      return;
+    }
+
+    await updateAnnotation(annotation);
+    await refresh();
+  }
+
   async function deleteSelectedAnnotation() {
     const selectedAnnotation = savedAnnotations.find(
       (annotation) =>
@@ -818,7 +839,7 @@ export default function EditorScreen() {
         : undefined;
   const isKeyboardEditingLabel = Boolean(selectedLabelId && keyboardHeight > 0);
   const isKeyboardEditingRouteMarkerNumber = isEditingRouteMarkerNumber && keyboardHeight > 0;
-  const bottomOverlayKeyboardOffset = isKeyboardEditingRouteMarkerNumber ? keyboardHeight : 0;
+  const bottomOverlayKeyboardOffset = isKeyboardEditingLabel || isKeyboardEditingRouteMarkerNumber ? keyboardHeight : 0;
 
   return (
     <View style={styles.root}>
@@ -835,10 +856,12 @@ export default function EditorScreen() {
           onChangeSelectedLabelText={changeSelectedLabelText}
           onCommitSelectedLabelEdit={commitSelectedLabelEdit}
           onCommitSelectedPathEdit={commitSelectedPathEdit}
+          onCommitSelectedStampEdit={commitSelectedStampEdit}
           onExtendPathDraft={extendPathDraft}
           onFinishPathDraft={finishPathDraft}
           onMoveSelectedLabel={moveSelectedLabel}
           onMoveSelectedPathPoint={moveSelectedPathPoint}
+          onMoveSelectedStamp={moveSelectedStamp}
           onPlaceAnnotation={handlePlace}
           onResizeSelectedLabel={resizeSelectedLabel}
           onSelectLabel={selectLabel}
@@ -869,7 +892,6 @@ export default function EditorScreen() {
         style={[
           styles.bottomOverlay,
           bottomOverlayKeyboardOffset > 0 ? { bottom: bottomOverlayKeyboardOffset } : null,
-          isKeyboardEditingLabel ? styles.hiddenBottomOverlay : null,
         ]}
         testID="editor-bottom-overlay"
       >
@@ -923,7 +945,7 @@ export default function EditorScreen() {
             />
           ) : null}
         </View>
-        {isKeyboardEditingRouteMarkerNumber ? null : (
+        {isKeyboardEditingLabel || isKeyboardEditingRouteMarkerNumber ? null : (
           <ToolPalette
             onSelectTool={(tool) => {
               void commitEditingLabelSnapshot();
@@ -967,9 +989,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     justifyContent: 'center',
-  },
-  hiddenBottomOverlay: {
-    display: 'none',
   },
   loadingText: {
     color: '#F8FAFC',

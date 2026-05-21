@@ -22,7 +22,13 @@ import {
   pointDistance,
   screenToNormalizedImagePoint,
 } from '@/domain/geometry';
-import { isLabelAnnotation, isPathAnnotation, isPathKind, isStampAnnotation } from '@/domain/annotationFactory';
+import {
+  isLabelAnnotation,
+  isMarkerAnnotation,
+  isPathAnnotation,
+  isPathKind,
+  isStampAnnotation,
+} from '@/domain/annotationFactory';
 import {
   DEFAULT_SCREEN_LABEL_FONT_SIZE,
   containsPoint,
@@ -59,8 +65,9 @@ const HANDLE_HIT_RADIUS = 32;
 const LABEL_HANDLE_HIT_RADIUS = 34;
 const LABEL_BOUNDS_HIT_PADDING = 8;
 
-type GestureMode = 'draw' | 'editPath' | 'editLabel' | 'pan';
+type GestureMode = 'draw' | 'editPath' | 'editLabel' | 'editStamp' | 'pan';
 type LabelDragMode = 'move' | 'resize' | 'none';
+type StampDragMode = 'move' | 'none';
 
 type TopoCanvasProps = {
   photo: PhotoAsset;
@@ -79,6 +86,8 @@ type TopoCanvasProps = {
   onChangeSelectedLabelText: (text: string) => void;
   onCommitSelectedLabelEdit: () => void;
   onMoveSelectedLabel: (point: NormalizedPoint) => void;
+  onCommitSelectedStampEdit: () => void;
+  onMoveSelectedStamp: (point: NormalizedPoint) => void;
   onPlaceAnnotation: (
     kind: MarkerAnnotationKind,
     point: NormalizedPoint,
@@ -103,8 +112,10 @@ export function TopoCanvas({
   onFinishPathDraft,
   onChangeSelectedLabelText,
   onCommitSelectedLabelEdit,
+  onCommitSelectedStampEdit,
   onMoveSelectedLabel,
   onMoveSelectedPathPoint,
+  onMoveSelectedStamp,
   onPlaceAnnotation,
   onResizeSelectedLabel,
   onSelectLabel,
@@ -152,7 +163,9 @@ export function TopoCanvas({
   const activePointers = useSharedValue(0);
   const dragHandleIndexRef = useRef(-1);
   const labelDragModeRef = useRef<LabelDragMode>('none');
+  const stampDragModeRef = useRef<StampDragMode>('none');
   const labelMoveOffsetRef = useRef({ x: 0, y: 0 });
+  const stampMoveOffsetRef = useRef({ x: 0, y: 0 });
   const labelResizeStartRef = useRef({ distance: 1, fontSize: 1 });
   const [viewport, setViewport] = useState({ scale: 1, tx: 0, ty: 0 });
   const activePathTool = activeTool !== 'select' && isPathKind(activeTool);
@@ -189,6 +202,8 @@ export function TopoCanvas({
       ? 'editPath'
       : activeTool === 'select' && selectedLabel
         ? 'editLabel'
+      : activeTool === 'select' && selectedStamp
+        ? 'editStamp'
         : 'pan';
 
   // Reset zoom/pan whenever the photo changes so each topo opens at the cover view.
@@ -457,6 +472,45 @@ export function TopoCanvas({
     onResizeSelectedLabel(start.fontSize * (nextDistance / start.distance));
   };
 
+  const beginStampDragRef = useRef<
+    (screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) => void
+  >(() => undefined);
+  beginStampDragRef.current = (screenX, screenY, viewTx, viewTy, viewScale) => {
+    if (!selectedStamp || imageFit.width <= 0 || imageFit.height <= 0) {
+      stampDragModeRef.current = 'none';
+      return;
+    }
+
+    setViewport({ scale: viewScale, tx: viewTx, ty: viewTy });
+    const displaySize = sampleSizeFor(viewScale);
+    const point = normalizedPointAt(screenX, screenY, viewTx, viewTy, viewScale);
+    const target = denormalizePoint(point, displaySize);
+    const stampPoint = denormalizePoint(selectedStamp.point, displaySize);
+    if (pointDistance(target, stampPoint) > STAMP_HIT_RADIUS) {
+      stampDragModeRef.current = 'none';
+      return;
+    }
+
+    stampDragModeRef.current = 'move';
+    stampMoveOffsetRef.current = {
+      x: target.x - stampPoint.x,
+      y: target.y - stampPoint.y,
+    };
+  };
+
+  const moveStampRef = useRef<
+    (screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) => void
+  >(() => undefined);
+  moveStampRef.current = (screenX, screenY, viewTx, viewTy, viewScale) => {
+    if (!selectedStamp || stampDragModeRef.current === 'none' || imageFit.width <= 0 || imageFit.height <= 0) {
+      return;
+    }
+
+    const displaySize = sampleSizeFor(viewScale);
+    const point = normalizedPointAt(screenX, screenY, viewTx, viewTy, viewScale);
+    onMoveSelectedStamp(moveLabelPoint({ currentPointer: point, pointerOffset: stampMoveOffsetRef.current, size: displaySize }));
+  };
+
   function dispatchTap(screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) {
     placeRef.current(screenX, screenY, viewTx, viewTy, viewScale);
   }
@@ -493,10 +547,35 @@ export function TopoCanvas({
     moveControlPointRef.current(screenX, screenY, viewTx, viewTy, viewScale);
   }
 
+  function dispatchMoveControlPointOrPan(
+    screenX: number,
+    screenY: number,
+    translationX: number,
+    translationY: number,
+    viewTx: number,
+    viewTy: number,
+    viewScale: number,
+  ) {
+    if (dragHandleIndexRef.current < 0) {
+      const next = clampPan(
+        { x: startTx.value + translationX, y: startTy.value + translationY },
+        viewScale,
+        imageFit,
+        canvasSize,
+      );
+      tx.value = next.x;
+      ty.value = next.y;
+      return;
+    }
+
+    moveControlPointRef.current(screenX, screenY, viewTx, viewTy, viewScale);
+  }
+
   function dispatchFinishControlPointDrag() {
     if (dragHandleIndexRef.current >= 0) {
       onCommitSelectedPathEdit();
     }
+    setViewport({ scale: scale.value, tx: tx.value, ty: ty.value });
     dragHandleIndexRef.current = -1;
   }
 
@@ -552,6 +631,58 @@ export function TopoCanvas({
     labelDragModeRef.current = 'none';
   }
 
+  function dispatchBeginStampDrag(
+    screenX: number,
+    screenY: number,
+    viewTx: number,
+    viewTy: number,
+    viewScale: number,
+  ) {
+    beginStampDragRef.current(screenX, screenY, viewTx, viewTy, viewScale);
+  }
+
+  function dispatchMoveStamp(
+    screenX: number,
+    screenY: number,
+    viewTx: number,
+    viewTy: number,
+    viewScale: number,
+  ) {
+    moveStampRef.current(screenX, screenY, viewTx, viewTy, viewScale);
+  }
+
+  function dispatchMoveStampOrPan(
+    screenX: number,
+    screenY: number,
+    translationX: number,
+    translationY: number,
+    viewTx: number,
+    viewTy: number,
+    viewScale: number,
+  ) {
+    if (stampDragModeRef.current === 'none') {
+      const next = clampPan(
+        { x: startTx.value + translationX, y: startTy.value + translationY },
+        viewScale,
+        imageFit,
+        canvasSize,
+      );
+      tx.value = next.x;
+      ty.value = next.y;
+      return;
+    }
+
+    moveStampRef.current(screenX, screenY, viewTx, viewTy, viewScale);
+  }
+
+  function dispatchFinishStampDrag() {
+    if (stampDragModeRef.current !== 'none') {
+      onCommitSelectedStampEdit();
+    }
+    setViewport({ scale: scale.value, tx: tx.value, ty: ty.value });
+    stampDragModeRef.current = 'none';
+  }
+
   const panGesture = useMemo(
     () =>
       Gesture.Pan()
@@ -604,17 +735,27 @@ export function TopoCanvas({
         .maxPointers(1)
         .minDistance(3)
         .onStart((event) => {
+          startTx.value = tx.value;
+          startTy.value = ty.value;
           runOnJS(dispatchBeginControlPointDrag)(event.x, event.y, tx.value, ty.value, scale.value);
         })
         .onChange((event) => {
-          runOnJS(dispatchMoveControlPoint)(event.x, event.y, tx.value, ty.value, scale.value);
+          runOnJS(dispatchMoveControlPointOrPan)(
+            event.x,
+            event.y,
+            event.translationX,
+            event.translationY,
+            tx.value,
+            ty.value,
+            scale.value,
+          );
         })
         .onEnd(() => {
           runOnJS(dispatchFinishControlPointDrag)();
         }),
     // Dispatch functions are refreshed through render closures and only read JS state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [scale, tx, ty],
+    [canvasSize, imageFit, scale, startTx, startTy, tx, ty],
   );
 
   const labelGesture = useMemo(
@@ -641,6 +782,36 @@ export function TopoCanvas({
         })
         .onEnd(() => {
           runOnJS(dispatchFinishLabelDrag)();
+        }),
+    // Dispatch functions are refreshed through render closures and only read JS state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [canvasSize, imageFit, scale, startTx, startTy, tx, ty],
+  );
+
+  const stampGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .minPointers(1)
+        .maxPointers(1)
+        .minDistance(3)
+        .onStart((event) => {
+          startTx.value = tx.value;
+          startTy.value = ty.value;
+          runOnJS(dispatchBeginStampDrag)(event.x, event.y, tx.value, ty.value, scale.value);
+        })
+        .onChange((event) => {
+          runOnJS(dispatchMoveStampOrPan)(
+            event.x,
+            event.y,
+            event.translationX,
+            event.translationY,
+            tx.value,
+            ty.value,
+            scale.value,
+          );
+        })
+        .onEnd(() => {
+          runOnJS(dispatchFinishStampDrag)();
         }),
     // Dispatch functions are refreshed through render closures and only read JS state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -735,9 +906,12 @@ export function TopoCanvas({
       if (gestureMode === 'editLabel') {
         return Gesture.Race(tapGesture, Gesture.Simultaneous(labelGesture, pinchGesture));
       }
+      if (gestureMode === 'editStamp') {
+        return Gesture.Race(tapGesture, Gesture.Simultaneous(stampGesture, pinchGesture));
+      }
       return Gesture.Race(tapGesture, Gesture.Simultaneous(panGesture, pinchGesture));
     },
-    [controlPointGesture, drawGesture, gestureMode, labelGesture, panGesture, pinchGesture, tapGesture],
+    [controlPointGesture, drawGesture, gestureMode, labelGesture, panGesture, pinchGesture, stampGesture, tapGesture],
   );
 
   const groupTransform = useDerivedValue(
@@ -763,9 +937,13 @@ export function TopoCanvas({
         transform: viewport,
       })
     : undefined;
+  const drawableAnnotations = useMemo(
+    () => annotationsInCanvasStackOrder(annotations, selectedLabel?.id),
+    [annotations, selectedLabel?.id],
+  );
 
   return (
-    <GestureDetector gesture={composedGesture} key={gestureMode}>
+    <GestureDetector gesture={composedGesture}>
       <Animated.View onLayout={handleLayout} style={styles.container}>
         <Canvas style={StyleSheet.absoluteFill}>
           <Group transform={groupTransform}>
@@ -782,17 +960,15 @@ export function TopoCanvas({
               ) : (
                 <Rect x={0} y={0} width={imageFit.width} height={imageFit.height} color="#CBD5E1" />
               )}
-              {annotations
-                .filter((annotation) => annotation.id !== selectedLabel?.id)
-                .map((annotation) => (
-                  <AnnotationShape
-                    annotation={annotation}
-                    key={annotation.id}
-                    routeMarkerFont={routeMarkerFont}
-                    imageScale={imageFit.scale}
-                    size={renderableSize}
-                  />
-                ))}
+              {drawableAnnotations.map((annotation) => (
+                <AnnotationShape
+                  annotation={annotation}
+                  key={annotation.id}
+                  routeMarkerFont={routeMarkerFont}
+                  imageScale={imageFit.scale}
+                  size={renderableSize}
+                />
+              ))}
               {selectedPath ? <SelectedPathHandles points={selectedPath.points} size={renderableSize} /> : null}
               {selectedStamp ? (
                 <Circle
@@ -844,6 +1020,18 @@ export function TopoCanvas({
       </Animated.View>
     </GestureDetector>
   );
+}
+
+export function annotationsInCanvasStackOrder(annotations: Annotation[], selectedLabelId?: string) {
+  const drawableAnnotations = annotations.filter((annotation) => annotation.id !== selectedLabelId);
+
+  return [
+    ...drawableAnnotations.filter(isPathAnnotation),
+    ...drawableAnnotations.filter(
+      (annotation): annotation is MarkerAnnotation => isMarkerAnnotation(annotation) && !isLabelAnnotation(annotation),
+    ),
+    ...drawableAnnotations.filter(isLabelAnnotation),
+  ];
 }
 
 const styles = StyleSheet.create({
