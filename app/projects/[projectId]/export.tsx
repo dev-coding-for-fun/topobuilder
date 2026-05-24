@@ -6,6 +6,7 @@ import type { TopoProject } from '@/domain/types';
 import { exportTopoPdf } from '@/export/pdf';
 import { useTopoStore } from '@/state/TopoStore';
 import { Button } from '@/ui/Button';
+import { interStyle } from '@/ui/fonts';
 import { Screen } from '@/ui/Screen';
 
 export default function ExportScreen() {
@@ -79,7 +80,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     color: '#111827',
     fontSize: 18,
-    fontWeight: '900',
+    ...interStyle('900'),
   },
   center: {
     alignItems: 'center',
@@ -103,7 +104,7 @@ const styles = StyleSheet.create({
   title: {
     color: '#111827',
     fontSize: 30,
-    fontWeight: '900',
+    ...interStyle('900'),
   },
   uri: {
     color: '#6B7280',

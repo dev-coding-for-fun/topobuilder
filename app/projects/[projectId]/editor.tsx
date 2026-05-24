@@ -54,6 +54,7 @@ import { StampSizeControl } from '@/editor/StampSizeControl';
 import { ToolPalette } from '@/editor/ToolPalette';
 import { TopoCanvas } from '@/editor/TopoCanvas';
 import { useTopoStore } from '@/state/TopoStore';
+import { interStyle } from '@/ui/fonts';
 
 const CONTROL_POINT_MIN_DISTANCE = 44;
 
@@ -1054,7 +1055,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     color: '#F8FAFC',
-    fontWeight: '700',
+    ...interStyle('700'),
   },
   root: {
     backgroundColor: '#000000',

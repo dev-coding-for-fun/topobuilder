@@ -57,7 +57,7 @@ import {
   SelectedLabelHandles,
   SelectedPathHandles,
 } from '@/editor/AnnotationShapes';
-import { fontFamilies } from '@/ui/fonts';
+import { interStyle } from '@/ui/fonts';
 
 const MAX_ZOOM = 6;
 const TAP_MAX_DELTA = 10;
@@ -1101,15 +1101,14 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     color: '#F8FAFC',
-    fontWeight: '700',
+    ...interStyle('700'),
   },
   labelBackdrop: {
     position: 'absolute',
   },
   labelInput: {
     backgroundColor: 'transparent',
-    fontFamily: fontFamilies.bold,
-    fontWeight: '700',
+    ...interStyle('700'),
     padding: 0,
     position: 'absolute',
   },

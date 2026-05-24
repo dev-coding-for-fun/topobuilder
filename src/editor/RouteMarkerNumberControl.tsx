@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { RouteMarkerNumber } from '@/domain/routeMarkerNumbers';
-import { fontFamilies } from '@/ui/fonts';
+import { interStyle } from '@/ui/fonts';
 
 export function RouteMarkerNumberControl({
   accessibilityLabel,
@@ -85,9 +85,8 @@ const styles = StyleSheet.create({
   },
   input: {
     color: '#F8FAFC',
-    fontFamily: fontFamilies.black,
     fontSize: 14,
-    fontWeight: '900',
+    ...interStyle('900'),
     height: 24,
     minWidth: 28,
     padding: 0,
@@ -105,9 +104,8 @@ const styles = StyleSheet.create({
   },
   stepText: {
     color: '#F8FAFC',
-    fontFamily: fontFamilies.black,
     fontSize: 16,
-    fontWeight: '900',
+    ...interStyle('900'),
     lineHeight: 20,
   },
 });

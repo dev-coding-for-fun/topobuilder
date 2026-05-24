@@ -11,6 +11,7 @@ import {
 import { requestCameraPermission } from '@/camera/photoCapture';
 import { useTopoStore } from '@/state/TopoStore';
 import { Button } from '@/ui/Button';
+import { interStyle } from '@/ui/fonts';
 import { Screen } from '@/ui/Screen';
 
 export default function CameraScreen() {
@@ -116,7 +117,7 @@ const styles = StyleSheet.create({
   title: {
     color: '#111827',
     fontSize: 24,
-    fontWeight: '900',
+    ...interStyle('900'),
     textAlign: 'center',
   },
 });

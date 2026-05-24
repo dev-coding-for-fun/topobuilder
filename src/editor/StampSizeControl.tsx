@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { STAMP_SIZE_OPTIONS, type StampSize } from '@/domain/stampSizes';
+import { interStyle } from '@/ui/fonts';
 
 export function StampSizeControl({
   currentSize,
@@ -89,7 +90,7 @@ const styles = StyleSheet.create({
   chevron: {
     color: '#F8FAFC',
     fontSize: 13,
-    fontWeight: '800',
+    ...interStyle('800'),
     lineHeight: 14,
   },
   collapsed: {
@@ -107,12 +108,12 @@ const styles = StyleSheet.create({
   collapsedLabel: {
     color: '#F8FAFC',
     fontSize: 13,
-    fontWeight: '700',
+    ...interStyle('700'),
   },
   currentSize: {
     color: '#F8FAFC',
     fontSize: 14,
-    fontWeight: '900',
+    ...interStyle('900'),
     minWidth: 14,
     textAlign: 'center',
   },
@@ -147,6 +148,6 @@ const styles = StyleSheet.create({
   sizeButtonText: {
     color: '#F8FAFC',
     fontSize: 13,
-    fontWeight: '900',
+    ...interStyle('900'),
   },
 });

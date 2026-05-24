@@ -6,6 +6,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { chooseContrastingTextColour, defaultAnnotationColourForTarget, type StampAnnotationKind } from '@/domain/annotationColours';
 import type { EditorTool } from '@/domain/types';
+import { interStyle } from '@/ui/fonts';
 
 type IoniconName = ComponentProps<typeof Ionicons>['name'];
 type MaterialCommunityIconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -264,7 +265,7 @@ const styles = StyleSheet.create({
   routeMarkerLabel: {
     color: '#F8FAFC',
     fontSize: 12,
-    fontWeight: '800',
+    ...interStyle('800'),
   },
   selectedTool: {
     backgroundColor: '#F2B58F',

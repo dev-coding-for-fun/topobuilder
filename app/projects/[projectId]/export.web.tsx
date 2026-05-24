@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { StyleSheet, Text } from 'react-native';
 
 import { Button } from '@/ui/Button';
+import { interStyle } from '@/ui/fonts';
 import { Screen } from '@/ui/Screen';
 
 export default function ExportScreen() {
@@ -30,7 +31,7 @@ const styles = StyleSheet.create({
   title: {
     color: '#111827',
     fontSize: 24,
-    fontWeight: '900',
+    ...interStyle('900'),
     textAlign: 'center',
   },
 });

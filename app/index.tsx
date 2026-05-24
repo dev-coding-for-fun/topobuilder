@@ -4,6 +4,7 @@ import { FlatList, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { useTopoStore } from '@/state/TopoStore';
 import { Button } from '@/ui/Button';
+import { interStyle } from '@/ui/fonts';
 import { Screen } from '@/ui/Screen';
 
 export default function ProjectListScreen() {
@@ -80,7 +81,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     color: '#111827',
     fontSize: 18,
-    fontWeight: '800',
+    ...interStyle('800'),
   },
   empty: {
     color: '#6B7280',
@@ -95,7 +96,7 @@ const styles = StyleSheet.create({
   eyebrow: {
     color: '#2563EB',
     fontSize: 13,
-    fontWeight: '900',
+    ...interStyle('900'),
     letterSpacing: 0.7,
     textTransform: 'uppercase',
   },
@@ -133,7 +134,7 @@ const styles = StyleSheet.create({
   projectTitle: {
     color: '#111827',
     fontSize: 17,
-    fontWeight: '800',
+    ...interStyle('800'),
   },
   screen: {
     alignSelf: 'center',
@@ -150,7 +151,7 @@ const styles = StyleSheet.create({
   title: {
     color: '#111827',
     fontSize: 30,
-    fontWeight: '900',
+    ...interStyle('900'),
     lineHeight: 36,
   },
 });

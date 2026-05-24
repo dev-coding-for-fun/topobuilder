@@ -1,5 +1,7 @@
 import { Pressable, StyleSheet, Text } from 'react-native';
 
+import { interStyle } from '@/ui/fonts';
+
 type ButtonProps = {
   label: string;
   onPress: () => void;
@@ -44,7 +46,7 @@ const styles = StyleSheet.create({
   label: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '700',
+    ...interStyle('700'),
   },
   pressed: {
     opacity: 0.8,

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { AnnotationColourSwatch } from '@/domain/annotationColours';
+import { interStyle } from '@/ui/fonts';
 
 export function AnnotationColorControl({
   currentColor,
@@ -103,12 +104,12 @@ const styles = StyleSheet.create({
   collapsedLabel: {
     color: '#F8FAFC',
     fontSize: 13,
-    fontWeight: '700',
+    ...interStyle('700'),
   },
   chevron: {
     color: '#F8FAFC',
     fontSize: 13,
-    fontWeight: '800',
+    ...interStyle('800'),
     lineHeight: 14,
   },
   currentSwatch: {

@@ -5,6 +5,7 @@ import { FlatList, Image, Platform, StyleSheet, Text, View } from 'react-native'
 import type { TopoProject } from '@/domain/types';
 import { useTopoStore } from '@/state/TopoStore';
 import { Button } from '@/ui/Button';
+import { interStyle } from '@/ui/fonts';
 import { Screen } from '@/ui/Screen';
 
 export default function ProjectDetailScreen() {
@@ -142,7 +143,7 @@ const styles = StyleSheet.create({
   emptyTitle: {
     color: '#111827',
     fontSize: 18,
-    fontWeight: '800',
+    ...interStyle('800'),
   },
   error: {
     color: '#B91C1C',
@@ -173,7 +174,7 @@ const styles = StyleSheet.create({
   },
   photoTitle: {
     color: '#111827',
-    fontWeight: '800',
+    ...interStyle('800'),
   },
   screen: {
     alignSelf: 'center',
@@ -190,6 +191,6 @@ const styles = StyleSheet.create({
   title: {
     color: '#111827',
     fontSize: 28,
-    fontWeight: '900',
+    ...interStyle('900'),
   },
 });
