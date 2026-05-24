@@ -19,6 +19,7 @@ import {
 
 type TopoStoreValue = {
   isReady: boolean;
+  storageError?: string;
   summaries: TopoSummary[];
   refresh: () => Promise<void>;
   createProject: (name: string) => Promise<TopoProject>;
@@ -59,6 +60,7 @@ const TopoStoreContext = createContext<TopoStoreValue | undefined>(undefined);
 
 export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
   const [db, setDb] = useState<TopoDatabase>();
+  const [storageError, setStorageError] = useState<string>();
   const [summaries, setSummaries] = useState<TopoSummary[]>([]);
 
   const refresh = useCallback(async () => {
@@ -72,11 +74,18 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
     let mounted = true;
 
     async function prepare() {
-      const nextDb = await getDatabase();
-      await migrateDatabase(nextDb);
-      if (mounted) {
-        setDb(nextDb);
-        setSummaries(await listTopoSummaries(nextDb));
+      try {
+        const nextDb = await getDatabase();
+        await migrateDatabase(nextDb);
+        if (mounted) {
+          setDb(nextDb);
+          setStorageError(undefined);
+          setSummaries(await listTopoSummaries(nextDb));
+        }
+      } catch (error) {
+        if (mounted) {
+          setStorageError(error instanceof Error ? error.message : 'Local storage could not be initialized.');
+        }
       }
     }
 
@@ -143,20 +152,25 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
         return undefined;
       }
 
-      const now = nowIso();
-      const uri = await copyPhotoIntoLibrary(picked.uri, topoId);
-      const photo: PhotoAsset = {
-        id: createId('photo'),
-        topoId,
-        uri,
-        width: picked.width,
-        height: picked.height,
-        createdAt: now,
-      };
-
-      await insertPhotoAsset(db, photo);
-      await refresh();
-      return photo;
+      try {
+        const now = nowIso();
+        const uri = await copyPhotoIntoLibrary(picked.uri, topoId);
+        const photo: PhotoAsset = {
+          id: createId('photo'),
+          topoId,
+          uri,
+          width: picked.width,
+          height: picked.height,
+          createdAt: now,
+        };
+        await insertPhotoAsset(db, photo);
+        await refresh();
+        setStorageError(undefined);
+        return photo;
+      } catch (error) {
+        setStorageError(error instanceof Error ? error.message : 'Imported photo could not be saved.');
+        throw error;
+      }
     },
     [db, refresh],
   );
@@ -167,20 +181,25 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
         throw new Error('Database is not ready');
       }
 
-      const now = nowIso();
-      const uri = await copyPhotoIntoLibrary(input.uri, input.topoId);
-      const photo: PhotoAsset = {
-        id: createId('photo'),
-        topoId: input.topoId,
-        uri,
-        width: input.width,
-        height: input.height,
-        createdAt: now,
-      };
-
-      await insertPhotoAsset(db, photo);
-      await refresh();
-      return photo;
+      try {
+        const now = nowIso();
+        const uri = await copyPhotoIntoLibrary(input.uri, input.topoId);
+        const photo: PhotoAsset = {
+          id: createId('photo'),
+          topoId: input.topoId,
+          uri,
+          width: input.width,
+          height: input.height,
+          createdAt: now,
+        };
+        await insertPhotoAsset(db, photo);
+        await refresh();
+        setStorageError(undefined);
+        return photo;
+      } catch (error) {
+        setStorageError(error instanceof Error ? error.message : 'Captured photo could not be saved.');
+        throw error;
+      }
     },
     [db, refresh],
   );
@@ -285,6 +304,7 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<TopoStoreValue>(
     () => ({
       isReady: Boolean(db),
+      storageError,
       summaries,
       refresh,
       createProject,
@@ -296,7 +316,7 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
       updateAnnotation,
       removeAnnotation,
     }),
-    [addAnnotation, addPathAnnotation, addPhotoFromLibrary, addPhotoFromUri, createProject, db, loadProject, refresh, removeAnnotation, summaries, updateAnnotation],
+    [addAnnotation, addPathAnnotation, addPhotoFromLibrary, addPhotoFromUri, createProject, db, loadProject, refresh, removeAnnotation, storageError, summaries, updateAnnotation],
   );
 
   return <TopoStoreContext.Provider value={value}>{children}</TopoStoreContext.Provider>;

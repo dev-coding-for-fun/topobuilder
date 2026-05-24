@@ -1,7 +1,9 @@
 import * as ImagePicker from 'expo-image-picker';
+import { VisionCamera } from 'react-native-vision-camera';
 
 export async function requestPhotoLibraryPermission() {
-  return true;
+  const result = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  return result.granted;
 }
 
 export async function pickPhotoFromLibrary() {
@@ -23,5 +25,5 @@ export async function pickPhotoFromLibrary() {
 }
 
 export async function requestCameraPermission() {
-  return false;
+  return VisionCamera.requestCameraPermission();
 }

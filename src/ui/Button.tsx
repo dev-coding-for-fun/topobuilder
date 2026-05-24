@@ -5,9 +5,10 @@ type ButtonProps = {
   onPress: () => void;
   variant?: 'primary' | 'secondary' | 'danger';
   disabled?: boolean;
+  testID?: string;
 };
 
-export function Button({ label, onPress, variant = 'primary', disabled }: ButtonProps) {
+export function Button({ label, onPress, variant = 'primary', disabled, testID }: ButtonProps) {
   return (
     <Pressable
       accessibilityRole="button"
@@ -19,6 +20,7 @@ export function Button({ label, onPress, variant = 'primary', disabled }: Button
         disabled && styles.disabled,
         pressed && !disabled && styles.pressed,
       ]}
+      testID={testID}
     >
       <Text style={[styles.label, variant !== 'primary' && styles.secondaryLabel]}>{label}</Text>
     </Pressable>

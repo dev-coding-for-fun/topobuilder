@@ -4,11 +4,11 @@ import { StyleSheet, Text } from 'react-native';
 import { Button } from '@/ui/Button';
 import { Screen } from '@/ui/Screen';
 
-export default function CameraScreen() {
+export default function ExportScreen() {
   return (
     <Screen style={styles.center}>
-      <Text style={styles.title}>Camera capture is mobile-only</Text>
-      <Text style={styles.copy}>Use photo import on desktop/web builds.</Text>
+      <Text style={styles.title}>Export is not available on web yet</Text>
+      <Text style={styles.copy}>This browser MVP focuses on local import, editing, and persistence.</Text>
       <Button label="Back to project" onPress={() => router.back()} />
     </Screen>
   );

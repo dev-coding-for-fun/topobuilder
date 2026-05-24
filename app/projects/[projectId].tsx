@@ -1,6 +1,6 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { FlatList, Image, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Image, Platform, StyleSheet, Text, View } from 'react-native';
 
 import type { TopoProject } from '@/domain/types';
 import { useTopoStore } from '@/state/TopoStore';
@@ -9,7 +9,7 @@ import { Screen } from '@/ui/Screen';
 
 export default function ProjectDetailScreen() {
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
-  const { loadProject, addPhotoFromLibrary } = useTopoStore();
+  const { loadProject, addPhotoFromLibrary, storageError } = useTopoStore();
   const [project, setProject] = useState<TopoProject>();
   const [isAddingPhoto, setIsAddingPhoto] = useState(false);
 
@@ -62,24 +62,33 @@ export default function ProjectDetailScreen() {
           label={isAddingPhoto ? 'Importing...' : 'Import photo'}
           onPress={handleAddPhoto}
         />
-        <Button
-          label="Take photo"
-          onPress={() => router.push(`/projects/${project.id}/camera`)}
-          variant="secondary"
-        />
-        <Button
-          disabled={project.photos.length === 0}
-          label="Export PDF"
-          onPress={() => router.push(`/projects/${project.id}/export`)}
-          variant="secondary"
-        />
+        {Platform.OS === 'web' ? null : (
+          <>
+            <Button
+              label="Take photo"
+              onPress={() => router.push(`/projects/${project.id}/camera`)}
+              variant="secondary"
+            />
+            <Button
+              disabled={project.photos.length === 0}
+              label="Export PDF"
+              onPress={() => router.push(`/projects/${project.id}/export`)}
+              variant="secondary"
+            />
+          </>
+        )}
       </View>
+      {storageError ? <Text style={styles.error}>{storageError}</Text> : null}
 
       <FlatList
         ListEmptyComponent={
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>Add your first rock face photo</Text>
-            <Text style={styles.emptyText}>The MVP supports library import now, with VisionCamera wired for mobile capture next.</Text>
+            <Text style={styles.emptyText}>
+              {Platform.OS === 'web'
+                ? 'Import an existing image file to start marking up a topo in the browser.'
+                : 'The MVP supports library import now, with VisionCamera wired for mobile capture next.'}
+            </Text>
           </View>
         }
         contentContainerStyle={styles.listContent}
@@ -109,6 +118,7 @@ export default function ProjectDetailScreen() {
 const styles = StyleSheet.create({
   actions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
   },
   center: {
@@ -131,6 +141,11 @@ const styles = StyleSheet.create({
     color: '#111827',
     fontSize: 18,
     fontWeight: '800',
+  },
+  error: {
+    color: '#B91C1C',
+    fontSize: 14,
+    lineHeight: 20,
   },
   header: {
     gap: 6,
@@ -159,7 +174,10 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   screen: {
+    alignSelf: 'center',
+    maxWidth: 980,
     padding: 18,
+    width: '100%',
   },
   thumbnail: {
     backgroundColor: '#CBD5E1',

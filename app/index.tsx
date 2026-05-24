@@ -7,7 +7,7 @@ import { Button } from '@/ui/Button';
 import { Screen } from '@/ui/Screen';
 
 export default function ProjectListScreen() {
-  const { summaries, isReady, createProject } = useTopoStore();
+  const { summaries, isReady, storageError, createProject } = useTopoStore();
   const [name, setName] = useState('New crag topo');
   const [isCreating, setIsCreating] = useState(false);
 
@@ -22,25 +22,28 @@ export default function ProjectListScreen() {
   }
 
   return (
-    <Screen style={styles.screen}>
+    <Screen style={styles.screen} testID="project-list:screen">
       <View style={styles.hero}>
-        <Text style={styles.eyebrow}>Offline topo builder</Text>
+        <Text style={styles.eyebrow} testID="project-list:eyebrow">Offline topo builder</Text>
         <Text style={styles.title}>Stamp bolts, anchors, starts, labels, and route lines in the field.</Text>
         <Text style={styles.subtitle}>Everything stays local to the device for this MVP.</Text>
       </View>
 
-      <View style={styles.card}>
+      <View style={styles.card} testID="project-list:create-card">
         <Text style={styles.cardTitle}>Create a topo</Text>
+        {storageError ? <Text style={styles.error}>{storageError}</Text> : null}
         <TextInput
           onChangeText={setName}
           placeholder="Topo name"
           style={styles.input}
+          testID="project-list:name-input"
           value={name}
         />
         <Button
           disabled={!isReady || isCreating}
           label={isCreating ? 'Creating...' : 'Create topo'}
           onPress={handleCreateProject}
+          testID="project-list:create-button"
         />
       </View>
 
@@ -83,6 +86,11 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     paddingVertical: 24,
     textAlign: 'center',
+  },
+  error: {
+    color: '#B91C1C',
+    fontSize: 14,
+    lineHeight: 20,
   },
   eyebrow: {
     color: '#2563EB',
@@ -128,8 +136,11 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   screen: {
+    alignSelf: 'center',
     gap: 18,
+    maxWidth: 920,
     padding: 18,
+    width: '100%',
   },
   subtitle: {
     color: '#4B5563',
