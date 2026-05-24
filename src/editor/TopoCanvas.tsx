@@ -29,6 +29,7 @@ import {
   isPathKind,
   isStampAnnotation,
 } from '@/domain/annotationFactory';
+import { chooseTextBackdrop, rgbaString } from '@/domain/annotationColours';
 import {
   DEFAULT_SCREEN_LABEL_FONT_SIZE,
   containsPoint,
@@ -64,6 +65,7 @@ const STAMP_HIT_RADIUS = 32;
 const HANDLE_HIT_RADIUS = 32;
 const LABEL_HANDLE_HIT_RADIUS = 34;
 const LABEL_BOUNDS_HIT_PADDING = 8;
+const LABEL_BACKDROP_RADIUS = 6;
 
 type GestureMode = 'draw' | 'editPath' | 'editLabel' | 'editStamp' | 'pan';
 type LabelDragMode = 'move' | 'resize' | 'none';
@@ -937,6 +939,13 @@ export function TopoCanvas({
         transform: viewport,
       })
     : undefined;
+  const selectedLabelBackdrop =
+    selectedLabel && selectedLabelFrame
+      ? editBackdropFrame({
+          frame: selectedLabelFrame,
+          textColour: selectedLabel.color,
+        })
+      : undefined;
   const drawableAnnotations = useMemo(
     () => annotationsInCanvasStackOrder(annotations, selectedLabel?.id),
     [annotations, selectedLabel?.id],
@@ -990,6 +999,22 @@ export function TopoCanvas({
             </Group>
           </Group>
         </Canvas>
+        {selectedLabelBackdrop ? (
+          <View
+            pointerEvents="none"
+            style={[
+              styles.labelBackdrop,
+              {
+                backgroundColor: selectedLabelBackdrop.backgroundColor,
+                borderRadius: LABEL_BACKDROP_RADIUS,
+                height: selectedLabelBackdrop.height,
+                left: selectedLabelBackdrop.x,
+                top: selectedLabelBackdrop.y,
+                width: selectedLabelBackdrop.width,
+              },
+            ]}
+          />
+        ) : null}
         {selectedLabel && selectedLabelFrame ? (
           <TextInput
             autoFocus
@@ -1002,11 +1027,11 @@ export function TopoCanvas({
               {
                 color: selectedLabel.color,
                 fontSize: selectedLabelFrame.fontSize,
+                height: selectedLabelFrame.height,
                 left: selectedLabelFrame.x,
                 lineHeight: selectedLabelFrame.lineHeight,
-                minHeight: selectedLabelFrame.height,
-                minWidth: selectedLabelFrame.width,
                 top: selectedLabelFrame.y,
+                width: selectedLabelFrame.width,
               },
             ]}
             value={labelText(selectedLabel)}
@@ -1034,6 +1059,30 @@ export function annotationsInCanvasStackOrder(annotations: Annotation[], selecte
   ];
 }
 
+function editBackdropFrame({
+  frame,
+  textColour,
+}: {
+  frame: ReturnType<typeof screenFrameForLabel>;
+  textColour: string;
+}) {
+  const backdrop = chooseTextBackdrop({ textColour });
+  if (backdrop.opacity <= 0) {
+    return undefined;
+  }
+
+  const padding = Math.max(4, frame.fontSize * 0.18);
+  const trailingPadding = padding + Math.max(2, frame.fontSize * 0.06);
+
+  return {
+    backgroundColor: rgbaString(backdrop.color, backdrop.opacity),
+    height: frame.height + padding * 2,
+    width: frame.width + padding + trailingPadding,
+    x: frame.x - padding,
+    y: frame.y - padding,
+  };
+}
+
 const styles = StyleSheet.create({
   container: {
     backgroundColor: '#0F172A',
@@ -1053,8 +1102,11 @@ const styles = StyleSheet.create({
     color: '#F8FAFC',
     fontWeight: '700',
   },
+  labelBackdrop: {
+    position: 'absolute',
+  },
   labelInput: {
-    backgroundColor: 'rgba(248, 250, 252, 0.18)',
+    backgroundColor: 'transparent',
     fontWeight: '700',
     padding: 0,
     position: 'absolute',

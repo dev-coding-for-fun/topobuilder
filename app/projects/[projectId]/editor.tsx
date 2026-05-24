@@ -1,6 +1,6 @@
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Keyboard, KeyboardEvent, StatusBar, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Keyboard, KeyboardEvent, Platform, StatusBar, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
@@ -126,6 +126,10 @@ export default function EditorScreen() {
   }, [nextRouteMarkerNumberByPhoto]);
 
   useEffect(() => {
+    if (Platform.OS === 'web') {
+      return;
+    }
+
     function updateKeyboardHeight(event: KeyboardEvent) {
       const keyboardTop = event.endCoordinates.screenY;
       const heightFromScreenY = windowHeight > keyboardTop ? windowHeight - keyboardTop : 0;
@@ -883,8 +887,9 @@ export default function EditorScreen() {
       : activeTool === 'start'
         ? currentRouteMarkerNumberForPhoto(photo.id)
         : undefined;
-  const isKeyboardEditingLabel = Boolean(selectedLabelId && keyboardHeight > 0);
-  const isKeyboardEditingRouteMarkerNumber = isEditingRouteMarkerNumber && keyboardHeight > 0;
+  const supportsKeyboardAvoidance = Platform.OS !== 'web';
+  const isKeyboardEditingLabel = supportsKeyboardAvoidance && Boolean(selectedLabelId && keyboardHeight > 0);
+  const isKeyboardEditingRouteMarkerNumber = supportsKeyboardAvoidance && isEditingRouteMarkerNumber && keyboardHeight > 0;
   const bottomOverlayKeyboardOffset = isKeyboardEditingLabel || isKeyboardEditingRouteMarkerNumber ? keyboardHeight : 0;
 
   return (

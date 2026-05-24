@@ -1,4 +1,5 @@
 import { render } from '@testing-library/react-native';
+import { Skia } from '@shopify/react-native-skia';
 
 import { AnnotationShape } from './AnnotationShapes';
 
@@ -123,5 +124,69 @@ describe('AnnotationShape route markers', () => {
     );
 
     expect(UNSAFE_getByProps({ text: '12' }).props.color).toBe('#F8FAFC');
+  });
+});
+
+describe('AnnotationShape labels', () => {
+  it('renders deselected labels using the editor image scale', () => {
+    const { UNSAFE_getByProps } = render(
+      <AnnotationShape
+        annotation={{
+          id: 'label-1',
+          topoId: 'topo-1',
+          photoId: 'photo-1',
+          kind: 'label',
+          color: '#111827',
+          label: 'Pitch 1',
+          labelFontSize: 80,
+          point: { x: 0.5, y: 0.5 },
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        }}
+        imageScale={0.25}
+        routeMarkerFont={null}
+        size={{ width: 1000, height: 1000 }}
+      />,
+    );
+
+    expect(UNSAFE_getByProps({ text: 'Pitch 1' }).props.font.fontSize).toBe(20);
+  });
+
+  it('does not pass a null system typeface into Skia.Font on web', () => {
+    const systemFontMgr = Skia.FontMgr.System as jest.Mock;
+    const makeFont = Skia.Font as jest.Mock;
+    systemFontMgr.mockReturnValueOnce({
+      matchFamilyStyle: jest.fn(() => null),
+    });
+    makeFont.mockImplementation((typeface, fontSize) => {
+      return {
+        fontTypeface: typeface,
+        fontSize,
+        measureText: jest.fn(() => ({ width: 0 })),
+        setEmbolden: jest.fn(),
+      };
+    });
+
+    render(
+      <AnnotationShape
+        annotation={{
+          id: 'label-1',
+          topoId: 'topo-1',
+          photoId: 'photo-1',
+          kind: 'label',
+          color: '#111827',
+          label: 'Pitch 1',
+          labelFontSize: 80,
+          point: { x: 0.5, y: 0.5 },
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        }}
+        imageScale={0.25}
+        routeMarkerFont={null}
+        size={{ width: 1000, height: 1000 }}
+      />,
+    );
+
+    expect(makeFont).not.toHaveBeenCalledWith(null, expect.any(Number));
   });
 });
