@@ -1,0 +1,18 @@
+/**
+ * Cloudflare Workers Static Assets config for the TopoBuilder web build.
+ *
+ * The web build is produced by `npx expo export --platform web` into ./dist
+ * and is fully static (no server runtime). See docs/web.md for details.
+ *
+ * COOP/COEP headers required by expo-sqlite's SharedArrayBuffer worker are
+ * served via public/_headers, which Expo copies into dist/_headers on export.
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "topo-builder-web",
+  "compatibility_date": "2026-05-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}
