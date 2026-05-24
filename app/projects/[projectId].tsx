@@ -48,9 +48,9 @@ export default function ProjectDetailScreen() {
   }
 
   return (
-    <Screen style={styles.screen}>
+    <Screen style={styles.screen} testID="project-detail:screen">
       <View style={styles.header}>
-        <Text style={styles.title}>{project.name}</Text>
+        <Text style={styles.title} testID="project-detail:title">{project.name}</Text>
         <Text style={styles.meta}>
           {project.photos.length} photos · {project.annotations.length} annotations
         </Text>
@@ -61,6 +61,7 @@ export default function ProjectDetailScreen() {
           disabled={isAddingPhoto}
           label={isAddingPhoto ? 'Importing...' : 'Import photo'}
           onPress={handleAddPhoto}
+          testID="project-detail:import-photo-button"
         />
         {Platform.OS === 'web' ? null : (
           <>
@@ -82,7 +83,7 @@ export default function ProjectDetailScreen() {
 
       <FlatList
         ListEmptyComponent={
-          <View style={styles.emptyCard}>
+          <View style={styles.emptyCard} testID="project-detail:empty-photos">
             <Text style={styles.emptyTitle}>Add your first rock face photo</Text>
             <Text style={styles.emptyText}>
               {Platform.OS === 'web'
@@ -95,7 +96,7 @@ export default function ProjectDetailScreen() {
         data={project.photos}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <View style={styles.photoCard}>
+          <View style={styles.photoCard} testID="project-detail:photo-card">
             <Image source={{ uri: item.uri }} style={styles.thumbnail} />
             <View style={styles.photoCopy}>
               <Text style={styles.photoTitle}>Topo photo</Text>
@@ -106,6 +107,7 @@ export default function ProjectDetailScreen() {
             <Button
               label="Edit"
               onPress={() => router.push(`/projects/${project.id}/editor?photoId=${item.id}`)}
+              testID="project-detail:edit-photo-button"
               variant="secondary"
             />
           </View>

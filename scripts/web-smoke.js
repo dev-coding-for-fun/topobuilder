@@ -68,6 +68,50 @@ async function main() {
   if (eyebrow !== 'OFFLINE TOPO BUILDER') {
     throw new Error(`Unexpected eyebrow text: ${eyebrow}`);
   }
+
+  const projectName = `Web smoke ${Date.now()}`;
+  await page.getByTestId('project-list:name-input').fill(projectName);
+  await page.getByTestId('project-list:create-button').click();
+  await page.getByTestId('project-detail:screen').waitFor({ state: 'visible', timeout: 15_000 });
+  await expectText(page, 'project-detail:title', projectName);
+
+  const projectUrl = page.url();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.getByTestId('project-detail:screen').waitFor({ state: 'visible', timeout: 15_000 });
+  await expectText(page, 'project-detail:title', projectName);
+
+  await page.goto(baseURL, { waitUntil: 'domcontentloaded' });
+  await page.getByText(projectName).waitFor({ state: 'visible', timeout: 15_000 });
+  await page.goto(projectUrl, { waitUntil: 'domcontentloaded' });
+  await page.getByTestId('project-detail:empty-photos').waitFor({ state: 'visible', timeout: 15_000 });
+
+  const fileChooserPromise = page.waitForEvent('filechooser', { timeout: 15_000 });
+  await page.getByTestId('project-detail:import-photo-button').click();
+  const fileChooser = await fileChooserPromise;
+  await fileChooser.setFiles({
+    buffer: Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
+      'base64',
+    ),
+    mimeType: 'image/png',
+    name: 'topo-smoke.png',
+  });
+  await page.getByTestId('project-detail:photo-card').waitFor({ state: 'visible', timeout: 15_000 });
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.getByTestId('project-detail:photo-card').waitFor({ state: 'visible', timeout: 15_000 });
+
+  await page.getByTestId('project-detail:edit-photo-button').click();
+  await page.getByTestId('editor:screen').waitFor({ state: 'visible', timeout: 15_000 });
+  await page.getByTestId('editor:tool-palette').waitFor({ state: 'visible', timeout: 15_000 });
+  await page.getByTestId('editor:tool-stamps').click();
+  await page.getByTestId('editor:canvas-region').click({ position: { x: 160, y: 220 } });
+
+  await page.goto(projectUrl, { waitUntil: 'domcontentloaded' });
+  await page.getByText(/1 annotations/).waitFor({ state: 'visible', timeout: 15_000 });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.getByText(/1 annotations/).waitFor({ state: 'visible', timeout: 15_000 });
+
   if (pageErrors.length > 0) {
     throw new Error(`Browser page errors: ${pageErrors.join('\n')}`);
   }
@@ -89,3 +133,10 @@ main()
     server?.kill();
     process.exit(1);
   });
+
+async function expectText(page, testId, expected) {
+  const actual = await page.getByTestId(testId).innerText();
+  if (actual !== expected) {
+    throw new Error(`Expected ${testId} to be "${expected}", got "${actual}"`);
+  }
+}

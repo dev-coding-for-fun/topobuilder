@@ -833,7 +833,7 @@ export default function EditorScreen() {
 
   if (!project || !photo) {
     return (
-      <View style={[styles.root, styles.center]}>
+      <View style={[styles.root, styles.center]} testID="editor:loading">
         <Stack.Screen options={{ headerShown: false }} />
         <Text style={styles.loadingText}>Loading editor...</Text>
       </View>
@@ -888,12 +888,12 @@ export default function EditorScreen() {
   const bottomOverlayKeyboardOffset = isKeyboardEditingLabel || isKeyboardEditingRouteMarkerNumber ? keyboardHeight : 0;
 
   return (
-    <View style={styles.root}>
+    <View style={styles.root} testID="editor:screen">
       <Stack.Screen options={{ headerShown: false }} />
       <StatusBar barStyle="light-content" />
       <View
         style={[styles.canvasRegion, isKeyboardEditingLabel ? { marginBottom: keyboardHeight } : null]}
-        testID="editor-canvas-region"
+        testID="editor:canvas-region"
       >
         <TopoCanvas
           activeTool={activeTool}
@@ -939,7 +939,7 @@ export default function EditorScreen() {
           styles.bottomOverlay,
           bottomOverlayKeyboardOffset > 0 ? { bottom: bottomOverlayKeyboardOffset } : null,
         ]}
-        testID="editor-bottom-overlay"
+        testID="editor:bottom-overlay"
       >
         <View style={styles.contextControls}>
           {routeMarkerNumberControlValue !== undefined ? (

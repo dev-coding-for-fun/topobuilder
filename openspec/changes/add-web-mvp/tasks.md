@@ -16,19 +16,19 @@
 ## 3. Browser Persistence
 
 - [x] 3.1 Validate whether `expo-sqlite` web can run the current migration and repository queries in the app.
-- [ ] 3.2 If SQLite web is viable, add focused tests or integration coverage for create/list/load behavior on web-compatible storage.
-- [ ] 3.3 If SQLite web is not viable, implement an IndexedDB-backed web persistence adapter that preserves the store-facing behavior.
+- [x] 3.2 If SQLite web is viable, add focused tests or integration coverage for create/list/load behavior on web-compatible storage.
+- [x] 3.3 If SQLite web is not viable, implement an IndexedDB-backed web persistence adapter that preserves the store-facing behavior.
 - [x] 3.4 Persist imported browser photo data in durable browser storage so photos survive reloads.
 - [x] 3.5 Surface a clear error state when browser storage or photo persistence fails.
 
 ## 4. Web App Workflow
 
 - [x] 4.1 Verify the project list screen renders in a desktop browser without native runtime errors.
-- [ ] 4.2 Verify creating a project, navigating to project detail, and returning to the project list works on web.
-- [ ] 4.3 Verify browser photo import adds an image to the current project and canceling import leaves the project unchanged.
-- [ ] 4.4 Verify imported photos remain visible after a page reload.
-- [ ] 4.5 Verify the editor opens imported photos and supports the core add/edit annotation workflow on web.
-- [ ] 4.6 Verify annotations remain visible and editable after a page reload.
+- [x] 4.2 Verify creating a project, navigating to project detail, and returning to the project list works on web.
+- [x] 4.3 Verify browser photo import adds an image to the current project and canceling import leaves the project unchanged.
+- [x] 4.4 Verify imported photos remain visible after a page reload.
+- [x] 4.5 Verify the editor opens imported photos and supports the core add/edit annotation workflow on web.
+- [x] 4.6 Verify annotations remain visible and editable after a page reload.
 
 ## 5. Responsive and UX Polish
 
@@ -40,6 +40,6 @@
 
 - [x] 6.1 Add or update unit tests for platform-specific photo import/storage behavior where practical.
 - [x] 6.2 Add or update store/repository tests for web persistence behavior or its selected adapter.
-- [ ] 6.3 Add focused editor tests for web-safe rendering and core annotation persistence if existing test tooling supports it.
+- [x] 6.3 Add focused editor tests for web-safe rendering and core annotation persistence if existing test tooling supports it.
 - [x] 6.4 Run typecheck and the relevant Jest test suite.
-- [ ] 6.5 Manually smoke-test the browser flow: open app, create topo, import photo, annotate, reload, reopen.
+- [x] 6.5 Manually smoke-test the browser flow: open app, create topo, import photo, annotate, reload, reopen.

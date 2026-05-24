@@ -73,7 +73,7 @@ export function ToolPalette({
   );
 
   return (
-    <View style={styles.wrapper} pointerEvents="box-none">
+    <View style={styles.wrapper} pointerEvents="box-none" testID="editor:tool-palette">
       {activeGroup?.submenu ? (
         <View style={styles.submenu}>
           {activeGroup.submenu.map((tool) => {
@@ -97,6 +97,7 @@ export function ToolPalette({
                   isDisabled && styles.disabled,
                   pressed && !isSelected && !isDisabled && styles.pressed,
                 ]}
+                testID={`editor:submenu-${tool.id ?? tool.label}`}
               >
                 <SubmenuIcon
                   color={tool.id && isStampTool(tool.id) ? stampColors?.[tool.id] : undefined}
@@ -135,6 +136,7 @@ export function ToolPalette({
                   isSelected && styles.selectedTool,
                   pressed && !isSelected && styles.pressed,
                 ]}
+                testID={`editor:tool-${group.id}`}
               >
                 <ToolbarIcon icon={group.icon} selected={isSelected} />
               </Pressable>
