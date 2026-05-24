@@ -57,6 +57,7 @@ import {
   SelectedLabelHandles,
   SelectedPathHandles,
 } from '@/editor/AnnotationShapes';
+import { fontFamilies } from '@/ui/fonts';
 
 const MAX_ZOOM = 6;
 const TAP_MAX_DELTA = 10;
@@ -1107,6 +1108,7 @@ const styles = StyleSheet.create({
   },
   labelInput: {
     backgroundColor: 'transparent',
+    fontFamily: fontFamilies.bold,
     fontWeight: '700',
     padding: 0,
     position: 'absolute',

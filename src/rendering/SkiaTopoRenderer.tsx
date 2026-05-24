@@ -12,8 +12,18 @@ import {
 } from '@shopify/react-native-skia';
 import { Inter_400Regular, Inter_700Bold } from '@expo-google-fonts/inter';
 
-import type { TopoRenderItem } from './scene';
+import type { RenderTextFontWeight, TopoRenderItem } from './scene';
 import { smoothedRenderPath } from './scene';
+
+/**
+ * Only the weights listed in `RenderTextFontWeight` are wired up here. If a
+ * new weight is added to that union, TypeScript will require a matching entry
+ * in this map – we deliberately avoid a silent fallback to regular.
+ */
+const SKIA_FONT_BY_WEIGHT = {
+  '400': Inter_400Regular,
+  '700': Inter_700Bold,
+} satisfies Record<RenderTextFontWeight, Parameters<typeof useFont>[0]>;
 
 export function SkiaTopoImage({
   image,
@@ -108,7 +118,7 @@ function SkiaRenderItem({
 }
 
 function SkiaTextRenderItem({ item }: { item: Extract<TopoRenderItem, { kind: 'text' }> }) {
-  const font = useFont(item.fontWeight === '700' ? Inter_700Bold : Inter_400Regular, item.fontSize);
+  const font = useFont(SKIA_FONT_BY_WEIGHT[item.fontWeight], item.fontSize);
   if (!font) {
     return null;
   }
