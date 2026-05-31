@@ -1,4 +1,4 @@
-import { Stack, router, useLocalSearchParams } from 'expo-router';
+import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Keyboard, KeyboardEvent, Platform, StatusBar, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,7 +10,6 @@ import {
   defaultAnnotationColourForTarget,
 } from '@/domain/annotationColours';
 import {
-  annotationsForPhoto,
   isLabelAnnotation,
   isPathAnnotation,
   isPathKind,
@@ -34,7 +33,8 @@ import type {
   MarkerAnnotationKind,
   NormalizedPoint,
   PathAnnotationKind,
-  TopoProject,
+  Topo,
+  TopoEditorBundle,
 } from '@/domain/types';
 import { AnnotationColorControl } from '@/editor/AnnotationColorControl';
 import { DEFAULT_STAMP_SIZE, type StampSize, stampSizeForAnnotation } from '@/domain/stampSizes';
@@ -54,17 +54,50 @@ import { StampSizeControl } from '@/editor/StampSizeControl';
 import { ToolPalette } from '@/editor/ToolPalette';
 import { TopoCanvas } from '@/editor/TopoCanvas';
 import { useTopoStore } from '@/state/TopoStore';
+import { Button } from '@/ui/Button';
 import { interStyle } from '@/ui/fonts';
 
 const CONTROL_POINT_MIN_DISTANCE = 44;
 
 type ContextControl = 'colour' | 'lineWeight' | 'stampSize';
 
+type LoadedTopo = {
+  topo: Topo;
+  bundle: TopoEditorBundle;
+};
+
+/**
+ * Build a `photo` shape compatible with `TopoCanvas` from a Topo. A Topo is
+ * the photo, so the photo identity equals the topo's id. The canvas only
+ * needs `id`, `uri`, `width`, and `height`.
+ */
+function photoFromTopo(topo: Topo) {
+  if (!topo.photoUri || !topo.photoWidth || !topo.photoHeight) {
+    return undefined;
+  }
+  return {
+    id: topo.id,
+    topoId: topo.id,
+    uri: topo.photoUri,
+    width: topo.photoWidth,
+    height: topo.photoHeight,
+    createdAt: topo.createdAt,
+  };
+}
+
 export default function EditorScreen() {
-  const { projectId, photoId } = useLocalSearchParams<{ projectId: string; photoId: string }>();
+  const { cragId, topoId } = useLocalSearchParams<{ cragId: string; topoId: string }>();
   const { height: windowHeight } = useWindowDimensions();
-  const { loadProject, addAnnotation, addPathAnnotation, updateAnnotation, removeAnnotation } = useTopoStore();
-  const [project, setProject] = useState<TopoProject>();
+  const {
+    isReady,
+    loadTopoEditor,
+    addAnnotation,
+    addPathAnnotation,
+    updateAnnotation,
+    removeAnnotation,
+    attachPhotoFromLibrary,
+  } = useTopoStore();
+  const [loaded, setLoaded] = useState<LoadedTopo>();
   const [activeTool, setActiveTool] = useState<EditorTool>('select');
   const [draftPoints, setDraftPoints] = useState<NormalizedPoint[]>([]);
   const [selectedPathId, setSelectedPathId] = useState<string>();
@@ -74,13 +107,17 @@ export default function EditorScreen() {
   const [editingLabel, setEditingLabel] = useState<MarkerAnnotation>();
   const [editingStamp, setEditingStamp] = useState<MarkerAnnotation & { kind: StampAnnotationKind }>();
   const [isEditingRouteMarkerNumber, setIsEditingRouteMarkerNumber] = useState(false);
+  const [isImportingPhoto, setIsImportingPhoto] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const [lastLabelColorByPhoto, setLastLabelColorByPhoto] = useState<Record<string, string>>({});
-  const [lastLineColorByPhoto, setLastLineColorByPhoto] = useState<Record<string, string>>({});
-  const [lastLineWeightByPhoto, setLastLineWeightByPhoto] = useState<Record<string, LineWeight>>({});
-  const [lastStampColorByPhoto, setLastStampColorByPhoto] = useState<Record<string, Partial<Record<StampAnnotationKind, string>>>>({});
-  const [nextRouteMarkerNumberByPhoto, setNextRouteMarkerNumberByPhoto] = useState<Record<string, RouteMarkerNumber>>({});
-  const [stampSizeByPhoto, setStampSizeByPhoto] = useState<Record<string, StampSize>>({});
+  // Per-topo in-memory caches. Keyed by topo id; in practice there's only ever
+  // one entry while the editor is mounted, but keeping it keyed makes it easy
+  // to extend later without restructuring.
+  const [lastLabelColorByTopo, setLastLabelColorByTopo] = useState<Record<string, string>>({});
+  const [lastLineColorByTopo, setLastLineColorByTopo] = useState<Record<string, string>>({});
+  const [lastLineWeightByTopo, setLastLineWeightByTopo] = useState<Record<string, LineWeight>>({});
+  const [lastStampColorByTopo, setLastStampColorByTopo] = useState<Record<string, Partial<Record<StampAnnotationKind, string>>>>({});
+  const [nextRouteMarkerNumberByTopo, setNextRouteMarkerNumberByTopo] = useState<Record<string, RouteMarkerNumber>>({});
+  const [stampSizeByTopo, setStampSizeByTopo] = useState<Record<string, StampSize>>({});
   const [openContextControl, setOpenContextControl] = useState<ContextControl>();
   const draftPointsRef = useRef<NormalizedPoint[]>([]);
   const draftKindRef = useRef<PathAnnotationKind | undefined>(undefined);
@@ -90,13 +127,13 @@ export default function EditorScreen() {
   const selectedStampIdRef = useRef<string | undefined>(undefined);
   const editingLabelRef = useRef<MarkerAnnotation | undefined>(undefined);
   const editingStampRef = useRef<(MarkerAnnotation & { kind: StampAnnotationKind }) | undefined>(undefined);
-  const lastLabelFontSizeByPhotoRef = useRef<Record<string, number>>({});
-  const lastLabelColorByPhotoRef = useRef<Record<string, string>>({});
-  const lastLineColorByPhotoRef = useRef<Record<string, string>>({});
-  const lastLineWeightByPhotoRef = useRef<Record<string, LineWeight>>({});
-  const lastStampColorByPhotoRef = useRef<Record<string, Partial<Record<StampAnnotationKind, string>>>>({});
-  const nextRouteMarkerNumberByPhotoRef = useRef<Record<string, RouteMarkerNumber>>({});
-  const stampSizeByPhotoRef = useRef<Record<string, StampSize>>({});
+  const lastLabelFontSizeByTopoRef = useRef<Record<string, number>>({});
+  const lastLabelColorByTopoRef = useRef<Record<string, string>>({});
+  const lastLineColorByTopoRef = useRef<Record<string, string>>({});
+  const lastLineWeightByTopoRef = useRef<Record<string, LineWeight>>({});
+  const lastStampColorByTopoRef = useRef<Record<string, Partial<Record<StampAnnotationKind, string>>>>({});
+  const nextRouteMarkerNumberByTopoRef = useRef<Record<string, RouteMarkerNumber>>({});
+  const stampSizeByTopoRef = useRef<Record<string, StampSize>>({});
 
   useEffect(() => {
     selectedPathIdRef.current = selectedPathId;
@@ -123,13 +160,11 @@ export default function EditorScreen() {
   }, [editingStamp]);
 
   useEffect(() => {
-    nextRouteMarkerNumberByPhotoRef.current = nextRouteMarkerNumberByPhoto;
-  }, [nextRouteMarkerNumberByPhoto]);
+    nextRouteMarkerNumberByTopoRef.current = nextRouteMarkerNumberByTopo;
+  }, [nextRouteMarkerNumberByTopo]);
 
   useEffect(() => {
-    if (Platform.OS === 'web') {
-      return;
-    }
+    if (Platform.OS === 'web') return;
 
     function updateKeyboardHeight(event: KeyboardEvent) {
       const keyboardTop = event.endCoordinates.screenY;
@@ -153,45 +188,48 @@ export default function EditorScreen() {
   }, [windowHeight]);
 
   const refresh = useCallback(async () => {
-    if (projectId) {
-      setProject(await loadProject(projectId));
+    if (!topoId || !isReady) return;
+    const bundle = await loadTopoEditor(topoId);
+    if (bundle) {
+      setLoaded({ topo: bundle.topo, bundle });
+    } else {
+      setLoaded(undefined);
     }
-  }, [loadProject, projectId]);
+  }, [isReady, loadTopoEditor, topoId]);
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  const photo = project?.photos.find((item) => item.id === photoId);
-  const route = project?.routes[0];
-  const savedAnnotations = useMemo(
-    () => annotationsForPhoto(project?.annotations ?? [], photoId),
-    [photoId, project?.annotations],
+  useFocusEffect(
+    useCallback(() => {
+      void refresh();
+    }, [refresh]),
   );
+
+  const topo = loaded?.topo;
+  const photo = topo ? photoFromTopo(topo) : undefined;
+  const route = loaded?.bundle.routes[0];
+  const savedAnnotations = useMemo(() => loaded?.bundle.annotations ?? [], [loaded]);
   useEffect(() => {
-    if (!photo || nextRouteMarkerNumberByPhotoRef.current[photo.id] !== undefined) {
+    if (!photo || nextRouteMarkerNumberByTopoRef.current[photo.id] !== undefined) {
       return;
     }
-
     const nextNumber = nextUnusedRouteMarkerNumber(savedAnnotations);
-    nextRouteMarkerNumberByPhotoRef.current = {
-      ...nextRouteMarkerNumberByPhotoRef.current,
+    nextRouteMarkerNumberByTopoRef.current = {
+      ...nextRouteMarkerNumberByTopoRef.current,
       [photo.id]: nextNumber,
     };
-    setNextRouteMarkerNumberByPhoto((numbers) => ({ ...numbers, [photo.id]: nextNumber }));
+    setNextRouteMarkerNumberByTopo((numbers) => ({ ...numbers, [photo.id]: nextNumber }));
   }, [photo, savedAnnotations]);
 
   const savedStampSize = useMemo(() => {
     const stamp = savedAnnotations.find(isStampAnnotation);
     return stamp ? stampSizeForAnnotation(stamp) : DEFAULT_STAMP_SIZE;
   }, [savedAnnotations]);
-  const currentStampSize = photo ? (stampSizeByPhoto[photo.id] ?? savedStampSize) : DEFAULT_STAMP_SIZE;
+  const currentStampSize = photo ? (stampSizeByTopo[photo.id] ?? savedStampSize) : DEFAULT_STAMP_SIZE;
   const annotations = useMemo(() => {
     const hasPathEdit = Boolean(selectedPathId && editingPathPoints);
     const hasLabelEdit = Boolean(selectedLabelId && editingLabel);
     const hasStampEdit = Boolean(selectedStampId && editingStamp);
     const hasPathDraft =
-      Boolean(project && photo && draftPoints.length > 0) &&
+      Boolean(loaded && photo && draftPoints.length > 0) &&
       activeTool !== 'select' &&
       isPathKind(activeTool);
 
@@ -215,19 +253,18 @@ export default function EditorScreen() {
           })
         : savedAnnotations;
 
-    if (!project || !photo || !hasPathDraft || !isPathKind(activeTool)) {
+    if (!loaded || !photo || !hasPathDraft || !isPathKind(activeTool)) {
       return editedAnnotations;
     }
 
     const now = new Date().toISOString();
     const draft: Annotation = {
       id: 'draft',
-      topoId: project.id,
-      photoId: photo.id,
+      topoId: loaded.topo.id,
       routeId: route?.id,
       kind: activeTool,
-      color: currentLineColorForPhoto(photo.id),
-      lineWeight: currentLineWeightForPhoto(photo.id),
+      color: currentLineColorForTopo(photo.id),
+      lineWeight: currentLineWeightForTopo(photo.id),
       points: draftPoints,
       createdAt: now,
       updatedAt: now,
@@ -240,7 +277,7 @@ export default function EditorScreen() {
     editingStamp,
     editingPathPoints,
     photo,
-    project,
+    loaded,
     route?.id,
     savedAnnotations,
     selectedLabelId,
@@ -315,38 +352,38 @@ export default function EditorScreen() {
     setEditingStamp(annotation);
   }
 
-  function currentLineColorForPhoto(photoId: string) {
-    return lastLineColorByPhotoRef.current[photoId] ?? defaultAnnotationColourForTarget('line');
+  function currentLineColorForTopo(id: string) {
+    return lastLineColorByTopoRef.current[id] ?? defaultAnnotationColourForTarget('line');
   }
 
-  function currentLineWeightForPhoto(photoId: string) {
-    return lastLineWeightByPhotoRef.current[photoId] ?? DEFAULT_LINE_WEIGHT;
+  function currentLineWeightForTopo(id: string) {
+    return lastLineWeightByTopoRef.current[id] ?? DEFAULT_LINE_WEIGHT;
   }
 
-  function currentStampColorForPhoto(photoId: string, kind: StampAnnotationKind) {
-    return lastStampColorByPhotoRef.current[photoId]?.[kind] ?? defaultAnnotationColourForTarget(kind);
+  function currentStampColorForTopo(id: string, kind: StampAnnotationKind) {
+    return lastStampColorByTopoRef.current[id]?.[kind] ?? defaultAnnotationColourForTarget(kind);
   }
 
-  function currentStampSizeForPhoto(photoId: string) {
-    return stampSizeByPhotoRef.current[photoId] ?? savedStampSize;
+  function currentStampSizeForTopo(id: string) {
+    return stampSizeByTopoRef.current[id] ?? savedStampSize;
   }
 
-  function currentRouteMarkerNumberForPhoto(photoId: string) {
-    return Object.prototype.hasOwnProperty.call(nextRouteMarkerNumberByPhotoRef.current, photoId)
-      ? nextRouteMarkerNumberByPhotoRef.current[photoId]
+  function currentRouteMarkerNumberForTopo(id: string) {
+    return Object.prototype.hasOwnProperty.call(nextRouteMarkerNumberByTopoRef.current, id)
+      ? nextRouteMarkerNumberByTopoRef.current[id]
       : nextUnusedRouteMarkerNumber(savedAnnotations);
   }
 
-  function setNextRouteMarkerNumberForPhoto(photoId: string, value: RouteMarkerNumber) {
-    nextRouteMarkerNumberByPhotoRef.current = {
-      ...nextRouteMarkerNumberByPhotoRef.current,
-      [photoId]: value,
+  function setNextRouteMarkerNumberForTopo(id: string, value: RouteMarkerNumber) {
+    nextRouteMarkerNumberByTopoRef.current = {
+      ...nextRouteMarkerNumberByTopoRef.current,
+      [id]: value,
     };
-    setNextRouteMarkerNumberByPhoto((numbers) => ({ ...numbers, [photoId]: value }));
+    setNextRouteMarkerNumberByTopo((numbers) => ({ ...numbers, [id]: value }));
   }
 
   function advanceNextRouteMarkerNumber(
-    photoId: string,
+    id: string,
     placedNumber: RouteMarkerNumber,
     nextAnnotations: Annotation[],
   ) {
@@ -354,7 +391,7 @@ export default function EditorScreen() {
       placedNumber === null || placedNumber >= 99
         ? null
         : nextUnusedRouteMarkerNumber(nextAnnotations, placedNumber + 1);
-    setNextRouteMarkerNumberForPhoto(photoId, nextNumber);
+    setNextRouteMarkerNumberForTopo(id, nextNumber);
   }
 
   async function handlePlace(
@@ -362,13 +399,11 @@ export default function EditorScreen() {
     point: NormalizedPoint,
     context: { labelFontSize?: number },
   ) {
-    if (!project || !photo) {
-      return;
-    }
+    if (!loaded || !photo) return;
     clearSelectionState();
 
-    const rememberedFontSize = lastLabelFontSizeByPhotoRef.current[photo.id];
-    const rememberedColor = lastLabelColorByPhotoRef.current[photo.id];
+    const rememberedFontSize = lastLabelFontSizeByTopoRef.current[photo.id];
+    const rememberedColor = lastLabelColorByTopoRef.current[photo.id];
     const labelFontSize =
       kind === 'label'
         ? clampLabelFontSize(rememberedFontSize ?? context.labelFontSize ?? DEFAULT_LABEL_FONT_SIZE)
@@ -377,14 +412,13 @@ export default function EditorScreen() {
       kind === 'label'
         ? (rememberedColor ?? defaultAnnotationColourForTarget('label'))
         : isStampKind(kind)
-          ? currentStampColorForPhoto(photo.id, kind)
+          ? currentStampColorForTopo(photo.id, kind)
         : undefined;
-    const stampSize = isStampKind(kind) ? currentStampSizeForPhoto(photo.id) : undefined;
-    const routeMarkerNumber = kind === 'start' ? currentRouteMarkerNumberForPhoto(photo.id) : undefined;
+    const stampSize = isStampKind(kind) ? currentStampSizeForTopo(photo.id) : undefined;
+    const routeMarkerNumber = kind === 'start' ? currentRouteMarkerNumberForTopo(photo.id) : undefined;
 
     const annotation = await addAnnotation({
-      topoId: project.id,
-      photoId: photo.id,
+      topoId: loaded.topo.id,
       routeId: route?.id,
       kind,
       point,
@@ -394,19 +428,19 @@ export default function EditorScreen() {
       stampSize,
     });
     if (isLabelAnnotation(annotation)) {
-      lastLabelFontSizeByPhotoRef.current[photo.id] =
+      lastLabelFontSizeByTopoRef.current[photo.id] =
         annotation.labelFontSize ?? labelFontSize ?? DEFAULT_LABEL_FONT_SIZE;
-      lastLabelColorByPhotoRef.current[photo.id] = annotation.color;
-      setLastLabelColorByPhoto((colors) => ({ ...colors, [photo.id]: annotation.color }));
+      lastLabelColorByTopoRef.current[photo.id] = annotation.color;
+      setLastLabelColorByTopo((colors) => ({ ...colors, [photo.id]: annotation.color }));
       setActiveTool('select');
       selectLabelSnapshot(annotation);
     } else if (isStampKind(kind)) {
       const placedStampColor = color ?? defaultAnnotationColourForTarget(kind);
-      lastStampColorByPhotoRef.current[photo.id] = {
-        ...lastStampColorByPhotoRef.current[photo.id],
+      lastStampColorByTopoRef.current[photo.id] = {
+        ...lastStampColorByTopoRef.current[photo.id],
         [kind]: placedStampColor,
       };
-      setLastStampColorByPhoto((colors) => ({
+      setLastStampColorByTopo((colors) => ({
         ...colors,
         [photo.id]: {
           ...colors[photo.id],
@@ -424,9 +458,7 @@ export default function EditorScreen() {
   }
 
   function beginPathDraft(kind: PathAnnotationKind, point: NormalizedPoint) {
-    if (!isPathKind(kind)) {
-      return;
-    }
+    if (!isPathKind(kind)) return;
     clearSelectionState();
     draftKindRef.current = kind;
     draftPointsRef.current = [point];
@@ -455,24 +487,21 @@ export default function EditorScreen() {
     draftPointsRef.current = finalizedPoints;
     setDraftPoints(finalizedPoints);
 
-    if (!project || !photo || !kind || finalizedPoints.length < 2) {
-      return;
-    }
+    if (!loaded || !photo || !kind || finalizedPoints.length < 2) return;
 
     const annotation = await addPathAnnotation({
-      topoId: project.id,
-      photoId: photo.id,
+      topoId: loaded.topo.id,
       routeId: route?.id,
       kind,
       points: finalizedPoints,
-      color: currentLineColorForPhoto(photo.id),
-      lineWeight: currentLineWeightForPhoto(photo.id),
+      color: currentLineColorForTopo(photo.id),
+      lineWeight: currentLineWeightForTopo(photo.id),
     });
     if (isPathAnnotation(annotation)) {
-      lastLineColorByPhotoRef.current[photo.id] = annotation.color;
-      lastLineWeightByPhotoRef.current[photo.id] = lineWeightForAnnotation(annotation);
-      setLastLineColorByPhoto((colors) => ({ ...colors, [photo.id]: annotation.color }));
-      setLastLineWeightByPhoto((weights) => ({ ...weights, [photo.id]: lineWeightForAnnotation(annotation) }));
+      lastLineColorByTopoRef.current[photo.id] = annotation.color;
+      lastLineWeightByTopoRef.current[photo.id] = lineWeightForAnnotation(annotation);
+      setLastLineColorByTopo((colors) => ({ ...colors, [photo.id]: annotation.color }));
+      setLastLineWeightByTopo((weights) => ({ ...weights, [photo.id]: lineWeightForAnnotation(annotation) }));
     }
     const selectedPoints = 'points' in annotation ? annotation.points : finalizedPoints;
     draftKindRef.current = undefined;
@@ -512,9 +541,7 @@ export default function EditorScreen() {
     sampleSize: { width: number; height: number },
   ) {
     setEditingPathPoints((points) => {
-      if (!points) {
-        return points;
-      }
+      if (!points) return points;
       const next = moveControlPoint(points, pointIndex, point, sampleSize, CONTROL_POINT_MIN_DISTANCE);
       editingPathPointsRef.current = next;
       return next;
@@ -523,9 +550,7 @@ export default function EditorScreen() {
 
   function changeSelectedLabelText(label: string) {
     const annotation = editingLabelRef.current;
-    if (!annotation) {
-      return;
-    }
+    if (!annotation) return;
     const next = { ...annotation, label };
     editingLabelRef.current = next;
     setEditingLabel(next);
@@ -533,9 +558,7 @@ export default function EditorScreen() {
 
   function moveSelectedLabel(point: NormalizedPoint) {
     setEditingLabel((annotation) => {
-      if (!annotation) {
-        return annotation;
-      }
+      if (!annotation) return annotation;
       const next = { ...annotation, point };
       editingLabelRef.current = next;
       return next;
@@ -544,11 +567,9 @@ export default function EditorScreen() {
 
   function resizeSelectedLabel(fontSize: number) {
     setEditingLabel((annotation) => {
-      if (!annotation || !photo) {
-        return annotation;
-      }
+      if (!annotation || !photo) return annotation;
       const next = { ...annotation, labelFontSize: clampLabelFontSize(fontSize) };
-      lastLabelFontSizeByPhotoRef.current[photo.id] = next.labelFontSize;
+      lastLabelFontSizeByTopoRef.current[photo.id] = next.labelFontSize;
       editingLabelRef.current = next;
       return next;
     });
@@ -556,9 +577,7 @@ export default function EditorScreen() {
 
   function moveSelectedStamp(point: NormalizedPoint) {
     setEditingStamp((annotation) => {
-      if (!annotation) {
-        return annotation;
-      }
+      if (!annotation) return annotation;
       const next = { ...annotation, point };
       editingStampRef.current = next;
       return next;
@@ -566,16 +585,12 @@ export default function EditorScreen() {
   }
 
   async function changeSelectedLabelColor(color: string) {
-    if (!photo) {
-      return;
-    }
+    if (!photo) return;
 
-    lastLabelColorByPhotoRef.current[photo.id] = color;
-    setLastLabelColorByPhoto((colors) => ({ ...colors, [photo.id]: color }));
+    lastLabelColorByTopoRef.current[photo.id] = color;
+    setLastLabelColorByTopo((colors) => ({ ...colors, [photo.id]: color }));
     const annotation = editingLabelRef.current;
-    if (!annotation) {
-      return;
-    }
+    if (!annotation) return;
 
     const next = { ...annotation, color };
     editingLabelRef.current = next;
@@ -589,18 +604,14 @@ export default function EditorScreen() {
   }
 
   async function changeSelectedPathColor(color: string) {
-    if (!photo) {
-      return;
-    }
+    if (!photo) return;
 
-    lastLineColorByPhotoRef.current[photo.id] = color;
-    setLastLineColorByPhoto((colors) => ({ ...colors, [photo.id]: color }));
+    lastLineColorByTopoRef.current[photo.id] = color;
+    setLastLineColorByTopo((colors) => ({ ...colors, [photo.id]: color }));
     const annotationId = selectedPathIdRef.current;
     const points = editingPathPointsRef.current;
     const annotation = savedAnnotations.find((item) => item.id === annotationId);
-    if (!annotation || !isPathAnnotation(annotation)) {
-      return;
-    }
+    if (!annotation || !isPathAnnotation(annotation)) return;
 
     const next = { ...annotation, points: points ?? annotation.points, color };
     const updated = await updateAnnotation(next);
@@ -612,18 +623,14 @@ export default function EditorScreen() {
   }
 
   async function changeSelectedPathWeight(lineWeight: LineWeight) {
-    if (!photo) {
-      return;
-    }
+    if (!photo) return;
 
-    lastLineWeightByPhotoRef.current[photo.id] = lineWeight;
-    setLastLineWeightByPhoto((weights) => ({ ...weights, [photo.id]: lineWeight }));
+    lastLineWeightByTopoRef.current[photo.id] = lineWeight;
+    setLastLineWeightByTopo((weights) => ({ ...weights, [photo.id]: lineWeight }));
     const annotationId = selectedPathIdRef.current;
     const points = editingPathPointsRef.current;
     const annotation = savedAnnotations.find((item) => item.id === annotationId);
-    if (!annotation || !isPathAnnotation(annotation)) {
-      return;
-    }
+    if (!annotation || !isPathAnnotation(annotation)) return;
 
     const next = { ...annotation, points: points ?? annotation.points, lineWeight };
     const updated = await updateAnnotation(next);
@@ -635,32 +642,23 @@ export default function EditorScreen() {
   }
 
   async function changeSelectedStampColor(color: string) {
-    if (!photo) {
-      return;
-    }
+    if (!photo) return;
 
     const annotation = editingStampRef.current;
     const targetKind =
       annotation?.kind ?? (activeTool !== 'select' && isStampKind(activeTool) ? activeTool : undefined);
-    if (!targetKind) {
-      return;
-    }
+    if (!targetKind) return;
 
-    lastStampColorByPhotoRef.current[photo.id] = {
-      ...lastStampColorByPhotoRef.current[photo.id],
+    lastStampColorByTopoRef.current[photo.id] = {
+      ...lastStampColorByTopoRef.current[photo.id],
       [targetKind]: color,
     };
-    setLastStampColorByPhoto((colors) => ({
+    setLastStampColorByTopo((colors) => ({
       ...colors,
-      [photo.id]: {
-        ...colors[photo.id],
-        [targetKind]: color,
-      },
+      [photo.id]: { ...colors[photo.id], [targetKind]: color },
     }));
 
-    if (!annotation) {
-      return;
-    }
+    if (!annotation) return;
 
     const next = { ...annotation, color };
     editingStampRef.current = next;
@@ -674,13 +672,11 @@ export default function EditorScreen() {
   }
 
   async function changeRouteMarkerNumber(value: RouteMarkerNumber) {
-    if (!photo) {
-      return;
-    }
+    if (!photo) return;
 
     const annotation = editingStampRef.current;
     if (!annotation || annotation.kind !== 'start') {
-      setNextRouteMarkerNumberForPhoto(photo.id, value);
+      setNextRouteMarkerNumberForTopo(photo.id, value);
       return;
     }
 
@@ -696,23 +692,24 @@ export default function EditorScreen() {
 
     if (typeof previousNumber === 'number') {
       const nextAnnotations = savedAnnotations.map((item) => (item.id === next.id ? next : item));
-      setNextRouteMarkerNumberForPhoto(
+      setNextRouteMarkerNumberForTopo(
         photo.id,
-        nextUnusedRouteMarkerNumber(nextAnnotations, Math.min(previousNumber, currentRouteMarkerNumberForPhoto(photo.id) ?? previousNumber)),
+        nextUnusedRouteMarkerNumber(
+          nextAnnotations,
+          Math.min(previousNumber, currentRouteMarkerNumberForTopo(photo.id) ?? previousNumber),
+        ),
       );
     }
     await refresh();
   }
 
   function changeRouteMarkerNumberByStep(direction: 'decrement' | 'increment') {
-    if (!photo) {
-      return;
-    }
+    if (!photo) return;
 
     const currentValue =
       editingStamp?.kind === 'start'
         ? (parseRouteMarkerNumber(editingStamp.label) ?? null)
-        : currentRouteMarkerNumberForPhoto(photo.id);
+        : currentRouteMarkerNumberForTopo(photo.id);
     const nextValue =
       direction === 'increment'
         ? incrementRouteMarkerNumber(currentValue)
@@ -721,12 +718,10 @@ export default function EditorScreen() {
   }
 
   async function changeStampSize(size: StampSize) {
-    if (!project || !photo) {
-      return;
-    }
+    if (!loaded || !photo) return;
 
-    stampSizeByPhotoRef.current[photo.id] = size;
-    setStampSizeByPhoto((sizes) => ({ ...sizes, [photo.id]: size }));
+    stampSizeByTopoRef.current[photo.id] = size;
+    setStampSizeByTopo((sizes) => ({ ...sizes, [photo.id]: size }));
 
     const stampAnnotations = savedAnnotations.filter(isStampAnnotation);
     const updatedStamps = stampAnnotations.map((annotation) => ({ ...annotation, stampSize: size }));
@@ -736,14 +731,17 @@ export default function EditorScreen() {
       setEditingStamp(selectedUpdate);
     }
 
-    setProject((current) =>
-      current && current.id === project.id
+    setLoaded((current) =>
+      current
         ? {
             ...current,
-            annotations: current.annotations.map((annotation) => {
-              const updated = updatedStamps.find((stamp) => stamp.id === annotation.id);
-              return updated ?? annotation;
-            }),
+            bundle: {
+              ...current.bundle,
+              annotations: current.bundle.annotations.map((annotation) => {
+                const updated = updatedStamps.find((stamp) => stamp.id === annotation.id);
+                return updated ?? annotation;
+              }),
+            },
           }
         : current,
     );
@@ -754,9 +752,7 @@ export default function EditorScreen() {
 
   async function commitEditingLabelSnapshot() {
     const annotation = editingLabelRef.current;
-    if (!annotation) {
-      return;
-    }
+    if (!annotation) return;
 
     if ((annotation.label ?? '').trim().length === 0) {
       await removeAnnotation(annotation);
@@ -776,9 +772,7 @@ export default function EditorScreen() {
     const annotationId = selectedPathIdRef.current;
     const points = editingPathPointsRef.current;
     const annotation = savedAnnotations.find((item) => item.id === annotationId);
-    if (!annotation || !points || !isPathAnnotation(annotation)) {
-      return;
-    }
+    if (!annotation || !points || !isPathAnnotation(annotation)) return;
 
     await updateAnnotation({ ...annotation, points });
     await refresh();
@@ -790,10 +784,7 @@ export default function EditorScreen() {
 
   async function commitSelectedStampEdit() {
     const annotation = editingStampRef.current;
-    if (!annotation) {
-      return;
-    }
-
+    if (!annotation) return;
     await updateAnnotation(annotation);
     await refresh();
   }
@@ -805,9 +796,7 @@ export default function EditorScreen() {
         annotation.id === selectedStampIdRef.current ||
         annotation.id === selectedPathIdRef.current,
     );
-    if (!selectedAnnotation) {
-      return;
-    }
+    if (!selectedAnnotation) return;
 
     clearSelectionState();
     await removeAnnotation(selectedAnnotation);
@@ -816,10 +805,7 @@ export default function EditorScreen() {
 
   async function deleteLastAnnotation() {
     const last = savedAnnotations.at(-1);
-    if (!last) {
-      return;
-    }
-
+    if (!last) return;
     await removeAnnotation(last);
     await refresh();
   }
@@ -830,17 +816,62 @@ export default function EditorScreen() {
       draftPointsRef.current = draftPointsRef.current.slice(0, -1);
       return;
     }
-    if (savedAnnotations.length === 0) {
-      return;
-    }
+    if (savedAnnotations.length === 0) return;
     void deleteLastAnnotation();
   }
 
-  if (!project || !photo) {
+  async function handleImportPhoto() {
+    if (!topoId || isImportingPhoto) return;
+
+    setIsImportingPhoto(true);
+    try {
+      const didAttach = await attachPhotoFromLibrary(topoId);
+      if (didAttach) {
+        await refresh();
+      }
+    } finally {
+      setIsImportingPhoto(false);
+    }
+  }
+
+  function handleOpenCamera() {
+    if (!cragId || !topoId) return;
+    router.push(`/crags/${cragId}/topos/${topoId}/camera`);
+  }
+
+  if (!loaded) {
     return (
       <View style={[styles.root, styles.center]} testID="editor:loading">
         <Stack.Screen options={{ headerShown: false }} />
-        <Text style={styles.loadingText}>Loading editor...</Text>
+        <Text style={styles.loadingText}>Loading editor…</Text>
+      </View>
+    );
+  }
+
+  if (!photo) {
+    return (
+      <View style={[styles.root, styles.center, { backgroundColor: '#0F172A' }]} testID="editor:no-photo">
+        <Stack.Screen options={{ headerShown: false }} />
+        <Text style={styles.loadingText}>This topo has no photo yet.</Text>
+        <Text style={styles.noPhotoCopy}>
+          {Platform.OS === 'web'
+            ? 'Import a photo to start drawing.'
+            : 'Open the camera or import a photo to start drawing.'}
+        </Text>
+        <View style={styles.noPhotoActions}>
+          {Platform.OS !== 'web' ? (
+            <Button label="Open camera" onPress={handleOpenCamera} testID="editor:no-photo:camera" />
+          ) : null}
+          <Button
+            disabled={isImportingPhoto}
+            label={isImportingPhoto ? 'Importing…' : 'Import photo'}
+            onPress={() => {
+              void handleImportPhoto();
+            }}
+            testID="editor:no-photo:import"
+            variant="secondary"
+          />
+        </View>
       </View>
     );
   }
@@ -867,11 +898,11 @@ export default function EditorScreen() {
               : undefined;
   const currentAnnotationColor =
     activeColourTarget === 'label'
-      ? (editingLabel?.color ?? lastLabelColorByPhoto[photo.id] ?? defaultAnnotationColourForTarget('label'))
+      ? (editingLabel?.color ?? lastLabelColorByTopo[photo.id] ?? defaultAnnotationColourForTarget('label'))
       : activeColourTarget === 'line'
-        ? (selectedPath && isPathAnnotation(selectedPath) ? selectedPath.color : lastLineColorByPhoto[photo.id] ?? defaultAnnotationColourForTarget('line'))
+        ? (selectedPath && isPathAnnotation(selectedPath) ? selectedPath.color : lastLineColorByTopo[photo.id] ?? defaultAnnotationColourForTarget('line'))
         : activeColourTarget
-          ? (editingStamp?.color ?? lastStampColorByPhoto[photo.id]?.[activeColourTarget] ?? defaultAnnotationColourForTarget(activeColourTarget))
+          ? (editingStamp?.color ?? lastStampColorByTopo[photo.id]?.[activeColourTarget] ?? defaultAnnotationColourForTarget(activeColourTarget))
           : undefined;
   const canChooseAnnotationColor = Boolean(activeColourTarget && currentAnnotationColor);
   const canChooseLineWeight =
@@ -880,13 +911,13 @@ export default function EditorScreen() {
   const currentLineWeight =
     selectedPath && isPathAnnotation(selectedPath)
       ? lineWeightForAnnotation(selectedPath)
-      : lastLineWeightByPhoto[photo.id] ?? DEFAULT_LINE_WEIGHT;
+      : lastLineWeightByTopo[photo.id] ?? DEFAULT_LINE_WEIGHT;
   const canChooseStampSize = activeTool !== 'select' && isStampKind(activeTool);
   const routeMarkerNumberControlValue =
     editingStamp?.kind === 'start'
       ? (parseRouteMarkerNumber(editingStamp.label) ?? null)
       : activeTool === 'start'
-        ? currentRouteMarkerNumberForPhoto(photo.id)
+        ? currentRouteMarkerNumberForTopo(photo.id)
         : undefined;
   const supportsKeyboardAvoidance = Platform.OS !== 'web';
   const isKeyboardEditingLabel = supportsKeyboardAvoidance && Boolean(selectedLabelId && keyboardHeight > 0);
@@ -899,7 +930,7 @@ export default function EditorScreen() {
       <StatusBar barStyle="light-content" />
       <View
         style={[styles.canvasRegion, isKeyboardEditingLabel ? { marginBottom: keyboardHeight } : null]}
-        testID="editor:canvas-region"
+        testID="editor-canvas-region"
       >
         <TopoCanvas
           activeTool={activeTool}
@@ -930,7 +961,7 @@ export default function EditorScreen() {
           canRedo={false}
           canUndo={draftPoints.length > 0 || savedAnnotations.length > 0}
           canDelete={Boolean(selectedAnnotation)}
-          onBack={() => router.back()}
+          onBack={() => router.replace(`/crags/${cragId}`)}
           onDelete={() => {
             void deleteSelectedAnnotation();
           }}
@@ -945,7 +976,7 @@ export default function EditorScreen() {
           styles.bottomOverlay,
           bottomOverlayKeyboardOffset > 0 ? { bottom: bottomOverlayKeyboardOffset } : null,
         ]}
-        testID="editor:bottom-overlay"
+        testID="editor-bottom-overlay"
       >
         <View style={styles.contextControls}>
           {routeMarkerNumberControlValue !== undefined ? (
@@ -1018,13 +1049,13 @@ export default function EditorScreen() {
               clearDraftState();
               clearSelectionState();
             }}
-            routeMarkerLabel={routeMarkerNumberLabel(currentRouteMarkerNumberForPhoto(photo.id))}
+            routeMarkerLabel={routeMarkerNumberLabel(currentRouteMarkerNumberForTopo(photo.id))}
             selectedTool={activeTool}
             stampColors={{
-              belay: lastStampColorByPhoto[photo.id]?.belay ?? defaultAnnotationColourForTarget('belay'),
-              bolt: lastStampColorByPhoto[photo.id]?.bolt ?? defaultAnnotationColourForTarget('bolt'),
-              rappel: lastStampColorByPhoto[photo.id]?.rappel ?? defaultAnnotationColourForTarget('rappel'),
-              start: lastStampColorByPhoto[photo.id]?.start ?? defaultAnnotationColourForTarget('start'),
+              belay: lastStampColorByTopo[photo.id]?.belay ?? defaultAnnotationColourForTarget('belay'),
+              bolt: lastStampColorByTopo[photo.id]?.bolt ?? defaultAnnotationColourForTarget('bolt'),
+              rappel: lastStampColorByTopo[photo.id]?.rappel ?? defaultAnnotationColourForTarget('rappel'),
+              start: lastStampColorByTopo[photo.id]?.start ?? defaultAnnotationColourForTarget('start'),
             }}
           />
         )}
@@ -1056,6 +1087,18 @@ const styles = StyleSheet.create({
   loadingText: {
     color: '#F8FAFC',
     ...interStyle('700'),
+  },
+  noPhotoActions: {
+    gap: 12,
+    marginTop: 24,
+    maxWidth: 320,
+    width: '100%',
+  },
+  noPhotoCopy: {
+    color: '#CBD5E1',
+    lineHeight: 20,
+    marginTop: 8,
+    textAlign: 'center',
   },
   root: {
     backgroundColor: '#000000',

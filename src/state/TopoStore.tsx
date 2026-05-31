@@ -4,54 +4,119 @@ import { createAnnotation } from '@/domain/annotationFactory';
 import { createId, nowIso } from '@/domain/ids';
 import type { LineWeight } from '@/domain/lineWeights';
 import type { StampSize } from '@/domain/stampSizes';
-import type { Annotation, AnnotationKind, NormalizedPoint, PhotoAsset, TopoProject, TopoSummary } from '@/domain/types';
+import type {
+  Annotation,
+  AnnotationKind,
+  Crag,
+  CragDetail,
+  CragSummary,
+  NormalizedPoint,
+  Route,
+  RouteType,
+  Sector,
+  SectorWithTopos,
+  Topo,
+  TopoEditorBundle,
+  TopoWithRoutes,
+} from '@/domain/types';
 import { pickPhotoFromLibrary } from '@/camera/photoCapture';
 import { copyPhotoIntoLibrary } from '@/storage/assetStorage';
-import { getDatabase, migrateDatabase, type TopoDatabase } from '@/storage/database';
+import { getDatabase, runMigrations, type TopoDatabase } from '@/storage/database';
 import {
-  deleteAnnotation,
-  getTopoProject,
-  insertPhotoAsset,
-  insertTopoProject,
-  listTopoSummaries,
+  createCrag as createCragRepo,
+  deleteCrag as deleteCragRepo,
+  getCrag,
+  listCragSummaries,
+  listPhotoUrisForCrag,
+  renameCrag as renameCragRepo,
+} from '@/storage/repos/cragsRepo';
+import {
+  createSector as createSectorRepo,
+  deleteSector as deleteSectorRepo,
+  listPhotoUrisForSector,
+  listSectorsForCrag,
+  renameSector as renameSectorRepo,
+} from '@/storage/repos/sectorsRepo';
+import {
+  attachPhotoToTopo,
+  createTopo as createTopoRepo,
+  deleteTopo as deleteTopoRepo,
+  loadTopoEditorBundle,
+  listToposForSector,
+  renameTopo as renameTopoRepo,
+  updateTopoDescription as updateTopoDescriptionRepo,
+} from '@/storage/repos/toposRepo';
+import {
+  createRoute as createRouteRepo,
+  deleteRoute as deleteRouteRepo,
+  listRoutesForTopo,
+  updateRoute as updateRouteRepo,
+} from '@/storage/repos/routesRepo';
+import {
+  deleteAnnotation as deleteAnnotationRepo,
   upsertAnnotation,
-} from '@/storage/repositories';
+} from '@/storage/repos/annotationsRepo';
+
+type CreateAnnotationInput = {
+  topoId: string;
+  routeId?: string;
+  kind: AnnotationKind;
+  point: NormalizedPoint;
+  color?: string;
+  label?: string;
+  labelFontSize?: number;
+  lineWeight?: LineWeight;
+  stampSize?: StampSize;
+};
+
+type CreatePathAnnotationInput = {
+  topoId: string;
+  routeId?: string;
+  kind: Extract<AnnotationKind, 'climbLine' | 'walkoff' | 'scramble'>;
+  points: NormalizedPoint[];
+  color?: string;
+  lineWeight?: LineWeight;
+};
+
+type RouteFieldUpdate = Partial<
+  Pick<Route, 'name' | 'grade' | 'routeType' | 'boltCount' | 'lengthM' | 'fa' | 'description' | 'color'>
+>;
 
 type TopoStoreValue = {
   isReady: boolean;
   storageError?: string;
-  summaries: TopoSummary[];
+  cragSummaries: CragSummary[];
   refresh: () => Promise<void>;
-  createProject: (name: string) => Promise<TopoProject>;
-  loadProject: (id: string) => Promise<TopoProject | undefined>;
-  addPhotoFromLibrary: (topoId: string) => Promise<PhotoAsset | undefined>;
-  addPhotoFromUri: (input: {
-    topoId: string;
-    uri: string;
-    width: number;
-    height: number;
-  }) => Promise<PhotoAsset>;
-  addAnnotation: (input: {
-    topoId: string;
-    photoId: string;
-    routeId?: string;
-    kind: AnnotationKind;
-    point: NormalizedPoint;
-    color?: string;
-    label?: string;
-    labelFontSize?: number;
-    lineWeight?: LineWeight;
-    stampSize?: StampSize;
-  }) => Promise<Annotation>;
-  addPathAnnotation: (input: {
-    topoId: string;
-    photoId: string;
-    routeId?: string;
-    kind: Extract<AnnotationKind, 'climbLine' | 'walkoff' | 'scramble'>;
-    points: NormalizedPoint[];
-    color?: string;
-    lineWeight?: LineWeight;
-  }) => Promise<Annotation>;
+
+  // Crags
+  createCrag: (name: string) => Promise<{ crag: Crag; defaultSector: Sector }>;
+  renameCrag: (id: string, name: string) => Promise<void>;
+  deleteCrag: (id: string) => Promise<void>;
+  loadCragDetail: (cragId: string) => Promise<CragDetail | undefined>;
+
+  // Sectors
+  createSector: (cragId: string, name: string) => Promise<Sector>;
+  renameSector: (id: string, name: string) => Promise<void>;
+  deleteSector: (id: string) => Promise<void>;
+
+  // Topos
+  createTopo: (sectorId: string, name?: string) => Promise<Topo>;
+  renameTopo: (id: string, name: string) => Promise<void>;
+  updateTopoDescription: (id: string, description: string | undefined) => Promise<void>;
+  deleteTopo: (id: string) => Promise<void>;
+  loadTopoInfo: (id: string) => Promise<{ topo: Topo; routes: Route[] } | undefined>;
+  loadTopoEditor: (id: string) => Promise<TopoEditorBundle | undefined>;
+  attachPhotoFromLibrary: (topoId: string) => Promise<boolean>;
+  attachPhotoFromUri: (input: { topoId: string; uri: string; width: number; height: number }) => Promise<void>;
+
+  // Routes
+  createRoute: (topoId: string, defaults?: RouteFieldUpdate) => Promise<Route>;
+  updateRouteField: (route: Route, fields: RouteFieldUpdate) => Promise<Route>;
+  deleteRoute: (id: string) => Promise<void>;
+
+  // Annotations (used by editor)
+  addAnnotation: (input: CreateAnnotationInput) => Promise<Annotation>;
+  addPathAnnotation: (input: CreatePathAnnotationInput) => Promise<Annotation>;
   updateAnnotation: (annotation: Annotation) => Promise<Annotation>;
   removeAnnotation: (annotation: Annotation) => Promise<void>;
 };
@@ -61,13 +126,11 @@ const TopoStoreContext = createContext<TopoStoreValue | undefined>(undefined);
 export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
   const [db, setDb] = useState<TopoDatabase>();
   const [storageError, setStorageError] = useState<string>();
-  const [summaries, setSummaries] = useState<TopoSummary[]>([]);
+  const [cragSummaries, setCragSummaries] = useState<CragSummary[]>([]);
 
   const refresh = useCallback(async () => {
-    if (!db) {
-      return;
-    }
-    setSummaries(await listTopoSummaries(db));
+    if (!db) return;
+    setCragSummaries(await listCragSummaries(db));
   }, [db]);
 
   useEffect(() => {
@@ -76,183 +139,268 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
     async function prepare() {
       try {
         const nextDb = await getDatabase();
-        await migrateDatabase(nextDb);
+        await runMigrations(nextDb);
         if (mounted) {
           setDb(nextDb);
           setStorageError(undefined);
-          setSummaries(await listTopoSummaries(nextDb));
+          setCragSummaries(await listCragSummaries(nextDb));
         }
       } catch (error) {
         if (mounted) {
-          setStorageError(error instanceof Error ? error.message : 'Local storage could not be initialized.');
+          setStorageError(
+            error instanceof Error ? error.message : 'Local storage could not be initialized.',
+          );
         }
       }
     }
 
     prepare();
-
     return () => {
       mounted = false;
     };
   }, []);
 
-  const createProject = useCallback(
+  function requireDb(): TopoDatabase {
+    if (!db) throw new Error('Database is not ready');
+    return db;
+  }
+
+  // ── Crags ───────────────────────────────────────────────────────────────
+
+  const createCrag = useCallback(
     async (name: string) => {
-      if (!db) {
-        throw new Error('Database is not ready');
-      }
-
-      const now = nowIso();
-      const topoId = createId('topo');
-      const routeId = createId('route');
-      const project: TopoProject = {
-        id: topoId,
-        name,
-        createdAt: now,
-        updatedAt: now,
-        photos: [],
-        routes: [
-          {
-            id: routeId,
-            topoId,
-            name: 'Route 1',
-            color: '#EB5757',
-            createdAt: now,
-            updatedAt: now,
-          },
-        ],
-        annotations: [],
-      };
-
-      await insertTopoProject(db, project);
+      const out = await createCragRepo(requireDb(), { name });
       await refresh();
-      return project;
+      return out;
     },
     [db, refresh],
   );
 
-  const loadProject = useCallback(
+  const renameCrag = useCallback(
+    async (id: string, name: string) => {
+      await renameCragRepo(requireDb(), id, name);
+      await refresh();
+    },
+    [db, refresh],
+  );
+
+  const deleteCrag = useCallback(
     async (id: string) => {
-      if (!db) {
-        return undefined;
-      }
-      return getTopoProject(db, id);
+      const dbRef = requireDb();
+      // Cascade is handled by FKs; nothing else to do for now.
+      await deleteCragRepo(dbRef, id);
+      await refresh();
+    },
+    [db, refresh],
+  );
+
+  const loadCragDetail = useCallback(
+    async (cragId: string): Promise<CragDetail | undefined> => {
+      const dbRef = requireDb();
+      const crag = await getCrag(dbRef, cragId);
+      if (!crag) return undefined;
+      const sectors = await listSectorsForCrag(dbRef, cragId);
+      const sectorsWithTopos: SectorWithTopos[] = await Promise.all(
+        sectors.map(async (sector) => {
+          const topos = await listToposForSector(dbRef, sector.id);
+          const toposWithRoutes: TopoWithRoutes[] = await Promise.all(
+            topos.map(async (topo) => ({
+              ...topo,
+              routes: await listRoutesForTopo(dbRef, topo.id),
+            })),
+          );
+          return { ...sector, topos: toposWithRoutes };
+        }),
+      );
+      return { crag, sectors: sectorsWithTopos };
     },
     [db],
   );
 
-  const addPhotoFromLibrary = useCallback(
-    async (topoId: string) => {
-      if (!db) {
-        throw new Error('Database is not ready');
-      }
+  // ── Sectors ─────────────────────────────────────────────────────────────
 
-      const picked = await pickPhotoFromLibrary();
-      if (!picked) {
-        return undefined;
-      }
+  const createSector = useCallback(
+    async (cragId: string, name: string) => {
+      const sector = await createSectorRepo(requireDb(), { cragId, name });
+      await refresh();
+      return sector;
+    },
+    [db, refresh],
+  );
 
+  const renameSector = useCallback(
+    async (id: string, name: string) => {
+      await renameSectorRepo(requireDb(), id, name);
+      await refresh();
+    },
+    [db, refresh],
+  );
+
+  const deleteSector = useCallback(
+    async (id: string) => {
+      const dbRef = requireDb();
+      // Photo cleanup is best-effort; we ignore failures and continue with the row delete.
       try {
-        const now = nowIso();
+        const uris = await listPhotoUrisForSector(dbRef, id);
+        await tryRemovePhotoFiles(uris);
+      } catch (error) {
+        console.warn('[store] sector photo cleanup failed', error);
+      }
+      await deleteSectorRepo(dbRef, id);
+      await refresh();
+    },
+    [db, refresh],
+  );
+
+  // ── Topos ───────────────────────────────────────────────────────────────
+
+  const createTopo = useCallback(
+    async (sectorId: string, name?: string) => {
+      const topo = await createTopoRepo(requireDb(), { sectorId, name });
+      await refresh();
+      return topo;
+    },
+    [db, refresh],
+  );
+
+  const renameTopo = useCallback(
+    async (id: string, name: string) => {
+      await renameTopoRepo(requireDb(), id, name);
+      await refresh();
+    },
+    [db, refresh],
+  );
+
+  const updateTopoDescription = useCallback(
+    async (id: string, description: string | undefined) => {
+      await updateTopoDescriptionRepo(requireDb(), id, description);
+      await refresh();
+    },
+    [db, refresh],
+  );
+
+  const deleteTopo = useCallback(
+    async (id: string) => {
+      const photoUri = await deleteTopoRepo(requireDb(), id);
+      if (photoUri) {
+        await tryRemovePhotoFiles([photoUri]);
+      }
+      await refresh();
+    },
+    [db, refresh],
+  );
+
+  const loadTopoInfo = useCallback(
+    async (id: string) => {
+      const dbRef = requireDb();
+      const bundle = await loadTopoEditorBundle(dbRef, id);
+      if (!bundle) return undefined;
+      return { topo: bundle.topo, routes: bundle.routes };
+    },
+    [db],
+  );
+
+  const loadTopoEditor = useCallback(
+    async (id: string) => {
+      return loadTopoEditorBundle(requireDb(), id);
+    },
+    [db],
+  );
+
+  const attachPhotoFromLibrary = useCallback(
+    async (topoId: string) => {
+      const dbRef = requireDb();
+      const picked = await pickPhotoFromLibrary();
+      if (!picked) return false;
+      try {
         const uri = await copyPhotoIntoLibrary(picked.uri, topoId);
-        const photo: PhotoAsset = {
-          id: createId('photo'),
-          topoId,
+        await attachPhotoToTopo(dbRef, topoId, {
           uri,
           width: picked.width,
           height: picked.height,
-          createdAt: now,
-        };
-        await insertPhotoAsset(db, photo);
+        });
         await refresh();
         setStorageError(undefined);
-        return photo;
+        return true;
       } catch (error) {
-        setStorageError(error instanceof Error ? error.message : 'Imported photo could not be saved.');
+        setStorageError(
+          error instanceof Error ? error.message : 'Imported photo could not be saved.',
+        );
         throw error;
       }
     },
     [db, refresh],
   );
 
-  const addPhotoFromUri = useCallback(
+  const attachPhotoFromUri = useCallback(
     async (input: { topoId: string; uri: string; width: number; height: number }) => {
-      if (!db) {
-        throw new Error('Database is not ready');
-      }
-
+      const dbRef = requireDb();
       try {
-        const now = nowIso();
         const uri = await copyPhotoIntoLibrary(input.uri, input.topoId);
-        const photo: PhotoAsset = {
-          id: createId('photo'),
-          topoId: input.topoId,
+        await attachPhotoToTopo(dbRef, input.topoId, {
           uri,
           width: input.width,
           height: input.height,
-          createdAt: now,
-        };
-        await insertPhotoAsset(db, photo);
+        });
         await refresh();
         setStorageError(undefined);
-        return photo;
       } catch (error) {
-        setStorageError(error instanceof Error ? error.message : 'Captured photo could not be saved.');
+        setStorageError(
+          error instanceof Error ? error.message : 'Captured photo could not be saved.',
+        );
         throw error;
       }
     },
     [db, refresh],
   );
 
-  const addAnnotation = useCallback(
-    async (input: {
-      topoId: string;
-      photoId: string;
-      routeId?: string;
-      kind: AnnotationKind;
-      point: NormalizedPoint;
-      color?: string;
-      label?: string;
-      labelFontSize?: number;
-      lineWeight?: LineWeight;
-      stampSize?: StampSize;
-    }) => {
-      if (!db) {
-        throw new Error('Database is not ready');
-      }
+  // ── Routes ──────────────────────────────────────────────────────────────
 
+  const createRoute = useCallback(
+    async (topoId: string, defaults?: RouteFieldUpdate) => {
+      return createRouteRepo(requireDb(), { topoId, ...defaults });
+    },
+    [db],
+  );
+
+  const updateRouteField = useCallback(
+    async (route: Route, fields: RouteFieldUpdate) => {
+      const next: Route = { ...route, ...fields, updatedAt: nowIso() };
+      await updateRouteRepo(requireDb(), next);
+      return next;
+    },
+    [db],
+  );
+
+  const deleteRoute = useCallback(
+    async (id: string) => {
+      await deleteRouteRepo(requireDb(), id);
+    },
+    [db],
+  );
+
+  // ── Annotations (editor) ────────────────────────────────────────────────
+
+  const addAnnotation = useCallback(
+    async (input: CreateAnnotationInput) => {
       const now = nowIso();
       const annotation = createAnnotation({
         id: createId('annotation'),
         now,
         ...input,
       });
-      await upsertAnnotation(db, annotation);
-      await refresh();
+      await upsertAnnotation(requireDb(), annotation);
       return annotation;
     },
-    [db, refresh],
+    [db],
   );
 
   const addPathAnnotation = useCallback(
-    async (input: {
-      topoId: string;
-      photoId: string;
-      routeId?: string;
-      kind: Extract<AnnotationKind, 'climbLine' | 'walkoff' | 'scramble'>;
-      points: NormalizedPoint[];
-      color?: string;
-      lineWeight?: LineWeight;
-    }) => {
-      if (!db) {
-        throw new Error('Database is not ready');
-      }
-
+    async (input: CreatePathAnnotationInput) => {
       const now = nowIso();
       const annotation = createAnnotation({
         id: createId('annotation'),
         topoId: input.topoId,
-        photoId: input.photoId,
         routeId: input.routeId,
         kind: input.kind,
         point: input.points[0] ?? { x: 0, y: 0 },
@@ -260,63 +408,88 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
         lineWeight: input.lineWeight,
         now,
       });
-
       if ('points' in annotation) {
         annotation.points = input.points;
       }
-
-      await upsertAnnotation(db, annotation);
-      await refresh();
+      await upsertAnnotation(requireDb(), annotation);
       return annotation;
     },
-    [db, refresh],
-  );
-
-  const removeAnnotation = useCallback(
-    async (annotation: Annotation) => {
-      if (!db) {
-        throw new Error('Database is not ready');
-      }
-
-      await deleteAnnotation(db, annotation.id, annotation.topoId, nowIso());
-      await refresh();
-    },
-    [db, refresh],
+    [db],
   );
 
   const updateAnnotation = useCallback(
     async (annotation: Annotation) => {
-      if (!db) {
-        throw new Error('Database is not ready');
-      }
-
-      const updated = {
-        ...annotation,
-        updatedAt: nowIso(),
-      };
-      await upsertAnnotation(db, updated);
-      await refresh();
+      const updated: Annotation = { ...annotation, updatedAt: nowIso() };
+      await upsertAnnotation(requireDb(), updated);
       return updated;
     },
-    [db, refresh],
+    [db],
+  );
+
+  const removeAnnotation = useCallback(
+    async (annotation: Annotation) => {
+      await deleteAnnotationRepo(requireDb(), annotation.id, annotation.topoId, nowIso());
+    },
+    [db],
   );
 
   const value = useMemo<TopoStoreValue>(
     () => ({
       isReady: Boolean(db),
       storageError,
-      summaries,
+      cragSummaries,
       refresh,
-      createProject,
-      loadProject,
-      addPhotoFromLibrary,
-      addPhotoFromUri,
+      createCrag,
+      renameCrag,
+      deleteCrag,
+      loadCragDetail,
+      createSector,
+      renameSector,
+      deleteSector,
+      createTopo,
+      renameTopo,
+      updateTopoDescription,
+      deleteTopo,
+      loadTopoInfo,
+      loadTopoEditor,
+      attachPhotoFromLibrary,
+      attachPhotoFromUri,
+      createRoute,
+      updateRouteField,
+      deleteRoute,
       addAnnotation,
       addPathAnnotation,
       updateAnnotation,
       removeAnnotation,
     }),
-    [addAnnotation, addPathAnnotation, addPhotoFromLibrary, addPhotoFromUri, createProject, db, loadProject, refresh, removeAnnotation, storageError, summaries, updateAnnotation],
+    [
+      addAnnotation,
+      addPathAnnotation,
+      attachPhotoFromLibrary,
+      attachPhotoFromUri,
+      cragSummaries,
+      createCrag,
+      createRoute,
+      createSector,
+      createTopo,
+      db,
+      deleteCrag,
+      deleteRoute,
+      deleteSector,
+      deleteTopo,
+      loadCragDetail,
+      loadTopoEditor,
+      loadTopoInfo,
+      refresh,
+      removeAnnotation,
+      renameCrag,
+      renameSector,
+      renameTopo,
+      storageError,
+      updateAnnotation,
+      updateRouteField,
+      updateTopoDescription,
+    ],
   );
 
   return <TopoStoreContext.Provider value={value}>{children}</TopoStoreContext.Provider>;
@@ -328,4 +501,30 @@ export function useTopoStore() {
     throw new Error('useTopoStore must be used within TopoStoreProvider');
   }
   return value;
+}
+
+async function tryRemovePhotoFiles(uris: string[]): Promise<void> {
+  // Inline-deferred import so we don't pull native modules into the web bundle path
+  // at module load time. Best-effort cleanup; errors logged but not rethrown.
+  if (uris.length === 0) return;
+  try {
+    // We rely on the platform-specific file system module being available; on web,
+    // photo URIs are inline data URLs and there is nothing to remove.
+    const FS = await import('expo-file-system/legacy');
+    await Promise.all(
+      uris.map(async (uri) => {
+        if (!uri || uri.startsWith('data:')) return;
+        try {
+          await FS.deleteAsync(uri, { idempotent: true });
+        } catch (error) {
+          console.warn('[store] failed to remove photo file', uri, error);
+        }
+      }),
+    );
+  } catch (error) {
+    // expo-file-system not available on this platform (e.g. plain web); ignore.
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug('[store] photo file cleanup skipped (no FS available)');
+    }
+  }
 }

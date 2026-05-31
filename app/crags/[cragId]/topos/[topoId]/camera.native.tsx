@@ -15,8 +15,8 @@ import { interStyle } from '@/ui/fonts';
 import { Screen } from '@/ui/Screen';
 
 export default function CameraScreen() {
-  const { projectId } = useLocalSearchParams<{ projectId: string }>();
-  const { addPhotoFromUri } = useTopoStore();
+  const { topoId } = useLocalSearchParams<{ topoId: string }>();
+  const { attachPhotoFromUri } = useTopoStore();
   const camera = useRef<CameraRef>(null);
   const device = useCameraDevice('back');
   const photoOutput = usePhotoOutput();
@@ -28,16 +28,14 @@ export default function CameraScreen() {
   }, []);
 
   async function handleCapture() {
-    if (!projectId || !photoOutput) {
-      return;
-    }
+    if (!topoId || !photoOutput) return;
 
     setIsCapturing(true);
     try {
       const file = await photoOutput.capturePhotoToFile({}, {});
       const uri = file.filePath.startsWith('file://') ? file.filePath : `file://${file.filePath}`;
       const size = await getImageSize(uri);
-      await addPhotoFromUri({ topoId: projectId, uri, ...size });
+      await attachPhotoFromUri({ topoId, uri, ...size });
       router.back();
     } finally {
       setIsCapturing(false);
@@ -75,7 +73,7 @@ export default function CameraScreen() {
         <Button label="Cancel" onPress={() => router.back()} variant="secondary" />
         <Button
           disabled={isCapturing}
-          label={isCapturing ? 'Capturing...' : 'Capture'}
+          label={isCapturing ? 'Capturing…' : 'Capture'}
           onPress={handleCapture}
         />
       </View>
@@ -90,16 +88,8 @@ function getImageSize(uri: string) {
 }
 
 const styles = StyleSheet.create({
-  cameraScreen: {
-    backgroundColor: '#000000',
-    flex: 1,
-  },
-  center: {
-    alignItems: 'center',
-    gap: 14,
-    justifyContent: 'center',
-    padding: 24,
-  },
+  cameraScreen: { backgroundColor: '#000000', flex: 1 },
+  center: { alignItems: 'center', gap: 14, justifyContent: 'center', padding: 24 },
   controls: {
     bottom: 36,
     flexDirection: 'row',
@@ -108,16 +98,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 18,
   },
-  copy: {
-    color: '#4B5563',
-    fontSize: 16,
-    lineHeight: 23,
-    textAlign: 'center',
-  },
-  title: {
-    color: '#111827',
-    fontSize: 24,
-    ...interStyle('900'),
-    textAlign: 'center',
-  },
+  copy: { color: '#4B5563', fontSize: 16, lineHeight: 23, textAlign: 'center' },
+  title: { color: '#111827', fontSize: 24, ...interStyle('900'), textAlign: 'center' },
 });

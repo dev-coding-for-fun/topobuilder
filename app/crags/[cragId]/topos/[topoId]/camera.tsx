@@ -5,12 +5,12 @@ import { Button } from '@/ui/Button';
 import { interStyle } from '@/ui/fonts';
 import { Screen } from '@/ui/Screen';
 
-export default function ExportScreen() {
+export default function CameraScreen() {
   return (
     <Screen style={styles.center}>
-      <Text style={styles.title}>Export is not available on web yet</Text>
-      <Text style={styles.copy}>This browser MVP focuses on local import, editing, and persistence.</Text>
-      <Button label="Back to project" onPress={() => router.back()} />
+      <Text style={styles.title}>Camera capture is mobile-only</Text>
+      <Text style={styles.copy}>Use photo import on desktop/web builds.</Text>
+      <Button label="Back" onPress={() => router.back()} />
     </Screen>
   );
 }

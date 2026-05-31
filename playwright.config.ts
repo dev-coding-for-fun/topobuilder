@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
-  globalTimeout: 45_000,
+  globalTimeout: 180_000,
   timeout: 30_000,
   expect: {
     timeout: 10_000,
@@ -16,15 +16,15 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   webServer: {
-    command: 'npx expo export --platform web && node scripts/serve-web.js dist 8091',
+    command: 'node scripts/playwright-web-server.js',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
     url: 'http://127.0.0.1:8091',
   },
   projects: [
     {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'] },
     },
   ],
 });

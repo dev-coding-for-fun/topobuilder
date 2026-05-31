@@ -171,6 +171,10 @@ export function TopoCanvas({
   const stampMoveOffsetRef = useRef({ x: 0, y: 0 });
   const labelResizeStartRef = useRef({ distance: 1, fontSize: 1 });
   const [viewport, setViewport] = useState({ scale: 1, tx: 0, ty: 0 });
+  // Web-only: container DOM node ref used to attach a passive-false wheel listener
+  // for mouse-wheel zoom. `react-native-web` exposes View refs as the underlying
+  // DOM element, so we can call `addEventListener` directly. No-op on native.
+  const containerRef = useRef<View | null>(null);
   const activePathTool = activeTool !== 'select' && isPathKind(activeTool);
   const pathAnnotations = useMemo(
     () =>
@@ -885,6 +889,48 @@ export function TopoCanvas({
     ],
   );
 
+  // Mouse-wheel zoom. Mirrors the pinch math: anchor the zoom around the
+  // pointer's focal position, clamp to [minScale, MAX_ZOOM], then clampPan.
+  // On web, react-native-web exposes the View ref as the underlying DOM node;
+  // on native the ref isn't a DOM node so addEventListener won't exist and we
+  // bail out.
+  useEffect(() => {
+    const node = containerRef.current as unknown as HTMLElement | null;
+    if (!node || typeof node.addEventListener !== 'function') {
+      return;
+    }
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const rect = node.getBoundingClientRect();
+      const focalX = event.clientX - rect.left;
+      const focalY = event.clientY - rect.top;
+      // deltaMode: 0=pixel, 1=line (~16px), 2=page. Normalize to pixels.
+      const lineHeight = 16;
+      const deltaPixels =
+        event.deltaMode === 1
+          ? event.deltaY * lineHeight
+          : event.deltaMode === 2
+            ? event.deltaY * rect.height
+            : event.deltaY;
+      const zoomFactor = Math.exp(-deltaPixels * 0.0015);
+      const current = scale.value;
+      const next = Math.min(Math.max(current * zoomFactor, minScaleSv.value), MAX_ZOOM);
+      if (next === current) {
+        return;
+      }
+      const k = next / current;
+      const candidateTx = focalX * (1 - k) + k * tx.value;
+      const candidateTy = focalY * (1 - k) + k * ty.value;
+      const clamped = clampPan({ x: candidateTx, y: candidateTy }, next, imageFit, canvasSize);
+      scale.value = next;
+      tx.value = clamped.x;
+      ty.value = clamped.y;
+      setViewport({ scale: next, tx: clamped.x, ty: clamped.y });
+    };
+    node.addEventListener('wheel', handleWheel, { passive: false });
+    return () => node.removeEventListener('wheel', handleWheel);
+  }, [canvasSize, imageFit, minScaleSv, scale, tx, ty]);
+
   const tapGesture = useMemo(
     () =>
       Gesture.Tap()
@@ -954,7 +1000,7 @@ export function TopoCanvas({
 
   return (
     <GestureDetector gesture={composedGesture}>
-      <Animated.View onLayout={handleLayout} style={styles.container}>
+      <Animated.View ref={containerRef} onLayout={handleLayout} style={styles.container}>
         <Canvas style={StyleSheet.absoluteFill}>
           <Group transform={groupTransform}>
             <Group transform={[{ translateX: imageFit.offsetX }, { translateY: imageFit.offsetY }]}>

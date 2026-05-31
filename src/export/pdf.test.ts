@@ -44,7 +44,6 @@ const project: TopoProject = {
     {
       id: 'line-1',
       topoId: 'project-1',
-      photoId: 'photo-1',
       kind: 'climbLine',
       color: '#2563EB',
       points: [

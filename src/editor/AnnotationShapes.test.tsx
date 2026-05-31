@@ -10,7 +10,6 @@ describe('AnnotationShape route lines', () => {
         annotation={{
           id: 'line-1',
           topoId: 'topo-1',
-          photoId: 'photo-1',
           kind: 'climbLine',
           color: '#FACC15',
           points: [
@@ -35,7 +34,6 @@ describe('AnnotationShape route lines', () => {
         annotation={{
           id: 'line-1',
           topoId: 'topo-1',
-          photoId: 'photo-1',
           kind: 'climbLine',
           color: '#FACC15',
           lineWeight: 'large',
@@ -63,7 +61,6 @@ describe('AnnotationShape route markers', () => {
         annotation={{
           id: 'start-1',
           topoId: 'topo-1',
-          photoId: 'photo-1',
           kind: 'start',
           color: '#FACC15',
           label: '12',
@@ -86,7 +83,6 @@ describe('AnnotationShape route markers', () => {
         annotation={{
           id: 'start-1',
           topoId: 'topo-1',
-          photoId: 'photo-1',
           kind: 'start',
           color: '#FACC15',
           label: '12',
@@ -109,7 +105,6 @@ describe('AnnotationShape route markers', () => {
         annotation={{
           id: 'start-1',
           topoId: 'topo-1',
-          photoId: 'photo-1',
           kind: 'start',
           color: '#1E3A8A',
           label: '12',
@@ -134,7 +129,6 @@ describe('AnnotationShape labels', () => {
         annotation={{
           id: 'label-1',
           topoId: 'topo-1',
-          photoId: 'photo-1',
           kind: 'label',
           color: '#111827',
           label: 'Pitch 1',
@@ -172,7 +166,6 @@ describe('AnnotationShape labels', () => {
         annotation={{
           id: 'label-1',
           topoId: 'topo-1',
-          photoId: 'photo-1',
           kind: 'label',
           color: '#111827',
           label: 'Pitch 1',

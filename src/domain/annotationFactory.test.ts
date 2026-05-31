@@ -5,7 +5,6 @@ describe('annotation factory', () => {
     const annotation = createAnnotation({
       id: 'a1',
       topoId: 't1',
-      photoId: 'p1',
       kind: 'bolt',
       point: { x: 0.25, y: 0.5 },
       now: '2026-01-01T00:00:00.000Z',
@@ -19,7 +18,6 @@ describe('annotation factory', () => {
     const annotation = createAnnotation({
       id: 'a2',
       topoId: 't1',
-      photoId: 'p1',
       kind: 'climbLine',
       point: { x: 0.1, y: 0.2 },
       now: '2026-01-01T00:00:00.000Z',
@@ -34,7 +32,6 @@ describe('annotation factory', () => {
     const annotation = createAnnotation({
       id: 'a7',
       topoId: 't1',
-      photoId: 'p1',
       kind: 'walkoff',
       point: { x: 0.1, y: 0.2 },
       now: '2026-01-01T00:00:00.000Z',
@@ -55,7 +52,6 @@ describe('annotation factory', () => {
     const annotation = createAnnotation({
       id: 'a3',
       topoId: 't1',
-      photoId: 'p1',
       kind: 'climbLine',
       point: { x: 0, y: 0 },
       now: '2026-01-01T00:00:00.000Z',
@@ -68,7 +64,6 @@ describe('annotation factory', () => {
     const annotation = createAnnotation({
       id: 'a4',
       topoId: 't1',
-      photoId: 'p1',
       kind: 'label',
       point: { x: 0.25, y: 0.5 },
       now: '2026-01-01T00:00:00.000Z',
@@ -84,7 +79,6 @@ describe('annotation factory', () => {
     const defaultStamp = createAnnotation({
       id: 'a5',
       topoId: 't1',
-      photoId: 'p1',
       kind: 'bolt',
       point: { x: 0.25, y: 0.5 },
       now: '2026-01-01T00:00:00.000Z',
@@ -92,7 +86,6 @@ describe('annotation factory', () => {
     const largeStamp = createAnnotation({
       id: 'a6',
       topoId: 't1',
-      photoId: 'p1',
       kind: 'rappel',
       point: { x: 0.25, y: 0.5 },
       now: '2026-01-01T00:00:00.000Z',

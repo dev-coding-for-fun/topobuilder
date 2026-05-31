@@ -4,7 +4,6 @@ import { annotationsInRenderOrder, buildTopoRenderScene, smoothedRenderPath } fr
 
 const base = {
   topoId: 'topo-1',
-  photoId: 'photo-1',
   color: '#2563EB',
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',

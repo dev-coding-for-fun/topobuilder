@@ -12,7 +12,6 @@ function marker(id: string, label?: string): Annotation {
   return {
     id,
     topoId: 'topo-1',
-    photoId: 'photo-1',
     kind: 'start',
     color: '#FACC15',
     label,

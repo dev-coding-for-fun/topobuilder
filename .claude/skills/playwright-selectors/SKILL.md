@@ -428,28 +428,22 @@ export const ProfileScreen = () => (
 ## Corresponding E2E Test
 
 ```typescript
-test.describe("Profile Screen", () => {
-  test.use({ viewport: VIEWPORT.desktop });
+test.describe("Crags Screen", () => {
+  test.use({ viewport: VIEWPORT.mobile });
 
-  test.beforeEach(async ({ auth }) => {
-    await auth.login();
-  });
-
-  test("displays user information", async ({ page }) => {
-    await page.goto("/profile");
+  test("creates a crag and opens its detail screen", async ({ page }) => {
+    await page.goto("/");
     await page.waitForLoadState("domcontentloaded");
 
-    // Verify structural container
-    await expect(page.getByTestId("profile:container")).toBeVisible();
+    await expect(page.getByTestId("crags:screen")).toBeVisible();
+    await page.getByTestId("crags:new-crag-fab").click();
+    await page.getByTestId("crags:new-crag-sheet:input").fill("Barrier Bluffs");
+    await page.getByTestId("crags:new-crag-sheet:confirm").click();
 
-    // Prefer accessible queries when available
-    await expect(page.getByRole("heading")).toHaveText("John Doe");
-    await expect(
-      page.getByRole("button", { name: "Edit profile" })
-    ).toBeVisible();
-
-    // Use testID for elements without semantic roles
-    await expect(page.getByTestId("profile:avatar")).toBeVisible();
+    await expect(page.getByTestId("crag-detail:screen")).toBeVisible();
+    await expect(page.getByTestId("crag-detail:summary")).toContainText(
+      "1 sector · 0 topos"
+    );
   });
 });
 ```

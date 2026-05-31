@@ -27,29 +27,59 @@ export type PathAnnotationKind = Extract<
   'climbLine' | 'walkoff' | 'scramble'
 >;
 
+/** Top-level container. A crag (or mountain, area) houses one or more sectors. */
+export type Crag = {
+  id: ID;
+  name: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Mid-level grouping. Every topo lives inside a sector; every crag has at least one. */
+export type Sector = {
+  id: ID;
+  cragId: ID;
+  name: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Leaf entity: one annotated image. The photo lives on the topo. */
+export type Topo = {
+  id: ID;
+  sectorId: ID;
+  name: string;
+  description?: string;
+  photoUri?: string;
+  photoWidth?: number;
+  photoHeight?: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RouteType = 'sport' | 'trad' | 'mixed' | 'boulder' | 'aid' | 'top-rope';
+
 export type Route = {
   id: ID;
   topoId: ID;
   name: string;
   grade?: string;
+  routeType?: RouteType;
+  boltCount?: number;
+  lengthM?: number;
+  fa?: string;
+  description?: string;
   color: string;
   createdAt: string;
   updatedAt: string;
 };
 
-export type PhotoAsset = {
-  id: ID;
-  topoId: ID;
-  uri: string;
-  width: number;
-  height: number;
-  createdAt: string;
-};
-
 export type BaseAnnotation = {
   id: ID;
+  /** A topo's id is also the photo's id; annotations belong to exactly one topo. */
   topoId: ID;
-  photoId: ID;
   routeId?: ID;
   kind: AnnotationKind;
   color: string;
@@ -73,6 +103,58 @@ export type PathAnnotation = BaseAnnotation & {
 
 export type Annotation = MarkerAnnotation | PathAnnotation;
 
+/** Summary row used by the Crags list. */
+export type CragSummary = {
+  id: ID;
+  name: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+  sectorCount: number;
+  topoCount: number;
+};
+
+/** Topo with its routes pre-loaded; used by the Crag detail rows and Topo info sheet. */
+export type TopoWithRoutes = Topo & {
+  routes: Route[];
+};
+
+export type SectorWithTopos = Sector & {
+  topos: TopoWithRoutes[];
+};
+
+export type CragDetail = {
+  crag: Crag;
+  sectors: SectorWithTopos[];
+};
+
+/** Bundle the editor needs in one shot: the topo, its routes, and its annotations. */
+export type TopoEditorBundle = {
+  topo: Topo;
+  routes: Route[];
+  annotations: Annotation[];
+};
+
+export type EditorTool = AnnotationKind | 'select';
+
+// ── Legacy/structural shapes used by the rendering and export layers ──────
+//
+// The rendering and PDF export pipelines were authored against the v0
+// `TopoProject` / `PhotoAsset` shapes. Rather than rewrite that pipeline as
+// part of this restructure, we keep these names available as structural
+// types — the renderer doesn't care about persistence, only about shape.
+
+/** Structural shape the renderer expects for a photo asset. */
+export type PhotoAsset = {
+  id: ID;
+  topoId: ID;
+  uri: string;
+  width: number;
+  height: number;
+  createdAt: string;
+};
+
+/** Structural shape the renderer expects for a topo project bundle. */
 export type TopoProject = {
   id: ID;
   name: string;
@@ -83,13 +165,3 @@ export type TopoProject = {
   routes: Route[];
   annotations: Annotation[];
 };
-
-export type TopoSummary = Pick<
-  TopoProject,
-  'id' | 'name' | 'description' | 'createdAt' | 'updatedAt'
-> & {
-  photoCount: number;
-  routeCount: number;
-};
-
-export type EditorTool = AnnotationKind | 'select';

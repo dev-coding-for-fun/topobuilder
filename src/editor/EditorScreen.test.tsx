@@ -1,17 +1,22 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { router } from 'expo-router';
 import { Keyboard, StyleSheet } from 'react-native';
 
-import type { NormalizedPoint, TopoProject } from '@/domain/types';
+import type { NormalizedPoint, TopoEditorBundle, TopoProject } from '@/domain/types';
 import { EditorTopBar } from '@/editor/EditorTopBar';
 import { TopoCanvas } from '@/editor/TopoCanvas';
 import { useTopoStore } from '@/state/TopoStore';
 
-import EditorScreen from '../../app/projects/[projectId]/editor';
+import EditorScreen from '../../app/crags/[cragId]/topos/[topoId]/editor';
 
 jest.mock('expo-router', () => ({
   Stack: { Screen: () => null },
-  router: { back: jest.fn() },
-  useLocalSearchParams: () => ({ projectId: 'project-1', photoId: 'photo-1' }),
+  router: { back: jest.fn(), push: jest.fn() },
+  useFocusEffect: (effect: () => void | (() => void)) => {
+    const React = require('react');
+    React.useEffect(effect, [effect]);
+  },
+  useLocalSearchParams: () => ({ cragId: 'crag-1', topoId: 'project-1' }),
 }));
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -139,6 +144,31 @@ function emitKeyboardEvent(eventName: string, height: number, screenY: number) {
   });
 }
 
+/**
+ * The editor's data layer was reshaped: it now consumes a `TopoEditorBundle`
+ * (`{ topo, routes, annotations }`) rather than a `TopoProject`. These tests
+ * predate that change and still construct `TopoProject` fixtures, so we
+ * convert at the mock boundary instead of rewriting every fixture.
+ */
+function bundleFromProject(p: TopoProject): TopoEditorBundle {
+  const photo = p.photos[0];
+  return {
+    topo: {
+      id: p.id,
+      sectorId: 'sector-1',
+      name: p.name,
+      description: p.description,
+      photoUri: photo?.uri,
+      photoWidth: photo?.width,
+      photoHeight: photo?.height,
+      createdAt: p.createdAt,
+      updatedAt: p.updatedAt,
+    },
+    routes: p.routes,
+    annotations: p.annotations,
+  };
+}
+
 function projectWithAnnotations(): TopoProject {
   return {
     ...project,
@@ -146,7 +176,6 @@ function projectWithAnnotations(): TopoProject {
       {
         id: 'label-1',
         topoId: 'project-1',
-        photoId: 'photo-1',
         kind: 'label',
         color: '#111827',
         label: 'Pitch 1',
@@ -158,7 +187,6 @@ function projectWithAnnotations(): TopoProject {
       {
         id: 'bolt-1',
         topoId: 'project-1',
-        photoId: 'photo-1',
         kind: 'bolt',
         color: '#FACC15',
         point: { x: 0.4, y: 0.5 },
@@ -168,7 +196,6 @@ function projectWithAnnotations(): TopoProject {
       {
         id: 'path-1',
         topoId: 'project-1',
-        photoId: 'photo-1',
         kind: 'climbLine',
         color: '#2563EB',
         points: [
@@ -186,7 +213,6 @@ function startMarker(id: string, label?: string) {
   return {
     id,
     topoId: 'project-1',
-    photoId: 'photo-1',
     kind: 'start' as const,
     color: '#FACC15',
     label,
@@ -199,7 +225,8 @@ function startMarker(id: string, label?: string) {
 describe('EditorScreen label editing', () => {
   const addAnnotation = jest.fn();
   const addPathAnnotation = jest.fn();
-  const loadProject = jest.fn();
+  const attachPhotoFromLibrary = jest.fn();
+  const loadTopoEditor = jest.fn();
   const removeAnnotation = jest.fn();
   const updateAnnotation = jest.fn();
 
@@ -219,12 +246,11 @@ describe('EditorScreen label editing', () => {
         }),
       } as unknown as ReturnType<typeof Keyboard.addListener>;
     });
-    loadProject.mockResolvedValue(project);
+    loadTopoEditor.mockResolvedValue(bundleFromProject(project));
     addAnnotation.mockImplementation(
       async (input: { color?: string; kind?: string; label?: string; labelFontSize?: number; point?: NormalizedPoint }) => ({
         id: input.kind === 'label' || !input.kind ? 'label-1' : `${input.kind}-1`,
         topoId: 'project-1',
-        photoId: 'photo-1',
         kind: input.kind ?? 'label',
         color: input.color ?? '#111827',
         label: input.label ?? (input.kind === 'label' || !input.kind ? '' : undefined),
@@ -238,7 +264,6 @@ describe('EditorScreen label editing', () => {
       async (input: { color?: string; kind: string; lineWeight?: string; points: NormalizedPoint[] }) => ({
         id: 'path-1',
         topoId: 'project-1',
-        photoId: 'photo-1',
         kind: input.kind,
         color: input.color ?? '#FACC15',
         lineWeight: input.lineWeight ?? 'medium',
@@ -248,11 +273,14 @@ describe('EditorScreen label editing', () => {
       }),
     );
     updateAnnotation.mockImplementation(async (annotation) => annotation);
+    attachPhotoFromLibrary.mockResolvedValue(true);
     removeAnnotation.mockResolvedValue(undefined);
     (useTopoStore as jest.Mock).mockReturnValue({
       addAnnotation,
       addPathAnnotation,
-      loadProject,
+      attachPhotoFromLibrary,
+      isReady: true,
+      loadTopoEditor,
       removeAnnotation,
       updateAnnotation,
     });
@@ -281,6 +309,22 @@ describe('EditorScreen label editing', () => {
       expect(updateAnnotation).toHaveBeenCalledWith(expect.objectContaining({ id: 'label-1', label: 'Pitch 1' })),
     );
     expect(removeAnnotation).not.toHaveBeenCalled();
+  });
+
+  it('offers camera and import actions when a topo has no photo', async () => {
+    loadTopoEditor.mockResolvedValue(bundleFromProject({ ...project, photos: [] }));
+
+    render(<EditorScreen />);
+    await waitFor(() => expect(screen.getByTestId('editor:no-photo')).toBeTruthy());
+
+    fireEvent.press(screen.getByTestId('editor:no-photo:camera'));
+    expect(router.push).toHaveBeenCalledWith('/crags/crag-1/topos/project-1/camera');
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('editor:no-photo:import'));
+    });
+
+    expect(attachPhotoFromLibrary).toHaveBeenCalledWith('project-1');
   });
 
   it('saves latest label text when typing and tapping away in the same turn', async () => {
@@ -366,7 +410,7 @@ describe('EditorScreen label editing', () => {
   });
 
   it('shows line weight control only for active or selected route lines', async () => {
-    loadProject.mockResolvedValue(projectWithAnnotations());
+    loadTopoEditor.mockResolvedValue(bundleFromProject(projectWithAnnotations()));
 
     render(<EditorScreen />);
     await waitFor(() => expect(TopoCanvas).toHaveBeenCalled());
@@ -423,7 +467,7 @@ describe('EditorScreen label editing', () => {
   });
 
   it('updates selected route line weight while preserving colour and points', async () => {
-    loadProject.mockResolvedValue(projectWithAnnotations());
+    loadTopoEditor.mockResolvedValue(bundleFromProject(projectWithAnnotations()));
 
     render(<EditorScreen />);
     await waitFor(() => expect(TopoCanvas).toHaveBeenCalled());
@@ -480,7 +524,6 @@ describe('EditorScreen label editing', () => {
         {
           id: 'bolt-1',
           topoId: 'project-1',
-          photoId: 'photo-1',
           kind: 'bolt',
           color: '#FACC15',
           point: { x: 0.2, y: 0.3 },
@@ -490,7 +533,6 @@ describe('EditorScreen label editing', () => {
         {
           id: 'rappel-1',
           topoId: 'project-1',
-          photoId: 'photo-1',
           kind: 'rappel',
           color: '#2563EB',
           point: { x: 0.4, y: 0.5 },
@@ -500,7 +542,6 @@ describe('EditorScreen label editing', () => {
         {
           id: 'label-1',
           topoId: 'project-1',
-          photoId: 'photo-1',
           kind: 'label',
           color: '#111827',
           label: 'Pitch 1',
@@ -512,7 +553,6 @@ describe('EditorScreen label editing', () => {
         {
           id: 'line-1',
           topoId: 'project-1',
-          photoId: 'photo-1',
           kind: 'climbLine',
           color: '#FACC15',
           points: [
@@ -524,7 +564,7 @@ describe('EditorScreen label editing', () => {
         },
       ],
     };
-    loadProject.mockResolvedValue(projectWithAnnotations);
+    loadTopoEditor.mockResolvedValue(bundleFromProject(projectWithAnnotations));
 
     render(<EditorScreen />);
     await waitFor(() => expect(TopoCanvas).toHaveBeenCalled());
@@ -574,10 +614,10 @@ describe('EditorScreen label editing', () => {
   });
 
   it('refills a freed route marker number after direct edit', async () => {
-    loadProject.mockResolvedValue({
+    loadTopoEditor.mockResolvedValue(bundleFromProject({
       ...project,
       annotations: [startMarker('start-1', '1'), startMarker('start-2', '2'), startMarker('start-3', '3')],
-    });
+    }));
 
     render(<EditorScreen />);
     await waitFor(() => expect(TopoCanvas).toHaveBeenCalled());
@@ -598,10 +638,10 @@ describe('EditorScreen label editing', () => {
   });
 
   it('skips taken route marker numbers during auto-increment', async () => {
-    loadProject.mockResolvedValue({
+    loadTopoEditor.mockResolvedValue(bundleFromProject({
       ...project,
       annotations: [startMarker('start-7', '7')],
-    });
+    }));
 
     render(<EditorScreen />);
     await waitFor(() => expect(TopoCanvas).toHaveBeenCalled());
@@ -657,10 +697,10 @@ describe('EditorScreen label editing', () => {
   });
 
   it('allows duplicate and blank direct route marker number edits', async () => {
-    loadProject.mockResolvedValue({
+    loadTopoEditor.mockResolvedValue(bundleFromProject({
       ...project,
       annotations: [startMarker('start-3', '3'), startMarker('start-7', '7')],
-    });
+    }));
 
     render(<EditorScreen />);
     await waitFor(() => expect(TopoCanvas).toHaveBeenCalled());
@@ -680,10 +720,10 @@ describe('EditorScreen label editing', () => {
   });
 
   it('shows route marker number control only for route marker tool or selected route markers', async () => {
-    loadProject.mockResolvedValue({
+    loadTopoEditor.mockResolvedValue(bundleFromProject({
       ...project,
       annotations: [startMarker('start-1', '1'), projectWithAnnotations().annotations[0]],
-    });
+    }));
 
     render(<EditorScreen />);
     await waitFor(() => expect(TopoCanvas).toHaveBeenCalled());
@@ -708,7 +748,7 @@ describe('EditorScreen label editing', () => {
   });
 
   it('shows contextual delete only while an annotation is selected', async () => {
-    loadProject.mockResolvedValue(projectWithAnnotations());
+    loadTopoEditor.mockResolvedValue(bundleFromProject(projectWithAnnotations()));
 
     render(<EditorScreen />);
     await waitFor(() => expect(TopoCanvas).toHaveBeenCalled());
@@ -744,7 +784,7 @@ describe('EditorScreen label editing', () => {
       'path-1',
     ],
   ])('deletes the selected %s and clears the delete control', async (_target, selectTarget, targetId) => {
-    loadProject.mockResolvedValue(projectWithAnnotations());
+    loadTopoEditor.mockResolvedValue(bundleFromProject(projectWithAnnotations()));
 
     render(<EditorScreen />);
     await waitFor(() => expect(TopoCanvas).toHaveBeenCalled());

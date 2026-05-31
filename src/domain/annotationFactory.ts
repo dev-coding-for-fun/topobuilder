@@ -42,9 +42,18 @@ export function isStampAnnotation(annotation: Annotation): annotation is MarkerA
   return isMarkerAnnotation(annotation) && isStampKind(annotation.kind);
 }
 
-export function annotationsForPhoto(annotations: Annotation[], photoId?: string) {
-  return annotations.filter((annotation) => annotation.photoId === photoId);
+/**
+ * Filter annotations down to those belonging to a given topo. Retained under
+ * the historical `annotationsForPhoto` name (and `annotationsForTopo` alias)
+ * so the editor's call sites do not all have to be renamed at once. A topo's
+ * id is also the identity of its photo, so the two names mean the same thing.
+ */
+export function annotationsForTopo(annotations: Annotation[], topoId?: string) {
+  if (!topoId) return [];
+  return annotations.filter((annotation) => annotation.topoId === topoId);
 }
+
+export const annotationsForPhoto = annotationsForTopo;
 
 export function defaultColorForKind(kind: AnnotationKind) {
   switch (kind) {
@@ -68,7 +77,6 @@ export function defaultColorForKind(kind: AnnotationKind) {
 type CreateAnnotationInput = {
   id: string;
   topoId: string;
-  photoId: string;
   routeId?: string;
   kind: AnnotationKind;
   point: NormalizedPoint;
@@ -84,7 +92,6 @@ export function createAnnotation(input: CreateAnnotationInput): Annotation {
   const base = {
     id: input.id,
     topoId: input.topoId,
-    photoId: input.photoId,
     routeId: input.routeId,
     kind: input.kind,
     color: input.color ?? defaultColorForKind(input.kind),

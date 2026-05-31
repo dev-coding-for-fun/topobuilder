@@ -192,7 +192,6 @@ describe('TopoCanvas selection callbacks', () => {
     const label: Annotation = {
       id: 'label-1',
       topoId: 'topo-1',
-      photoId: 'photo-1',
       kind: 'label',
       color: '#111827',
       label: 'Pitch 1',
@@ -216,7 +215,6 @@ describe('TopoCanvas selection callbacks', () => {
     const path: Annotation = {
       id: 'path-1',
       topoId: 'topo-1',
-      photoId: 'photo-1',
       kind: 'climbLine',
       color: '#C6F24F',
       points: [
@@ -241,7 +239,6 @@ describe('TopoCanvas selection callbacks', () => {
     const stamp: Annotation = {
       id: 'bolt-1',
       topoId: 'topo-1',
-      photoId: 'photo-1',
       kind: 'bolt',
       color: '#FACC15',
       point: { x: 0.5, y: 0.5 },
@@ -263,7 +260,6 @@ describe('TopoCanvas selection callbacks', () => {
     const stamp: Annotation = {
       id: 'bolt-1',
       topoId: 'topo-1',
-      photoId: 'photo-1',
       kind: 'bolt',
       color: '#FACC15',
       point: { x: 0.5, y: 0.5 },
@@ -290,7 +286,6 @@ describe('TopoCanvas selection callbacks', () => {
     const stamp: Annotation = {
       id: 'bolt-1',
       topoId: 'topo-1',
-      photoId: 'photo-1',
       kind: 'bolt',
       color: '#FACC15',
       point: { x: 0, y: 0 },
@@ -319,7 +314,6 @@ describe('TopoCanvas selection callbacks', () => {
     const path: Annotation = {
       id: 'path-1',
       topoId: 'topo-1',
-      photoId: 'photo-1',
       kind: 'climbLine',
       color: '#C6F24F',
       points: [
@@ -351,7 +345,6 @@ describe('TopoCanvas selection callbacks', () => {
     const path: Annotation = {
       id: 'path-1',
       topoId: 'topo-1',
-      photoId: 'photo-1',
       kind: 'climbLine',
       color: '#C6F24F',
       points: [
@@ -423,7 +416,6 @@ describe('annotationsInCanvasStackOrder', () => {
       {
         id: 'label-1',
         topoId: 'topo-1',
-        photoId: 'photo-1',
         kind: 'label',
         color: '#111827',
         label: 'Pitch 1',
@@ -435,7 +427,6 @@ describe('annotationsInCanvasStackOrder', () => {
       {
         id: 'bolt-1',
         topoId: 'topo-1',
-        photoId: 'photo-1',
         kind: 'bolt',
         color: '#FACC15',
         point: { x: 0.5, y: 0.5 },
@@ -445,7 +436,6 @@ describe('annotationsInCanvasStackOrder', () => {
       {
         id: 'path-1',
         topoId: 'topo-1',
-        photoId: 'photo-1',
         kind: 'climbLine',
         color: '#C6F24F',
         points: [
@@ -469,7 +459,6 @@ describe('annotationsInCanvasStackOrder', () => {
       {
         id: 'path-1',
         topoId: 'topo-1',
-        photoId: 'photo-1',
         kind: 'climbLine',
         color: '#C6F24F',
         points: [
@@ -482,7 +471,6 @@ describe('annotationsInCanvasStackOrder', () => {
       {
         id: 'label-1',
         topoId: 'topo-1',
-        photoId: 'photo-1',
         kind: 'label',
         color: '#111827',
         label: 'Pitch 1',

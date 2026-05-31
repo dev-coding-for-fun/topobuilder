@@ -5,6 +5,8 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { StyleSheet, Text, TextInput, type StyleProp, type TextStyle } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { TopoStoreProvider } from '@/state/TopoStore';
 import { interFontMap, interStyle } from '@/ui/fonts';
@@ -65,16 +67,20 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <TopoStoreProvider>
-        <StatusBar style="dark" />
-        <Stack
-          screenOptions={{
-            contentStyle: { backgroundColor: '#F8FAFC' },
-            headerShadowVisible: false,
-            headerStyle: { backgroundColor: '#F8FAFC' },
-          }}
-        />
-      </TopoStoreProvider>
+      <KeyboardProvider>
+        <SafeAreaProvider>
+          <TopoStoreProvider>
+            <StatusBar style="dark" />
+            <Stack
+              screenOptions={{
+                contentStyle: { backgroundColor: '#F8FAFC' },
+                headerShadowVisible: false,
+                headerStyle: { backgroundColor: '#F8FAFC' },
+              }}
+            />
+          </TopoStoreProvider>
+        </SafeAreaProvider>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }

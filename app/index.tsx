@@ -1,157 +1,236 @@
-import { router } from 'expo-router';
-import { useState } from 'react';
-import { FlatList, StyleSheet, Text, TextInput, View } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { Stack, router } from 'expo-router';
+import { useMemo, useState } from 'react';
+import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { useTopoStore } from '@/state/TopoStore';
-import { Button } from '@/ui/Button';
-import { interStyle } from '@/ui/fonts';
+import { CragCard } from '@/ui/CragCard';
+import { NameEntrySheet } from '@/ui/NameEntrySheet';
 import { Screen } from '@/ui/Screen';
+import { ShareSheet, type ShareScope } from '@/ui/ShareSheet';
+import { useTopoStore } from '@/state/TopoStore';
+import { interStyle } from '@/ui/fonts';
 
-export default function ProjectListScreen() {
-  const { summaries, isReady, storageError, createProject } = useTopoStore();
-  const [name, setName] = useState('New crag topo');
-  const [isCreating, setIsCreating] = useState(false);
+export default function CragsListScreen() {
+  const { cragSummaries, isReady, storageError, createCrag } = useTopoStore();
+  const [search, setSearch] = useState('');
+  const [showNewCrag, setShowNewCrag] = useState(false);
+  const [shareScope, setShareScope] = useState<ShareScope>();
 
-  async function handleCreateProject() {
-    setIsCreating(true);
-    try {
-      const project = await createProject(name.trim() || 'Untitled topo');
-      router.push(`/projects/${project.id}`);
-    } finally {
-      setIsCreating(false);
-    }
+  const hasNoCrags = isReady && cragSummaries.length === 0;
+  const isSearching = search.trim().length > 0;
+
+  const filtered = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    if (!needle) return cragSummaries;
+    return cragSummaries.filter((crag) => crag.name.toLowerCase().includes(needle));
+  }, [cragSummaries, search]);
+
+  const hasNoSearchResults = isReady && !hasNoCrags && isSearching && filtered.length === 0;
+
+  async function handleCreate(name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const { crag } = await createCrag(trimmed);
+    setShowNewCrag(false);
+    router.push(`/crags/${crag.id}`);
   }
 
   return (
-    <Screen style={styles.screen} testID="project-list:screen">
-      <View style={styles.hero}>
-        <Text style={styles.eyebrow} testID="project-list:eyebrow">Offline topo builder</Text>
-        <Text style={styles.title}>Stamp bolts, anchors, starts, labels, and route lines in the field.</Text>
-        <Text style={styles.subtitle}>Everything stays local to the device for this MVP.</Text>
+    <Screen style={styles.screen} testID="crags:screen">
+      <Stack.Screen
+        options={{
+          title: 'Crags',
+          headerRight: () => (
+            <Pressable
+              accessibilityLabel="Open settings"
+              accessibilityRole="button"
+              hitSlop={12}
+              onPress={() => router.push('/settings')}
+              style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
+              testID="crags:settings-button"
+            >
+              <Ionicons color="#111827" name="settings-outline" size={22} />
+            </Pressable>
+          ),
+        }}
+      />
+
+      <View style={[styles.searchWrap, hasNoCrags && styles.searchWrapDisabled]}>
+        <Ionicons
+          color={hasNoCrags ? '#9CA3AF' : '#6B7280'}
+          name="search"
+          size={18}
+          style={styles.searchIcon}
+        />
+        <TextInput
+          accessibilityLabel="Search crags"
+          accessibilityState={{ disabled: hasNoCrags }}
+          editable={!hasNoCrags}
+          onChangeText={setSearch}
+          placeholder="Search crags…"
+          placeholderTextColor="#9CA3AF"
+          style={[styles.searchInput, hasNoCrags && styles.searchInputDisabled]}
+          testID="crags:search-input"
+          value={search}
+        />
       </View>
 
-      <View style={styles.card} testID="project-list:create-card">
-        <Text style={styles.cardTitle}>Create a topo</Text>
-        {storageError ? <Text style={styles.error}>{storageError}</Text> : null}
-        <TextInput
-          onChangeText={setName}
-          placeholder="Topo name"
-          style={styles.input}
-          testID="project-list:name-input"
-          value={name}
-        />
-        <Button
-          disabled={!isReady || isCreating}
-          label={isCreating ? 'Creating...' : 'Create topo'}
-          onPress={handleCreateProject}
-          testID="project-list:create-button"
-        />
-      </View>
+      {storageError ? <Text style={styles.error}>{storageError}</Text> : null}
 
       <FlatList
-        ListEmptyComponent={
-          <Text style={styles.empty}>{isReady ? 'No local topos yet.' : 'Preparing offline storage...'}</Text>
-        }
         contentContainerStyle={styles.listContent}
-        data={summaries}
+        data={filtered}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View style={styles.projectCard}>
-            <View style={styles.projectCopy}>
-              <Text style={styles.projectTitle}>{item.name}</Text>
-              <Text style={styles.projectMeta}>
-                {item.photoCount} photos · {item.routeCount} routes
+        ListEmptyComponent={
+          !isReady ? (
+            <View style={styles.empty}>
+              <Text style={styles.emptyBody}>Preparing local storage…</Text>
+            </View>
+          ) : hasNoSearchResults ? (
+            <View style={styles.empty} testID="crags:search-empty">
+              <Text style={styles.emptyTitle}>No matching crags</Text>
+              <Text style={styles.emptyBody}>Try a different search term.</Text>
+            </View>
+          ) : hasNoCrags ? (
+            <View style={styles.empty} testID="crags:empty">
+              <Text style={styles.emptyTitle}>No crags yet</Text>
+              <Text style={styles.emptyBody}>
+                Tap “New crag” below to start documenting routes at your local crag.
               </Text>
             </View>
-            <Button label="Open" onPress={() => router.push(`/projects/${item.id}`)} variant="secondary" />
-          </View>
+          ) : null
+        }
+        renderItem={({ item }) => (
+          <CragCard
+            onOpen={() => router.push(`/crags/${item.id}`)}
+            onShare={() => setShareScope({ kind: 'crag', cragId: item.id, name: item.name })}
+            summary={item}
+          />
         )}
       />
+
+      <Pressable
+        accessibilityLabel="New crag"
+        accessibilityRole="button"
+        disabled={!isReady}
+        hitSlop={8}
+        onPress={() => setShowNewCrag(true)}
+        style={({ pressed }) => [styles.fab, pressed && styles.fabPressed, !isReady && styles.fabDisabled]}
+        testID="crags:new-crag-fab"
+      >
+        <Ionicons color="#FFFFFF" name="add" size={28} />
+        <Text style={styles.fabLabel}>New crag</Text>
+      </Pressable>
+
+      <NameEntrySheet
+        confirmLabel="Create crag"
+        defaultValue=""
+        onCancel={() => setShowNewCrag(false)}
+        onConfirm={handleCreate}
+        placeholder="e.g. Barrier Bluffs"
+        testID="crags:new-crag-sheet"
+        title="New crag"
+        visible={showNewCrag}
+      />
+
+      <ShareSheet onClose={() => setShareScope(undefined)} scope={shareScope} />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    gap: 12,
-    padding: 16,
-  },
-  cardTitle: {
-    color: '#111827',
-    fontSize: 18,
-    ...interStyle('800'),
-  },
   empty: {
-    color: '#6B7280',
-    paddingVertical: 24,
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 24,
+    paddingVertical: 48,
+  },
+  emptyBody: {
+    color: '#4B5563',
+    fontSize: 15,
+    lineHeight: 22,
     textAlign: 'center',
+  },
+  emptyTitle: {
+    color: '#111827',
+    fontSize: 20,
+    ...interStyle('800'),
   },
   error: {
     color: '#B91C1C',
     fontSize: 14,
-    lineHeight: 20,
+    paddingHorizontal: 18,
   },
-  eyebrow: {
-    color: '#2563EB',
-    fontSize: 13,
-    ...interStyle('900'),
-    letterSpacing: 0.7,
-    textTransform: 'uppercase',
+  fab: {
+    alignItems: 'center',
+    backgroundColor: '#1F2937',
+    borderRadius: 999,
+    bottom: 28,
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 22,
+    paddingVertical: 14,
+    position: 'absolute',
+    right: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 6,
   },
-  hero: {
-    gap: 10,
+  fabDisabled: {
+    opacity: 0.5,
   },
-  input: {
-    backgroundColor: '#F3F4F6',
-    borderRadius: 14,
-    fontSize: 16,
-    minHeight: 48,
-    paddingHorizontal: 14,
+  fabLabel: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    ...interStyle('700'),
+  },
+  fabPressed: {
+    opacity: 0.85,
+  },
+  iconButton: {
+    alignItems: 'center',
+    height: 36,
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  iconButtonPressed: {
+    opacity: 0.6,
   },
   listContent: {
-    gap: 12,
-    paddingBottom: 32,
-    paddingTop: 18,
-  },
-  projectCard: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    flexDirection: 'row',
-    gap: 12,
-    justifyContent: 'space-between',
-    padding: 14,
-  },
-  projectCopy: {
-    flex: 1,
-  },
-  projectMeta: {
-    color: '#6B7280',
-    marginTop: 4,
-  },
-  projectTitle: {
-    color: '#111827',
-    fontSize: 17,
-    ...interStyle('800'),
+    gap: 10,
+    paddingBottom: 120,
+    paddingHorizontal: 18,
+    paddingTop: 4,
   },
   screen: {
-    alignSelf: 'center',
-    gap: 18,
-    maxWidth: 920,
-    padding: 18,
-    width: '100%',
+    backgroundColor: '#F8FAFC',
+    flex: 1,
   },
-  subtitle: {
-    color: '#4B5563',
-    fontSize: 16,
-    lineHeight: 23,
+  searchIcon: {
+    marginRight: 8,
   },
-  title: {
+  searchInput: {
     color: '#111827',
-    fontSize: 30,
-    ...interStyle('900'),
-    lineHeight: 36,
+    flex: 1,
+    fontSize: 16,
+    paddingVertical: 0,
+  },
+  searchInputDisabled: {
+    color: '#9CA3AF',
+  },
+  searchWrap: {
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    flexDirection: 'row',
+    marginHorizontal: 18,
+    marginTop: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  searchWrapDisabled: {
+    opacity: 0.6,
   },
 });
