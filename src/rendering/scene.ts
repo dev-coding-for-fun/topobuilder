@@ -55,9 +55,9 @@ export type RenderRoundedRectItem = {
 };
 
 /**
- * Weights that the Skia text renderer is set up to handle. Keep this in sync
- * with the font map in `SkiaTopoRenderer.tsx`; adding a new weight here will
- * force the renderer's exhaustive switch to be updated.
+ * Weights that Skia text rendering is set up to handle. Keep this in sync with
+ * `SKIA_INTER_FONT_BY_WEIGHT`; adding a new weight here forces the font registry
+ * to provide the matching bundled face.
  */
 export type RenderTextFontWeight = '400' | '700';
 

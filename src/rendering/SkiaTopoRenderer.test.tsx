@@ -4,6 +4,7 @@ import { Skia, useFont } from '@shopify/react-native-skia';
 
 import type { TopoRenderItem } from './scene';
 import { SkiaTopoScene, SkiaTopoStaticScene } from './SkiaTopoRenderer';
+import { SKIA_INTER_FONT_BY_WEIGHT } from './skiaFontRegistry';
 
 const textItem: TopoRenderItem = {
   id: 'label-1:text:0',
@@ -48,6 +49,10 @@ describe('SkiaTopoScene web font fallback', () => {
 
     try {
       expect(() => render(<SkiaTopoScene items={[textItem]} />)).not.toThrow();
+      expect(useFont).toHaveBeenCalledWith(
+        SKIA_INTER_FONT_BY_WEIGHT[textItem.fontWeight],
+        textItem.fontSize,
+      );
       expect(Skia.FontMgr.System).not.toHaveBeenCalled();
     } finally {
       Object.defineProperty(Platform, 'OS', { value: originalOS, configurable: true });

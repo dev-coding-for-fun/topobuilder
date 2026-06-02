@@ -2,6 +2,7 @@ import { Asset } from 'expo-asset';
 import { Skia } from '@shopify/react-native-skia';
 
 import { clearExportSkiaTypefacesForTests, loadExportSkiaTypefaces } from './exportFonts';
+import { SKIA_INTER_FONT_BY_WEIGHT } from './skiaFontRegistry';
 
 jest.mock('expo-asset', () => ({
   Asset: {
@@ -23,14 +24,13 @@ describe('loadExportSkiaTypefaces', () => {
   it('loads bundled Inter font assets into Skia typefaces for offscreen export text', async () => {
     const typefaces = await loadExportSkiaTypefaces();
 
-    expect(Asset.fromModule).toHaveBeenCalledWith(400);
-    expect(Asset.fromModule).toHaveBeenCalledWith(700);
-    expect(Skia.Data.fromURI).toHaveBeenCalledWith('file://font-400.ttf');
-    expect(Skia.Data.fromURI).toHaveBeenCalledWith('file://font-700.ttf');
-    expect(Skia.Typeface.MakeFreeTypeFaceFromData).toHaveBeenCalledTimes(2);
-    expect(typefaces).toEqual({
-      '400': 'sk-typeface',
-      '700': 'sk-typeface',
+    Object.entries(SKIA_INTER_FONT_BY_WEIGHT).forEach(([weight, fontModule]) => {
+      expect(Asset.fromModule).toHaveBeenCalledWith(fontModule);
+      expect(Skia.Data.fromURI).toHaveBeenCalledWith(`file://font-${fontModule}.ttf`);
+      expect(typefaces).toHaveProperty(weight, 'sk-typeface');
     });
+    expect(Skia.Typeface.MakeFreeTypeFaceFromData).toHaveBeenCalledTimes(
+      Object.keys(SKIA_INTER_FONT_BY_WEIGHT).length,
+    );
   });
 });
