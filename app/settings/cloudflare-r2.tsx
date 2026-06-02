@@ -1,7 +1,6 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { Stack, router } from 'expo-router';
+import { Stack } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Button } from '@/ui/Button';
 import { Screen } from '@/ui/Screen';
@@ -15,21 +14,10 @@ export default function CloudflareR2Screen() {
   const [endpoint, setEndpoint] = useState('');
 
   return (
-    <Screen style={styles.screen} testID="settings:r2-screen">
+    <Screen edges={['left', 'right', 'bottom']} style={styles.screen} testID="settings:r2-screen">
       <Stack.Screen
         options={{
           title: 'Cloudflare R2',
-          headerLeft: () => (
-            <Pressable
-              accessibilityLabel="Back"
-              accessibilityRole="button"
-              hitSlop={12}
-              onPress={() => router.back()}
-              style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
-            >
-              <Ionicons color="#111827" name="arrow-back" size={22} />
-            </Pressable>
-          ),
         }}
       />
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -132,12 +120,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     ...interStyle('700'),
   },
-  iconButton: {
-    alignItems: 'center',
-    height: 36,
-    justifyContent: 'center',
-    paddingHorizontal: 8,
-  },
   input: {
     backgroundColor: '#FFFFFF',
     borderColor: '#E5E7EB',
@@ -153,9 +135,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     paddingBottom: 6,
-  },
-  pressed: {
-    opacity: 0.6,
   },
   screen: {
     backgroundColor: '#F8FAFC',

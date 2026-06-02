@@ -36,7 +36,7 @@ export default function CragsListScreen() {
   }
 
   return (
-    <Screen style={styles.screen} testID="crags:screen">
+    <Screen edges={['left', 'right', 'bottom']} style={styles.screen} testID="crags:screen">
       <Stack.Screen
         options={{
           title: 'Crags',

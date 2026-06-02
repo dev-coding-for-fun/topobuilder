@@ -83,17 +83,6 @@ export default function CragDetailScreen() {
       <Stack.Screen
         options={{
           title: crag.name,
-          headerLeft: () => (
-            <Pressable
-              accessibilityLabel="Back to crags"
-              accessibilityRole="button"
-              hitSlop={12}
-              onPress={() => router.replace('/')}
-              style={({ pressed }) => [styles.iconButton, pressed && styles.iconPressed]}
-            >
-              <Ionicons color="#111827" name="arrow-back" size={22} />
-            </Pressable>
-          ),
           headerRight: () => (
             <View style={styles.headerActions}>
               <Pressable

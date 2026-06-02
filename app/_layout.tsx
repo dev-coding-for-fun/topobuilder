@@ -74,8 +74,10 @@ export default function RootLayout() {
             <Stack
               screenOptions={{
                 contentStyle: { backgroundColor: '#F8FAFC' },
+                headerBackButtonDisplayMode: 'minimal',
                 headerShadowVisible: false,
                 headerStyle: { backgroundColor: '#F8FAFC' },
+                headerTintColor: '#111827',
               }}
             />
           </TopoStoreProvider>
