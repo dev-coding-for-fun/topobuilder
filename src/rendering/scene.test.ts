@@ -120,6 +120,35 @@ describe('buildTopoRenderScene', () => {
     });
   });
 
+  it('keeps artifact label backdrops proportional when downscaling high-resolution photos', () => {
+    const scene = buildTopoRenderScene({
+      annotations: [
+        {
+          ...base,
+          id: 'label-1',
+          kind: 'label',
+          label: 'Pitch 1',
+          labelFontSize: 80,
+          point: { x: 0.3, y: 0.4 },
+        },
+      ],
+      size: { width: 2400, height: 1800 },
+      sourcePhoto: { width: 4000, height: 3000 },
+      target: 'artifact',
+    });
+
+    expect(scene.find((item) => item.id === 'label-1:text:0')).toMatchObject({
+      kind: 'text',
+      fontSize: 48,
+      text: 'Pitch 1',
+    });
+    expect(scene.find((item) => item.id === 'label-1:backdrop')).toMatchObject({
+      kind: 'roundedRect',
+      height: 74.88,
+      width: 215.04,
+    });
+  });
+
   it('creates smoothed path data from render points', () => {
     expect(
       smoothedRenderPath([

@@ -2,9 +2,7 @@
 
 ## Purpose
 Define local database schema versioning, the v0 to v1 wipe baseline, and the forward-only migration policy.
-
 ## Requirements
-
 ### Requirement: Versioned Schema Using PRAGMA user_version
 The system SHALL track the persistent schema version using SQLite's built-in `PRAGMA user_version`. The codebase SHALL define a constant `CURRENT_SCHEMA_VERSION` and a forward-only migration runner that, on every boot after opening the database, walks from the stored version up to `CURRENT_SCHEMA_VERSION` by applying one step per integer. The new baseline established by this change is **version 1**.
 
@@ -41,3 +39,23 @@ For all schema changes after v1, the system SHALL implement real, data-preservin
 #### Scenario: Future migration preserves data
 - **WHEN** a future schema change introduces version `N+1` for some `N >= 1`
 - **THEN** the corresponding migration step is implemented as a transformation that preserves user data, not a wipe
+
+### Requirement: V1 To V2 Sort Order Migration
+The migration step from schema version 1 to schema version 2 SHALL preserve existing user data while adding persistent `sort_order` fields to Crags, Sectors, Topos, and Routes.
+
+#### Scenario: Migration adds sort order columns
+- **WHEN** the app boots against a database whose `PRAGMA user_version` is `1`
+- **THEN** the migration adds `sort_order` columns for Crags, Sectors, Topos, and Routes and advances `PRAGMA user_version` to `2`
+
+#### Scenario: Migration backfills current Crag order
+- **WHEN** existing Crags are migrated to schema version 2
+- **THEN** each Crag receives a sort order value based on the app's current Crag display order before the migration
+
+#### Scenario: Migration backfills nested order within parents
+- **WHEN** existing Sectors, Topos, and Routes are migrated to schema version 2
+- **THEN** each item receives a sort order value based on its current display order within its parent
+
+#### Scenario: Migration preserves existing content
+- **WHEN** the v1 to v2 migration completes
+- **THEN** existing Crags, Sectors, Topos, Routes, Annotations, and photo references remain present
+

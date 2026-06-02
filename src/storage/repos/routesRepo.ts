@@ -14,6 +14,7 @@ type RouteRow = {
   fa: string | null;
   description: string | null;
   color: string;
+  sort_order: number;
   created_at: string;
   updated_at: string;
 };
@@ -30,6 +31,7 @@ function mapRoute(row: RouteRow): Route {
     fa: row.fa ?? undefined,
     description: row.description ?? undefined,
     color: row.color,
+    sortOrder: row.sort_order,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -37,7 +39,7 @@ function mapRoute(row: RouteRow): Route {
 
 export async function listRoutesForTopo(db: TopoDatabase, topoId: string): Promise<Route[]> {
   const rows = await db.getAllAsync<RouteRow>(
-    'SELECT * FROM routes WHERE topo_id = ? ORDER BY created_at ASC',
+    'SELECT * FROM routes WHERE topo_id = ? ORDER BY sort_order ASC, created_at ASC, id ASC',
     topoId,
   );
   return rows.map(mapRoute);
@@ -58,6 +60,7 @@ export async function createRoute(
   >,
 ): Promise<Route> {
   const now = nowIso();
+  const sortOrder = await nextRouteSortOrder(db, input.topoId);
   const route: Route = {
     id: createId('route'),
     topoId: input.topoId,
@@ -71,12 +74,13 @@ export async function createRoute(
     description: input.description,
     createdAt: now,
     updatedAt: now,
+    sortOrder,
   };
 
   await db.runAsync(
     `INSERT INTO routes
-        (id, topo_id, name, grade, route_type, bolt_count, length_m, fa, description, color, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, topo_id, name, grade, route_type, bolt_count, length_m, fa, description, color, sort_order, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     route.id,
     route.topoId,
     route.name,
@@ -87,6 +91,7 @@ export async function createRoute(
     route.fa ?? null,
     route.description ?? null,
     route.color,
+    route.sortOrder,
     route.createdAt,
     route.updatedAt,
   );
@@ -121,4 +126,12 @@ export async function updateRoute(db: TopoDatabase, route: Route): Promise<void>
  */
 export async function deleteRoute(db: TopoDatabase, id: string): Promise<void> {
   await db.runAsync('DELETE FROM routes WHERE id = ?', id);
+}
+
+async function nextRouteSortOrder(db: TopoDatabase, topoId: string): Promise<number> {
+  const row = await db.getFirstAsync<{ next_sort_order: number | null }>(
+    'SELECT COALESCE(MAX(sort_order) + 1, 0) AS next_sort_order FROM routes WHERE topo_id = ?',
+    topoId,
+  );
+  return row?.next_sort_order ?? 0;
 }

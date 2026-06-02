@@ -1,22 +1,4 @@
-# share-placeholders Specification
-
-## Purpose
-Define placeholder share affordances for Crags, Sectors, and Topos without implementing export or sync behavior.
-## Requirements
-### Requirement: Share Affordance On Three Scopes
-The system SHALL render a share affordance (share icon or equivalent) on the Crag header, every Sector header, and every Topo row in the Crag detail screen.
-
-#### Scenario: Crag share affordance
-- **WHEN** the user views a Crag detail screen
-- **THEN** a share affordance is visible on the Crag header
-
-#### Scenario: Sector share affordance
-- **WHEN** the user views a Sector header on the Crag detail screen
-- **THEN** a share affordance is visible on the Sector header
-
-#### Scenario: Topo share affordance
-- **WHEN** the user views a Topo row on the Crag detail screen
-- **THEN** a share affordance is visible on the Topo row
+## MODIFIED Requirements
 
 ### Requirement: Share Placeholder Sheet
 Tapping any share affordance SHALL open the same share bottom sheet. The sheet SHALL display copy identifying the scope being shared (Crag name, Sector name, or Topo name), retain placeholder connected-service rows when no services are connected, expose PDF export for that scope, and provide a "Close" action that dismisses the sheet.
@@ -40,4 +22,3 @@ Tapping any share affordance SHALL open the same share bottom sheet. The sheet S
 #### Scenario: Export errors stay in the sheet
 - **WHEN** PDF generation or sharing fails
 - **THEN** the share sheet displays the error without dismissing automatically
-

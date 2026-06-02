@@ -39,16 +39,19 @@ jest.mock('@shopify/react-native-skia', () => ({
       }),
       MakeFromSVGString: jest.fn(() => 'sk-path'),
     },
+    Typeface: {
+      MakeFreeTypeFaceFromData: jest.fn(() => 'sk-typeface'),
+    },
   },
   ImageFormat: {
     JPEG: 3,
     PNG: 4,
     WEBP: 6,
   },
-  useFont: (_source: unknown, fontSize = 16) => ({
+  useFont: jest.fn((_source: unknown, fontSize = 16) => ({
     fontSize,
     measureText: jest.fn((text = '') => ({ width: String(text).length * fontSize * 0.5 })),
-  }),
+  })),
   useImage: () => null,
 }));
 

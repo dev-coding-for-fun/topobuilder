@@ -9,6 +9,7 @@ import {
   Text as SkiaText,
   useFont,
   type SkImage,
+  type SkTypeface,
 } from '@shopify/react-native-skia';
 import { Inter_400Regular, Inter_700Bold } from '@expo-google-fonts/inter';
 
@@ -16,14 +17,15 @@ import type { RenderTextFontWeight, TopoRenderItem } from './scene';
 import { smoothedRenderPath } from './scene';
 
 /**
- * Only the weights listed in `RenderTextFontWeight` are wired up here. If a
- * new weight is added to that union, TypeScript will require a matching entry
- * in this map – we deliberately avoid a silent fallback to regular.
+ * Mounted editor renders can use Skia's async font hook. Offscreen export
+ * renders pass preloaded typefaces into `SkiaTopoStaticScene` instead.
  */
 const SKIA_FONT_BY_WEIGHT = {
   '400': Inter_400Regular,
   '700': Inter_700Bold,
 } satisfies Record<RenderTextFontWeight, Parameters<typeof useFont>[0]>;
+
+export type SkiaTextTypefaces = Partial<Record<RenderTextFontWeight, SkTypeface>>;
 
 export function SkiaTopoImage({
   image,
@@ -55,6 +57,22 @@ export function SkiaTopoScene({
   );
 }
 
+export function SkiaTopoStaticScene({
+  items,
+  typefaces,
+}: {
+  items: TopoRenderItem[];
+  typefaces?: SkiaTextTypefaces;
+}) {
+  return (
+    <Group>
+      {items.map((item) => (
+        <SkiaStaticRenderItem item={item} key={item.id} typefaces={typefaces} />
+      ))}
+    </Group>
+  );
+}
+
 function SkiaRenderItem({
   item,
   routeMarkerFont,
@@ -62,6 +80,36 @@ function SkiaRenderItem({
   item: TopoRenderItem;
   routeMarkerFont?: ReturnType<typeof useFont>;
 }) {
+  const primitive = primitiveRenderItem(item);
+  if (primitive) {
+    return primitive;
+  }
+
+  if (item.kind === 'text') {
+    return <SkiaTextRenderItem item={item} />;
+  }
+  return null;
+}
+
+function SkiaStaticRenderItem({
+  item,
+  typefaces,
+}: {
+  item: TopoRenderItem;
+  typefaces?: SkiaTextTypefaces;
+}) {
+  const primitive = primitiveRenderItem(item);
+  if (primitive) {
+    return primitive;
+  }
+
+  if (item.kind === 'text') {
+    return <SkiaStaticTextRenderItem item={item} typefaces={typefaces} />;
+  }
+  return null;
+}
+
+function primitiveRenderItem(item: TopoRenderItem) {
   if (item.kind === 'path') {
     const path = Skia.Path.MakeFromSVGString(smoothedRenderPath(item.points)) ?? Skia.Path.Make();
     return (
@@ -114,11 +162,11 @@ function SkiaRenderItem({
     );
   }
 
-  return <SkiaTextRenderItem item={item} />;
+  return undefined;
 }
 
 function SkiaTextRenderItem({ item }: { item: Extract<TopoRenderItem, { kind: 'text' }> }) {
-  const font = useFont(SKIA_FONT_BY_WEIGHT[item.fontWeight], item.fontSize);
+  const font = useFont(SKIA_FONT_BY_WEIGHT[item.fontWeight], item.fontSize) ?? systemFont(item);
   if (!font) {
     return null;
   }
@@ -133,4 +181,43 @@ function SkiaTextRenderItem({ item }: { item: Extract<TopoRenderItem, { kind: 't
       y={item.y}
     />
   );
+}
+
+function SkiaStaticTextRenderItem({
+  item,
+  typefaces,
+}: {
+  item: Extract<TopoRenderItem, { kind: 'text' }>;
+  typefaces?: SkiaTextTypefaces;
+}) {
+  const font = bundledFont(item, typefaces) ?? systemFont(item);
+  if (!font) {
+    return null;
+  }
+
+  const textWidth = item.textAnchor === 'middle' ? font.measureText(item.text).width : 0;
+  return (
+    <SkiaText
+      color={item.color}
+      font={font}
+      text={item.text}
+      x={item.textAnchor === 'middle' ? item.x - textWidth / 2 : item.x}
+      y={item.y}
+    />
+  );
+}
+
+function bundledFont(
+  item: Extract<TopoRenderItem, { kind: 'text' }>,
+  typefaces?: SkiaTextTypefaces,
+) {
+  const typeface = typefaces?.[item.fontWeight];
+  return typeface ? Skia.Font(typeface, item.fontSize) : undefined;
+}
+
+function systemFont(item: Extract<TopoRenderItem, { kind: 'text' }>) {
+  const typeface = Skia.FontMgr.System().matchFamilyStyle('System', {
+    weight: item.fontWeight === '700' ? 700 : 400,
+  });
+  return Skia.Font(typeface ?? undefined, item.fontSize);
 }

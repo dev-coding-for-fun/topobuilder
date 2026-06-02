@@ -7,21 +7,10 @@ import { interStyle } from '@/ui/fonts';
 
 export default function SettingsScreen() {
   return (
-    <Screen style={styles.screen} testID="settings:screen">
+    <Screen edges={['left', 'right', 'bottom']} style={styles.screen} testID="settings:screen">
       <Stack.Screen
         options={{
           title: 'Settings',
-          headerLeft: () => (
-            <Pressable
-              accessibilityLabel="Back"
-              accessibilityRole="button"
-              hitSlop={12}
-              onPress={() => router.back()}
-              style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
-            >
-              <Ionicons color="#111827" name="arrow-back" size={22} />
-            </Pressable>
-          ),
         }}
       />
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -162,12 +151,6 @@ function ToggleRow({
 }
 
 const styles = StyleSheet.create({
-  iconButton: {
-    alignItems: 'center',
-    height: 36,
-    justifyContent: 'center',
-    paddingHorizontal: 8,
-  },
   pressed: {
     opacity: 0.6,
   },

@@ -2,9 +2,7 @@
 
 ## Purpose
 Define Sector-level organization inside Crags, including mandatory Topo parenting and Sector lifecycle behavior.
-
 ## Requirements
-
 ### Requirement: Sector Entity
 The system SHALL model a mid-level container called a **Sector** that belongs to exactly one Crag and owns zero or more Topos. A Sector has an `id`, a `crag_id`, a `name`, an optional `description`, and `created_at` / `updated_at` timestamps.
 
@@ -59,3 +57,19 @@ Each Sector header SHALL expose its own overflow menu (`...`) containing at mini
 #### Scenario: Sector menu is reachable
 - **WHEN** the user views a Sector header on a Crag detail screen
 - **THEN** an overflow affordance is visible on the Sector header and opens a menu listing Rename and Delete actions
+
+### Requirement: Sector Sort Order
+The system SHALL store a persistent sort order value for each Sector within its parent Crag and SHALL render Sector lists using that order with stable fallback ordering.
+
+#### Scenario: New Sector receives parent-scoped sort order
+- **WHEN** the user creates a Sector inside a Crag
+- **THEN** the new Sector receives a sort order value suitable for placing it after existing Sectors in that Crag
+
+#### Scenario: Crag detail renders Sectors by sort order
+- **WHEN** the Crag detail screen renders multiple Sectors
+- **THEN** the Sectors appear by persisted sort order within the Crag
+
+#### Scenario: Sector export uses Sector sort order
+- **WHEN** the user exports a Crag
+- **THEN** the exported guidebook lists Sectors by persisted sort order within the Crag
+

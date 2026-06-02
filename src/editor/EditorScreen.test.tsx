@@ -161,6 +161,7 @@ function bundleFromProject(p: TopoProject): TopoEditorBundle {
       photoUri: photo?.uri,
       photoWidth: photo?.width,
       photoHeight: photo?.height,
+      sortOrder: 0,
       createdAt: p.createdAt,
       updatedAt: p.updatedAt,
     },

@@ -8,6 +8,7 @@ type SectorRow = {
   crag_id: string;
   name: string;
   description: string | null;
+  sort_order: number;
   created_at: string;
   updated_at: string;
 };
@@ -18,6 +19,7 @@ function mapSector(row: SectorRow): Sector {
     cragId: row.crag_id,
     name: row.name,
     description: row.description ?? undefined,
+    sortOrder: row.sort_order,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -25,7 +27,7 @@ function mapSector(row: SectorRow): Sector {
 
 export async function listSectorsForCrag(db: TopoDatabase, cragId: string): Promise<Sector[]> {
   const rows = await db.getAllAsync<SectorRow>(
-    'SELECT * FROM sectors WHERE crag_id = ? ORDER BY created_at ASC',
+    'SELECT * FROM sectors WHERE crag_id = ? ORDER BY sort_order ASC, created_at ASC, id ASC',
     cragId,
   );
   return rows.map(mapSector);
@@ -41,22 +43,25 @@ export async function createSector(
   input: { cragId: string; name: string; description?: string },
 ): Promise<Sector> {
   const now = nowIso();
+  const sortOrder = await nextSectorSortOrder(db, input.cragId);
   const sector: Sector = {
     id: createId('sector'),
     cragId: input.cragId,
     name: input.name,
     description: input.description,
+    sortOrder,
     createdAt: now,
     updatedAt: now,
   };
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      'INSERT INTO sectors (id, crag_id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO sectors (id, crag_id, name, description, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
       sector.id,
       sector.cragId,
       sector.name,
       sector.description ?? null,
+      sector.sortOrder,
       sector.createdAt,
       sector.updatedAt,
     );
@@ -114,4 +119,12 @@ export async function listPhotoUrisForSector(db: TopoDatabase, id: string): Prom
     id,
   );
   return rows.map((row) => row.photo_uri).filter((uri): uri is string => Boolean(uri));
+}
+
+async function nextSectorSortOrder(db: TopoDatabase, cragId: string): Promise<number> {
+  const row = await db.getFirstAsync<{ next_sort_order: number | null }>(
+    'SELECT COALESCE(MAX(sort_order) + 1, 0) AS next_sort_order FROM sectors WHERE crag_id = ?',
+    cragId,
+  );
+  return row?.next_sort_order ?? 0;
 }

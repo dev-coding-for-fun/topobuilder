@@ -1,9 +1,9 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import type { TopoEditorBundle } from '@/domain/types';
-import { exportTopoPdf } from '@/export/pdf';
+import type { GuidebookExportBundle, GuidebookExportRequest } from '@/domain/types';
+import { exportGuidebookPdf } from '@/export/pdf';
 import { useTopoStore } from '@/state/TopoStore';
 import { BottomSheet } from '@/ui/BottomSheet';
 import { Button } from '@/ui/Button';
@@ -25,77 +25,52 @@ const KIND_COPY: Record<ShareScope['kind'], string> = {
   topo: 'topo',
 };
 
-const IS_WEB = Platform.OS === 'web';
-
 export function ShareSheet({ scope, onClose }: Props) {
-  const { loadTopoEditor } = useTopoStore();
-  const [bundle, setBundle] = useState<TopoEditorBundle>();
+  const { loadGuidebookExport } = useTopoStore();
+  const [bundle, setBundle] = useState<GuidebookExportBundle>();
   const [isExporting, setIsExporting] = useState(false);
   const [pdfUri, setPdfUri] = useState<string>();
   const [exportError, setExportError] = useState<string>();
 
-  const topoId = scope?.kind === 'topo' ? scope.topoId : undefined;
-
-  // Load the topo bundle so we know whether a PDF can be produced (and have the
-  // data ready to render one). Reset transient export state whenever the scope
-  // changes so a previous topo's result never bleeds into a new sheet.
+  // Load a complete export bundle up front so the PDF action can use the same
+  // one-column guidebook renderer for Crag, Sector, and Topo scopes.
   useEffect(() => {
     setBundle(undefined);
     setPdfUri(undefined);
     setExportError(undefined);
     setIsExporting(false);
-    if (!topoId) return;
+    if (!scope) return;
     let active = true;
-    void loadTopoEditor(topoId).then((next) => {
-      if (active) setBundle(next);
-    });
+    void loadGuidebookExport(guidebookRequestForScope(scope))
+      .then((next) => {
+        if (active) setBundle(next);
+      })
+      .catch((error) => {
+        if (active) {
+          setExportError(error instanceof Error ? error.message : 'Could not load export data.');
+        }
+      });
     return () => {
       active = false;
     };
-  }, [loadTopoEditor, topoId]);
-
-  const photo =
-    bundle?.topo.photoUri && bundle.topo.photoWidth && bundle.topo.photoHeight
-      ? {
-          id: bundle.topo.id,
-          topoId: bundle.topo.id,
-          uri: bundle.topo.photoUri,
-          width: bundle.topo.photoWidth,
-          height: bundle.topo.photoHeight,
-          createdAt: bundle.topo.createdAt,
-        }
-      : undefined;
+  }, [loadGuidebookExport, scope]);
 
   const isTopoScope = scope?.kind === 'topo';
-  const pdfEnabled = isTopoScope && !IS_WEB && Boolean(photo) && !isExporting;
+  const pdfEnabled = Boolean(scope) && Boolean(bundle) && !isExporting;
 
   function pdfSubtitle(): string {
     if (isExporting) return 'Generating…';
     if (pdfUri) return 'Saved — tap to generate again';
-    if (IS_WEB) return 'Not available on web yet';
-    if (!isTopoScope) return 'Available on individual topos';
-    if (!bundle) return 'Loading topo…';
-    if (!photo) return 'Add a photo to this topo first';
-    return `${bundle.annotations.length} annotation${bundle.annotations.length === 1 ? '' : 's'} included`;
+    if (!bundle) return 'Loading export data…';
+    return 'Guidebook-style PDF';
   }
 
   async function handleExportPdf() {
-    if (!photo || !bundle) return;
+    if (!bundle) return;
     setIsExporting(true);
     setExportError(undefined);
     try {
-      // Synthesize the legacy TopoProject shape `exportTopoPdf` expects.
-      const legacyProject = {
-        id: bundle.topo.id,
-        name: bundle.topo.name,
-        description: bundle.topo.description,
-        createdAt: bundle.topo.createdAt,
-        updatedAt: bundle.topo.updatedAt,
-        photos: [photo],
-        routes: bundle.routes,
-        annotations: bundle.annotations,
-      } as Parameters<typeof exportTopoPdf>[0];
-      const uri = await exportTopoPdf(legacyProject, photo as Parameters<typeof exportTopoPdf>[1]);
+      const uri = await exportGuidebookPdf(bundle);
       setPdfUri(uri);
     } catch (error) {
       setExportError(error instanceof Error ? error.message : 'Could not generate the PDF.');
@@ -177,6 +152,17 @@ export function ShareSheet({ scope, onClose }: Props) {
       </View>
     </BottomSheet>
   );
+}
+
+function guidebookRequestForScope(scope: ShareScope): GuidebookExportRequest {
+  switch (scope.kind) {
+    case 'crag':
+      return { kind: 'crag', cragId: scope.cragId };
+    case 'sector':
+      return { kind: 'sector', sectorId: scope.sectorId };
+    case 'topo':
+      return { kind: 'topo', topoId: scope.topoId };
+  }
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {

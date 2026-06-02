@@ -13,6 +13,7 @@ type TopoRow = {
   photo_uri: string | null;
   photo_width: number | null;
   photo_height: number | null;
+  sort_order: number;
   created_at: string;
   updated_at: string;
 };
@@ -26,6 +27,7 @@ function mapTopo(row: TopoRow): Topo {
     photoUri: row.photo_uri ?? undefined,
     photoWidth: row.photo_width ?? undefined,
     photoHeight: row.photo_height ?? undefined,
+    sortOrder: row.sort_order,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -38,7 +40,7 @@ export async function getTopo(db: TopoDatabase, id: string): Promise<Topo | unde
 
 export async function listToposForSector(db: TopoDatabase, sectorId: string): Promise<Topo[]> {
   const rows = await db.getAllAsync<TopoRow>(
-    'SELECT * FROM topos WHERE sector_id = ? ORDER BY created_at ASC',
+    'SELECT * FROM topos WHERE sector_id = ? ORDER BY sort_order ASC, created_at ASC, id ASC',
     sectorId,
   );
   return rows.map(mapTopo);
@@ -49,7 +51,8 @@ export async function listToposForCrag(db: TopoDatabase, cragId: string): Promis
     `SELECT topos.* FROM topos
      INNER JOIN sectors ON sectors.id = topos.sector_id
      WHERE sectors.crag_id = ?
-     ORDER BY topos.created_at ASC`,
+     ORDER BY sectors.sort_order ASC, sectors.created_at ASC, sectors.id ASC,
+              topos.sort_order ASC, topos.created_at ASC, topos.id ASC`,
     cragId,
   );
   return rows.map(mapTopo);
@@ -72,11 +75,13 @@ export async function createTopo(
 ): Promise<Topo> {
   const now = nowIso();
   const name = input.name ?? (await nextDefaultTopoNameForSector(db, input.sectorId));
+  const sortOrder = await nextTopoSortOrder(db, input.sectorId);
   const topo: Topo = {
     id: createId('topo'),
     sectorId: input.sectorId,
     name,
     description: input.description,
+    sortOrder,
     createdAt: now,
     updatedAt: now,
   };
@@ -84,12 +89,13 @@ export async function createTopo(
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `INSERT INTO topos
-        (id, sector_id, name, description, photo_uri, photo_width, photo_height, created_at, updated_at)
-       VALUES (?, ?, ?, ?, NULL, NULL, NULL, ?, ?)`,
+        (id, sector_id, name, description, photo_uri, photo_width, photo_height, sort_order, created_at, updated_at)
+       VALUES (?, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?)`,
       topo.id,
       topo.sectorId,
       topo.name,
       topo.description ?? null,
+      topo.sortOrder,
       topo.createdAt,
       topo.updatedAt,
     );
@@ -177,6 +183,14 @@ async function touchAncestors(
     when,
     sectorId,
   );
+}
+
+async function nextTopoSortOrder(db: TopoDatabase, sectorId: string): Promise<number> {
+  const row = await db.getFirstAsync<{ next_sort_order: number | null }>(
+    'SELECT COALESCE(MAX(sort_order) + 1, 0) AS next_sort_order FROM topos WHERE sector_id = ?',
+    sectorId,
+  );
+  return row?.next_sort_order ?? 0;
 }
 
 export const _toposInternal = { touchAncestors };

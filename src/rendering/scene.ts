@@ -95,7 +95,7 @@ export function buildTopoRenderScene({
   sourcePhoto,
   target = 'editor',
 }: BuildTopoRenderSceneInput): TopoRenderItem[] {
-  const artifactMarkerScale =
+  const artifactDisplayScale =
     target === 'artifact' && sourcePhoto ? Math.max(1, sourcePhoto.width / 900) * (size.width / sourcePhoto.width) : 1;
   const artifactLabelScale = target === 'artifact' && sourcePhoto ? size.width / sourcePhoto.width : 1;
   const labelStyleScale = labelScale ?? artifactLabelScale;
@@ -108,7 +108,7 @@ export function buildTopoRenderScene({
     if (isLabelAnnotation(annotation)) {
       return labelItems(annotation, size, labelStyleScale);
     }
-    return markerItems(annotation, size, artifactMarkerScale);
+    return markerItems(annotation, size, artifactDisplayScale);
   });
 }
 

@@ -5,8 +5,9 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { annotationsForPhoto } from '@/domain/annotationFactory';
 import type { PhotoAsset, TopoProject } from '@/domain/types';
 
+import { loadExportSkiaTypefaces } from './exportFonts';
 import { buildTopoRenderScene } from './scene';
-import { SkiaTopoImage, SkiaTopoScene } from './SkiaTopoRenderer';
+import { SkiaTopoImage, SkiaTopoStaticScene } from './SkiaTopoRenderer';
 
 export type RasterTopoOptions = {
   format?: ImageFormat;
@@ -30,6 +31,7 @@ export async function renderTopoRasterBase64(
   if (!photoImage) {
     throw new Error('Topo photo could not be decoded for export.');
   }
+  const typefaces = await loadExportSkiaTypefaces();
 
   const scene = buildTopoRenderScene({
     annotations: annotationsForPhoto(project.annotations, photo.id),
@@ -40,7 +42,7 @@ export async function renderTopoRasterBase64(
   const renderedImage = await drawAsImage(
     <Group>
       <SkiaTopoImage image={photoImage} size={size} />
-      <SkiaTopoScene items={scene} />
+      <SkiaTopoStaticScene items={scene} typefaces={typefaces} />
     </Group>,
     size,
   );

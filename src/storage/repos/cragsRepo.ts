@@ -7,6 +7,7 @@ type CragRow = {
   id: string;
   name: string;
   description: string | null;
+  sort_order: number;
   created_at: string;
   updated_at: string;
 };
@@ -21,6 +22,7 @@ function mapCrag(row: CragRow): Crag {
     id: row.id,
     name: row.name,
     description: row.description ?? undefined,
+    sortOrder: row.sort_order,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -43,6 +45,7 @@ export async function listCragSummaries(db: TopoDatabase): Promise<CragSummary[]
     id: row.id,
     name: row.name,
     description: row.description ?? undefined,
+    sortOrder: row.sort_order,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     sectorCount: row.sector_count,
@@ -67,11 +70,13 @@ export async function createCrag(
   const now = nowIso();
   const cragId = createId('crag');
   const sectorId = createId('sector');
+  const sortOrder = await nextCragSortOrder(db);
 
   const crag: Crag = {
     id: cragId,
     name: input.name,
     description: input.description,
+    sortOrder,
     createdAt: now,
     updatedAt: now,
   };
@@ -80,25 +85,28 @@ export async function createCrag(
     id: sectorId,
     cragId,
     name: input.name,
+    sortOrder: 0,
     createdAt: now,
     updatedAt: now,
   };
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      'INSERT INTO crags (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO crags (id, name, description, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
       crag.id,
       crag.name,
       crag.description ?? null,
+      crag.sortOrder,
       crag.createdAt,
       crag.updatedAt,
     );
     await db.runAsync(
-      'INSERT INTO sectors (id, crag_id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO sectors (id, crag_id, name, description, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
       defaultSector.id,
       defaultSector.cragId,
       defaultSector.name,
       null,
+      defaultSector.sortOrder,
       defaultSector.createdAt,
       defaultSector.updatedAt,
     );
@@ -155,6 +163,13 @@ export async function listPhotoUrisForCrag(db: TopoDatabase, id: string): Promis
 
 async function touchCrag(db: TopoDatabase, id: string, when: string): Promise<void> {
   await db.runAsync('UPDATE crags SET updated_at = ? WHERE id = ?', when, id);
+}
+
+async function nextCragSortOrder(db: TopoDatabase): Promise<number> {
+  const row = await db.getFirstAsync<{ next_sort_order: number | null }>(
+    'SELECT COALESCE(MAX(sort_order) + 1, 0) AS next_sort_order FROM crags',
+  );
+  return row?.next_sort_order ?? 0;
 }
 
 export const _cragsInternal = { touchCrag };

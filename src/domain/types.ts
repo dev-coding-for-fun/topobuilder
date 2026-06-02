@@ -32,6 +32,7 @@ export type Crag = {
   id: ID;
   name: string;
   description?: string;
+  sortOrder: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -42,6 +43,7 @@ export type Sector = {
   cragId: ID;
   name: string;
   description?: string;
+  sortOrder: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -55,6 +57,7 @@ export type Topo = {
   photoUri?: string;
   photoWidth?: number;
   photoHeight?: number;
+  sortOrder: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -72,6 +75,7 @@ export type Route = {
   fa?: string;
   description?: string;
   color: string;
+  sortOrder: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -108,6 +112,7 @@ export type CragSummary = {
   id: ID;
   name: string;
   description?: string;
+  sortOrder: number;
   createdAt: string;
   updatedAt: string;
   sectorCount: number;
@@ -164,4 +169,32 @@ export type TopoProject = {
   photos: PhotoAsset[];
   routes: Route[];
   annotations: Annotation[];
+};
+
+export type GuidebookTopo = Topo & {
+  annotations: Annotation[];
+  photo?: PhotoAsset;
+  routes: Route[];
+};
+
+export type GuidebookSector = Sector & {
+  topos: GuidebookTopo[];
+};
+
+export type GuidebookCrag = Crag & {
+  sectors: GuidebookSector[];
+};
+
+export type GuidebookExportScope = 'crag' | 'sector' | 'topo';
+
+export type GuidebookExportRequest =
+  | { kind: 'crag'; cragId: ID }
+  | { kind: 'sector'; sectorId: ID }
+  | { kind: 'topo'; topoId: ID };
+
+export type GuidebookExportBundle = {
+  crag: GuidebookCrag;
+  scope: GuidebookExportScope;
+  selectedSectorId?: ID;
+  selectedTopoId?: ID;
 };

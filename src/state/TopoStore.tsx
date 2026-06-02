@@ -10,6 +10,8 @@ import type {
   Crag,
   CragDetail,
   CragSummary,
+  GuidebookExportBundle,
+  GuidebookExportRequest,
   NormalizedPoint,
   Route,
   RouteType,
@@ -56,6 +58,7 @@ import {
   deleteAnnotation as deleteAnnotationRepo,
   upsertAnnotation,
 } from '@/storage/repos/annotationsRepo';
+import { loadGuidebookExportBundle } from '@/storage/repos/guidebookExportRepo';
 
 type CreateAnnotationInput = {
   topoId: string;
@@ -93,6 +96,7 @@ type TopoStoreValue = {
   renameCrag: (id: string, name: string) => Promise<void>;
   deleteCrag: (id: string) => Promise<void>;
   loadCragDetail: (cragId: string) => Promise<CragDetail | undefined>;
+  loadGuidebookExport: (request: GuidebookExportRequest) => Promise<GuidebookExportBundle | undefined>;
 
   // Sectors
   createSector: (cragId: string, name: string) => Promise<Sector>;
@@ -213,6 +217,13 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
         }),
       );
       return { crag, sectors: sectorsWithTopos };
+    },
+    [db],
+  );
+
+  const loadGuidebookExport = useCallback(
+    async (request: GuidebookExportRequest): Promise<GuidebookExportBundle | undefined> => {
+      return loadGuidebookExportBundle(requireDb(), request);
     },
     [db],
   );
@@ -443,6 +454,7 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
       renameCrag,
       deleteCrag,
       loadCragDetail,
+      loadGuidebookExport,
       createSector,
       renameSector,
       deleteSector,
@@ -478,6 +490,7 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
       deleteSector,
       deleteTopo,
       loadCragDetail,
+      loadGuidebookExport,
       loadTopoEditor,
       loadTopoInfo,
       refresh,

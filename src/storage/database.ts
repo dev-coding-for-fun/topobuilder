@@ -7,7 +7,7 @@ export type TopoDatabase = SQLite.SQLiteDatabase;
 
 const DATABASE_NAME = 'topobuilder.db';
 
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2;
 
 type MigrationStep = {
   from: number;
@@ -179,6 +179,79 @@ const migrations: MigrationStep[] = [
         DROP TABLE IF EXISTS crags;
       `);
       await db.execAsync(V1_SCHEMA);
+    },
+  },
+  {
+    from: 1,
+    to: 2,
+    run: async (db) => {
+      await db.execAsync(`
+        ALTER TABLE crags ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE sectors ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE topos ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE routes ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;
+
+        WITH ordered AS (
+          SELECT
+            id,
+            (ROW_NUMBER() OVER (ORDER BY updated_at DESC, created_at ASC, id ASC) - 1) AS next_sort_order
+          FROM crags
+        )
+        UPDATE crags
+           SET sort_order = (
+             SELECT ordered.next_sort_order
+               FROM ordered
+              WHERE ordered.id = crags.id
+           );
+
+        WITH ordered AS (
+          SELECT
+            id,
+            (ROW_NUMBER() OVER (
+              PARTITION BY crag_id
+              ORDER BY created_at ASC, id ASC
+            ) - 1) AS next_sort_order
+          FROM sectors
+        )
+        UPDATE sectors
+           SET sort_order = (
+             SELECT ordered.next_sort_order
+               FROM ordered
+              WHERE ordered.id = sectors.id
+           );
+
+        WITH ordered AS (
+          SELECT
+            id,
+            (ROW_NUMBER() OVER (
+              PARTITION BY sector_id
+              ORDER BY created_at ASC, id ASC
+            ) - 1) AS next_sort_order
+          FROM topos
+        )
+        UPDATE topos
+           SET sort_order = (
+             SELECT ordered.next_sort_order
+               FROM ordered
+              WHERE ordered.id = topos.id
+           );
+
+        WITH ordered AS (
+          SELECT
+            id,
+            (ROW_NUMBER() OVER (
+              PARTITION BY topo_id
+              ORDER BY created_at ASC, id ASC
+            ) - 1) AS next_sort_order
+          FROM routes
+        )
+        UPDATE routes
+           SET sort_order = (
+             SELECT ordered.next_sort_order
+               FROM ordered
+              WHERE ordered.id = routes.id
+           );
+      `);
     },
   },
 ];

@@ -70,13 +70,13 @@ describe('runMigrations', () => {
     infoSpy.mockRestore();
   });
 
-  it('wipes v0 data, creates v1 schema, bumps user_version, and cleans photos after commit', async () => {
+  it('wipes v0 data, creates v1 schema, migrates to v2, and cleans photos after commit', async () => {
     const db = new FakeDb(0);
 
     await runMigrations(asDb(db));
 
     expect(db.userVersion).toBe(CURRENT_SCHEMA_VERSION);
-    expect(db.transactionCount).toBe(1);
+    expect(db.transactionCount).toBe(2);
     expect(db.execs).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -91,9 +91,52 @@ describe('runMigrations', () => {
           sql: 'PRAGMA user_version = 1;',
           inTransaction: true,
         }),
+        expect.objectContaining({
+          sql: expect.stringContaining('ALTER TABLE crags ADD COLUMN sort_order'),
+          inTransaction: true,
+        }),
+        expect.objectContaining({
+          sql: 'PRAGMA user_version = 2;',
+          inTransaction: true,
+        }),
       ]),
     );
     expect(clearPhotosDirectory).toHaveBeenCalledTimes(1);
+  });
+
+  it('migrates v1 data to v2 with sort order columns and backfill SQL', async () => {
+    const db = new FakeDb(1);
+
+    await runMigrations(asDb(db));
+
+    expect(db.userVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(db.transactionCount).toBe(1);
+    expect(db.execs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sql: expect.stringContaining('ALTER TABLE crags ADD COLUMN sort_order'),
+          inTransaction: true,
+        }),
+        expect.objectContaining({
+          sql: expect.stringContaining('ROW_NUMBER() OVER (ORDER BY updated_at DESC'),
+          inTransaction: true,
+        }),
+        expect.objectContaining({
+          sql: expect.stringContaining('PARTITION BY crag_id'),
+          inTransaction: true,
+        }),
+        expect.objectContaining({
+          sql: expect.stringContaining('PARTITION BY sector_id'),
+          inTransaction: true,
+        }),
+        expect.objectContaining({
+          sql: expect.stringContaining('PARTITION BY topo_id'),
+          inTransaction: true,
+        }),
+      ]),
+    );
+    expect(db.execs.some((record) => record.sql.includes('DROP TABLE IF EXISTS'))).toBe(false);
+    expect(clearPhotosDirectory).not.toHaveBeenCalled();
   });
 
   it('does nothing when the database is already at the current version', async () => {
@@ -112,7 +155,7 @@ describe('runMigrations', () => {
     await Promise.all([runMigrations(asDb(db)), runMigrations(asDb(db)), runMigrations(asDb(db))]);
 
     expect(db.userVersion).toBe(CURRENT_SCHEMA_VERSION);
-    expect(db.transactionCount).toBe(1);
+    expect(db.transactionCount).toBe(2);
     expect(db.execs.filter((record) => record.sql.includes('DROP TABLE IF EXISTS'))).toHaveLength(1);
     expect(clearPhotosDirectory).toHaveBeenCalledTimes(1);
   });

@@ -2,9 +2,7 @@
 
 ## Purpose
 Define Topo and Route data, Crag detail presentation, lifecycle behavior, and inline route editing.
-
 ## Requirements
-
 ### Requirement: Topo Entity
 The system SHALL model a leaf entity called a **Topo** that belongs to exactly one Sector and represents a single annotated image. A Topo has an `id`, a `sector_id`, a `name`, an optional `description`, optional photo fields (`photo_uri`, `photo_width`, `photo_height`), and `created_at` / `updated_at` timestamps. The previous standalone "photo" entity is replaced by the Topo entity.
 
@@ -90,3 +88,34 @@ The Topo info sheet SHALL render the Topo's Routes in an inline editor (Pattern 
 #### Scenario: Deleting a Route from inline editor
 - **WHEN** the user removes a Route from the Topo info sheet
 - **THEN** the Route and any Annotations referencing it are updated (Annotations have their `route_id` set to null, the Route is deleted)
+
+### Requirement: Topo Sort Order
+The system SHALL store a persistent sort order value for each Topo within its parent Sector and SHALL render Topo lists using that order with stable fallback ordering.
+
+#### Scenario: New Topo receives parent-scoped sort order
+- **WHEN** the user creates a Topo inside a Sector
+- **THEN** the new Topo receives a sort order value suitable for placing it after existing Topos in that Sector
+
+#### Scenario: Crag detail renders Topos by sort order
+- **WHEN** the Crag detail screen renders multiple Topos inside a Sector
+- **THEN** the Topos appear by persisted sort order within the Sector
+
+#### Scenario: Sector and Crag exports use Topo sort order
+- **WHEN** the user exports a Sector or Crag
+- **THEN** each Sector's Topos are listed by persisted sort order
+
+### Requirement: Route Sort Order
+The system SHALL store a persistent sort order value for each Route within its parent Topo and SHALL render route lists using that order with stable fallback ordering.
+
+#### Scenario: New Route receives parent-scoped sort order
+- **WHEN** the user creates a Route inside a Topo
+- **THEN** the new Route receives a sort order value suitable for placing it after existing Routes in that Topo
+
+#### Scenario: Topo info renders Routes by sort order
+- **WHEN** the Topo info sheet renders multiple Routes
+- **THEN** the Routes appear by persisted sort order within the Topo
+
+#### Scenario: Export route numbers follow Route sort order
+- **WHEN** the user exports a Topo, Sector, or Crag
+- **THEN** each Topo's exported route numbers follow persisted Route sort order
+
