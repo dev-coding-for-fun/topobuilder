@@ -1,5 +1,3 @@
-import { join } from 'node:path';
-
 import { expect, test } from '@playwright/test';
 
 /**
@@ -23,7 +21,7 @@ import { expect, test } from '@playwright/test';
  * regression that blanks the editor is caught here too.
  */
 
-const PHOTO_FIXTURE = join(__dirname, '..', 'assets', 'icon.png');
+const PHOTO_FIXTURE = 'assets/icon.png';
 
 test.describe.configure({ mode: 'serial' });
 
