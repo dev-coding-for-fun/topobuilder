@@ -931,6 +931,39 @@ export function TopoCanvas({
     return () => node.removeEventListener('wheel', handleWheel);
   }, [canvasSize, imageFit, minScaleSv, scale, tx, ty]);
 
+  // Web-only: the label edit field lives inside the GestureDetector, and
+  // react-native-gesture-handler's web KeyboardEventManager treats Enter/Space
+  // keydowns that bubble to the gesture view as tap activations. While editing
+  // a label, that phantom tap deselects the label and tears the edit down (the
+  // typed text is lost and the canvas appears to blank out). We intercept those
+  // keys in the capture phase — before they reach gesture-handler's
+  // bubble-phase listener on the same node — but only when the key originates
+  // from the label text field. stopPropagation does not cancel the browser's
+  // default action, so the character is still typed and onChangeText still
+  // fires via the input event.
+  useEffect(() => {
+    const node = containerRef.current as unknown as HTMLElement | null;
+    if (!node || typeof node.addEventListener !== 'function') {
+      return;
+    }
+    const stopGestureKeyActivation = (event: KeyboardEvent) => {
+      if (event.key !== ' ' && event.key !== 'Enter') {
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName;
+      if (tagName === 'TEXTAREA' || tagName === 'INPUT') {
+        event.stopPropagation();
+      }
+    };
+    node.addEventListener('keydown', stopGestureKeyActivation, { capture: true });
+    node.addEventListener('keyup', stopGestureKeyActivation, { capture: true });
+    return () => {
+      node.removeEventListener('keydown', stopGestureKeyActivation, { capture: true });
+      node.removeEventListener('keyup', stopGestureKeyActivation, { capture: true });
+    };
+  }, []);
+
   const tapGesture = useMemo(
     () =>
       Gesture.Tap()
@@ -999,107 +1032,98 @@ export function TopoCanvas({
   );
 
   return (
-    // The label TextInput is rendered as a sibling of the GestureDetector (not
-    // a descendant) on purpose. react-native-gesture-handler's web build
-    // listens for `keydown` on the gesture view and treats Enter/Space as tap
-    // activations; if the focused label textarea lived inside the gesture view,
-    // typing a space would bubble up and fire a phantom canvas tap that tears
-    // down the in-progress edit. Keeping it outside the gesture subtree means
-    // those key events never reach the handler.
-    <View style={styles.container}>
-      <GestureDetector gesture={composedGesture}>
-        <Animated.View ref={containerRef} onLayout={handleLayout} style={StyleSheet.absoluteFill}>
-          <Canvas style={StyleSheet.absoluteFill}>
-            <Group transform={groupTransform}>
-              <Group transform={[{ translateX: imageFit.offsetX }, { translateY: imageFit.offsetY }]}>
-                {image ? (
-                  <SkiaImage
-                    image={image}
-                    x={0}
-                    y={0}
-                    width={imageFit.width}
-                    height={imageFit.height}
-                    fit="contain"
-                  />
-                ) : (
-                  <Rect x={0} y={0} width={imageFit.width} height={imageFit.height} color="#CBD5E1" />
-                )}
-                {drawableAnnotations.map((annotation) => (
-                  <AnnotationShape
-                    annotation={annotation}
-                    key={annotation.id}
-                    routeMarkerFont={routeMarkerFont}
-                    imageScale={imageFit.scale}
-                    size={renderableSize}
-                  />
-                ))}
-                {selectedPath ? <SelectedPathHandles points={selectedPath.points} size={renderableSize} /> : null}
-                {selectedStamp ? (
-                  <Circle
-                    color="#1D4ED8"
-                    cx={denormalizePoint(selectedStamp.point, renderableSize).x}
-                    cy={denormalizePoint(selectedStamp.point, renderableSize).y}
-                    r={18}
-                    strokeWidth={2}
-                    style="stroke"
-                  />
-                ) : null}
-                {selectedLabel ? (
-                  <SelectedLabelHandles
-                    annotation={selectedLabel}
-                    imageScale={imageFit.scale}
-                    size={renderableSize}
-                  />
-                ) : null}
-              </Group>
+    <GestureDetector gesture={composedGesture}>
+      <Animated.View ref={containerRef} onLayout={handleLayout} style={styles.container}>
+        <Canvas style={StyleSheet.absoluteFill}>
+          <Group transform={groupTransform}>
+            <Group transform={[{ translateX: imageFit.offsetX }, { translateY: imageFit.offsetY }]}>
+              {image ? (
+                <SkiaImage
+                  image={image}
+                  x={0}
+                  y={0}
+                  width={imageFit.width}
+                  height={imageFit.height}
+                  fit="contain"
+                />
+              ) : (
+                <Rect x={0} y={0} width={imageFit.width} height={imageFit.height} color="#CBD5E1" />
+              )}
+              {drawableAnnotations.map((annotation) => (
+                <AnnotationShape
+                  annotation={annotation}
+                  key={annotation.id}
+                  routeMarkerFont={routeMarkerFont}
+                  imageScale={imageFit.scale}
+                  size={renderableSize}
+                />
+              ))}
+              {selectedPath ? <SelectedPathHandles points={selectedPath.points} size={renderableSize} /> : null}
+              {selectedStamp ? (
+                <Circle
+                  color="#1D4ED8"
+                  cx={denormalizePoint(selectedStamp.point, renderableSize).x}
+                  cy={denormalizePoint(selectedStamp.point, renderableSize).y}
+                  r={18}
+                  strokeWidth={2}
+                  style="stroke"
+                />
+              ) : null}
+              {selectedLabel ? (
+                <SelectedLabelHandles
+                  annotation={selectedLabel}
+                  imageScale={imageFit.scale}
+                  size={renderableSize}
+                />
+              ) : null}
             </Group>
-          </Canvas>
-          {!image && (
-            <View pointerEvents="none" style={styles.loading}>
-              <Text style={styles.loadingText}>Loading topo photo...</Text>
-            </View>
-          )}
-        </Animated.View>
-      </GestureDetector>
-      {selectedLabelBackdrop ? (
-        <View
-          pointerEvents="none"
-          style={[
-            styles.labelBackdrop,
-            {
-              backgroundColor: selectedLabelBackdrop.backgroundColor,
-              borderRadius: LABEL_BACKDROP_RADIUS,
-              height: selectedLabelBackdrop.height,
-              left: selectedLabelBackdrop.x,
-              top: selectedLabelBackdrop.y,
-              width: selectedLabelBackdrop.width,
-            },
-          ]}
-        />
-      ) : null}
-      {selectedLabel && selectedLabelFrame ? (
-        <TextInput
-          autoFocus
-          multiline
-          onBlur={onCommitSelectedLabelEdit}
-          onChangeText={onChangeSelectedLabelText}
-          pointerEvents="none"
-          style={[
-            styles.labelInput,
-            {
-              color: selectedLabel.color,
-              fontSize: selectedLabelFrame.fontSize,
-              height: selectedLabelFrame.height,
-              left: selectedLabelFrame.x,
-              lineHeight: selectedLabelFrame.lineHeight,
-              top: selectedLabelFrame.y,
-              width: selectedLabelFrame.width,
-            },
-          ]}
-          value={labelText(selectedLabel)}
-        />
-      ) : null}
-    </View>
+          </Group>
+        </Canvas>
+        {selectedLabelBackdrop ? (
+          <View
+            pointerEvents="none"
+            style={[
+              styles.labelBackdrop,
+              {
+                backgroundColor: selectedLabelBackdrop.backgroundColor,
+                borderRadius: LABEL_BACKDROP_RADIUS,
+                height: selectedLabelBackdrop.height,
+                left: selectedLabelBackdrop.x,
+                top: selectedLabelBackdrop.y,
+                width: selectedLabelBackdrop.width,
+              },
+            ]}
+          />
+        ) : null}
+        {selectedLabel && selectedLabelFrame ? (
+          <TextInput
+            autoFocus
+            multiline
+            onBlur={onCommitSelectedLabelEdit}
+            onChangeText={onChangeSelectedLabelText}
+            pointerEvents="none"
+            style={[
+              styles.labelInput,
+              {
+                color: selectedLabel.color,
+                fontSize: selectedLabelFrame.fontSize,
+                height: selectedLabelFrame.height,
+                left: selectedLabelFrame.x,
+                lineHeight: selectedLabelFrame.lineHeight,
+                top: selectedLabelFrame.y,
+                width: selectedLabelFrame.width,
+              },
+            ]}
+            value={labelText(selectedLabel)}
+          />
+        ) : null}
+        {!image && (
+          <View pointerEvents="none" style={styles.loading}>
+            <Text style={styles.loadingText}>Loading topo photo...</Text>
+          </View>
+        )}
+      </Animated.View>
+    </GestureDetector>
   );
 }
 

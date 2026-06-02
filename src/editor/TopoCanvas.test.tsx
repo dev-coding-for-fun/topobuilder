@@ -176,10 +176,7 @@ function renderCanvas({
 
 function layoutCanvas(result: ReturnType<typeof renderCanvas>, width = 1000, height = 1000) {
   act(() => {
-    const layoutView = result
-      .UNSAFE_getAllByType(View)
-      .find((node) => typeof node.props.onLayout === 'function');
-    layoutView?.props.onLayout({
+    result.UNSAFE_getAllByType(View)[0].props.onLayout({
       nativeEvent: { layout: { height, width } },
     });
   });

@@ -15,9 +15,12 @@ import { expect, test } from '@playwright/test';
  * annotation, and tears the edit session down — the typed text vanishes, the
  * tool snaps back to Select, and the canvas is left blank.
  *
- * Fix: on web, key events from the label textarea are stopped from bubbling up
- * to the gesture view, so the KeyboardEventManager never sees them and no
- * phantom tap is fired. The space is typed into the label as expected.
+ * Fix: on web, Enter/Space key events originating from the label text field are
+ * stopped in the capture phase before they reach gesture-handler's listener, so
+ * no phantom tap is fired. The space is typed into the label as expected.
+ *
+ * The test also asserts the editor canvas actually renders (non-zero size) so a
+ * regression that blanks the editor is caught here too.
  */
 
 const PHOTO_FIXTURE = join(__dirname, '..', 'assets', 'icon.png');
@@ -30,6 +33,15 @@ test.describe('editor text annotation keyboard input', () => {
   test('keeps the in-progress label alive when typing a space', async ({ page }) => {
     const pageErrors: string[] = [];
     page.on('pageerror', (error) => pageErrors.push(error.message));
+    // React surfaces render-time throws (e.g. Skia's "Not implemented on React
+    // Native Web" from the system font fallback) via console.error rather than an
+    // uncaught pageerror, so capture those too.
+    const consoleErrors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') {
+        consoleErrors.push(message.text());
+      }
+    });
 
     const cragName = `E2E Spacebar ${Date.now()}`;
 
@@ -52,6 +64,14 @@ test.describe('editor text annotation keyboard input', () => {
 
     await expect(page.getByTestId('editor:screen')).toBeVisible();
 
+    // The Skia canvas must render with a real size — guards against a layout
+    // regression that leaves the editor blank.
+    const canvas = page.locator('canvas').first();
+    await expect(canvas).toBeVisible();
+    const canvasBox = await canvas.boundingBox();
+    expect(canvasBox?.width ?? 0).toBeGreaterThan(100);
+    expect(canvasBox?.height ?? 0).toBeGreaterThan(100);
+
     // Choose the Text tool and tap the canvas to place a label.
     await page.getByTestId('editor:tool-label').click();
     await page.getByTestId('editor-canvas-region').click({ position: { x: 195, y: 360 } });
@@ -70,6 +90,22 @@ test.describe('editor text annotation keyboard input', () => {
 
     await expect(page.getByTestId('editor:screen')).toBeVisible();
     await expect(labelInput).toHaveValue('Pitch ');
+
+    // Commit the label (selecting a tool saves + deselects it) so it becomes a
+    // *drawn* Skia text item rather than the live textarea. On web this is the
+    // path that calls into the font system; a regression here (e.g. calling the
+    // unimplemented FontMgr.System) throws synchronously and blanks the whole
+    // canvas, so we assert the editor and canvas survive with no page errors.
+    await page.getByTestId('editor:tool-select').click();
+    await expect(labelInput).toBeHidden();
+
+    await expect(page.getByTestId('editor:screen')).toBeVisible();
+    const committedCanvasBox = await canvas.boundingBox();
+    expect(committedCanvasBox?.width ?? 0).toBeGreaterThan(100);
+    expect(committedCanvasBox?.height ?? 0).toBeGreaterThan(100);
     expect(pageErrors).toEqual([]);
+    expect(
+      consoleErrors.filter((message) => message.includes('Not implemented on React Native Web')),
+    ).toEqual([]);
   });
 });

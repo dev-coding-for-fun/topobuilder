@@ -12,6 +12,7 @@ import {
   type SkTypeface,
 } from '@shopify/react-native-skia';
 import { Inter_400Regular, Inter_700Bold } from '@expo-google-fonts/inter';
+import { Platform } from 'react-native';
 
 import type { RenderTextFontWeight, TopoRenderItem } from './scene';
 import { smoothedRenderPath } from './scene';
@@ -216,6 +217,13 @@ function bundledFont(
 }
 
 function systemFont(item: Extract<TopoRenderItem, { kind: 'text' }>) {
+  // `FontMgr.System()`/`matchFamilyStyle` is not implemented on React Native
+  // Web and throws synchronously, which would crash the whole Skia canvas. On
+  // web we rely on the bundled `useFont`/typeface paths instead and simply skip
+  // rendering the glyphs until that font has loaded.
+  if (Platform.OS === 'web') {
+    return undefined;
+  }
   const typeface = Skia.FontMgr.System().matchFamilyStyle('System', {
     weight: item.fontWeight === '700' ? 700 : 400,
   });
