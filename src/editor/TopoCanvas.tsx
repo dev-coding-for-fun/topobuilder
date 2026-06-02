@@ -4,7 +4,6 @@ import {
   Group,
   Image as SkiaImage,
   Rect,
-  useFont,
   useImage,
 } from '@shopify/react-native-skia';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -128,7 +127,6 @@ export function TopoCanvas({
   selectedStampId,
 }: TopoCanvasProps) {
   const image = useImage(photo.uri);
-  const routeMarkerFont = useFont(null, 16);
   const [canvasSize, setCanvasSize] = useState({ width: 1, height: 1 });
 
   const imageFit = useMemo(
@@ -1053,7 +1051,6 @@ export function TopoCanvas({
                 <AnnotationShape
                   annotation={annotation}
                   key={annotation.id}
-                  routeMarkerFont={routeMarkerFont}
                   imageScale={imageFit.scale}
                   size={renderableSize}
                 />

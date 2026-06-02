@@ -39,15 +39,13 @@ export function SkiaTopoImage({
 
 export function SkiaTopoScene({
   items,
-  routeMarkerFont,
 }: {
   items: TopoRenderItem[];
-  routeMarkerFont?: ReturnType<typeof useFont>;
 }) {
   return (
     <Group>
       {items.map((item) => (
-        <SkiaRenderItem item={item} key={item.id} routeMarkerFont={routeMarkerFont} />
+        <SkiaRenderItem item={item} key={item.id} />
       ))}
     </Group>
   );
@@ -69,13 +67,7 @@ export function SkiaTopoStaticScene({
   );
 }
 
-function SkiaRenderItem({
-  item,
-  routeMarkerFont,
-}: {
-  item: TopoRenderItem;
-  routeMarkerFont?: ReturnType<typeof useFont>;
-}) {
+function SkiaRenderItem({ item }: { item: TopoRenderItem }) {
   const primitive = primitiveRenderItem(item);
   if (primitive) {
     return primitive;

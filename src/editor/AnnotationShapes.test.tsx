@@ -20,7 +20,6 @@ describe('AnnotationShape route lines', () => {
           updatedAt: '2026-01-01T00:00:00.000Z',
         }}
         imageScale={1}
-        routeMarkerFont={null}
         size={{ width: 1000, height: 1000 }}
       />,
     );
@@ -45,7 +44,6 @@ describe('AnnotationShape route lines', () => {
           updatedAt: '2026-01-01T00:00:00.000Z',
         }}
         imageScale={1}
-        routeMarkerFont={null}
         size={{ width: 1000, height: 1000 }}
       />,
     );
@@ -78,7 +76,6 @@ describe('AnnotationShape route markers', () => {
           updatedAt: '2026-01-01T00:00:00.000Z',
         }}
         imageScale={1}
-        routeMarkerFont={null}
         size={{ width: 1000, height: 1000 }}
       />,
     );
@@ -100,7 +97,6 @@ describe('AnnotationShape route markers', () => {
           updatedAt: '2026-01-01T00:00:00.000Z',
         }}
         imageScale={1}
-        routeMarkerFont={null}
         size={{ width: 1000, height: 1000 }}
       />,
     );
@@ -122,7 +118,6 @@ describe('AnnotationShape route markers', () => {
           updatedAt: '2026-01-01T00:00:00.000Z',
         }}
         imageScale={1}
-        routeMarkerFont={null}
         size={{ width: 1000, height: 1000 }}
       />,
     );
@@ -155,7 +150,6 @@ describe('AnnotationShape labels', () => {
           updatedAt: '2026-01-01T00:00:00.000Z',
         }}
         imageScale={0.25}
-        routeMarkerFont={null}
         size={{ width: 1000, height: 1000 }}
       />,
     );
@@ -189,7 +183,6 @@ describe('AnnotationShape labels', () => {
           updatedAt: '2026-01-01T00:00:00.000Z',
         }}
         imageScale={0.25}
-        routeMarkerFont={null}
         size={{ width: 1000, height: 1000 }}
       />,
     );
@@ -215,7 +208,6 @@ describe('AnnotationShape labels', () => {
           updatedAt: '2026-01-01T00:00:00.000Z',
         }}
         imageScale={0.25}
-        routeMarkerFont={null}
         size={{ width: 1000, height: 1000 }}
       />,
     );
@@ -254,7 +246,6 @@ describe('AnnotationShape labels', () => {
           updatedAt: '2026-01-01T00:00:00.000Z',
         }}
         imageScale={0.25}
-        routeMarkerFont={null}
         size={{ width: 1000, height: 1000 }}
       />,
     );

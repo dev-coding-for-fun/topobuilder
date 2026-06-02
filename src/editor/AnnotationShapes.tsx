@@ -4,7 +4,6 @@ import {
   Line,
   Rect,
 } from '@shopify/react-native-skia';
-import type { useFont } from '@shopify/react-native-skia';
 import { memo } from 'react';
 
 import { denormalizePoint, normalizedToScreenPoint } from '@/domain/geometry';
@@ -146,16 +145,14 @@ export function SelectedLabelHandles({
 export const AnnotationShape = memo(function AnnotationShape({
   annotation,
   imageScale,
-  routeMarkerFont,
   size,
 }: {
   annotation: Annotation;
   imageScale: number;
-  routeMarkerFont: ReturnType<typeof useFont>;
   size: { width: number; height: number };
 }) {
   const scene = buildTopoRenderScene({ annotations: [annotation], labelScale: imageScale, size });
-  return <SkiaTopoScene items={scene} routeMarkerFont={routeMarkerFont} />;
+  return <SkiaTopoScene items={scene} />;
 });
 
 export function screenFrameForLabel({
