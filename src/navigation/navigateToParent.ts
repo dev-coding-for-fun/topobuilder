@@ -1,19 +1,19 @@
-import { type Href, router, useSegments } from 'expo-router';
+import { type Href, router, usePathname } from 'expo-router';
 import { useCallback } from 'react';
 
-import { getParentHrefFromSegments } from '@/navigation/parentRoute';
+import { getParentHref } from '@/navigation/parentRoute';
 
-export function navigateToParentFromSegments(segments: readonly string[]) {
-  const parent = getParentHrefFromSegments(segments);
+export function navigateToParentFromPathname(pathname: string) {
+  const parent = getParentHref(pathname);
   if (parent) {
     router.replace(parent as Href);
   }
 }
 
 export function useNavigateToParent() {
-  const segments = useSegments();
+  const pathname = usePathname();
 
   return useCallback(() => {
-    navigateToParentFromSegments(segments);
-  }, [segments]);
+    navigateToParentFromPathname(pathname);
+  }, [pathname]);
 }

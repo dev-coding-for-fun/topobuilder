@@ -1,4 +1,4 @@
-import { Stack, useSegments } from 'expo-router';
+import { Stack, usePathname } from 'expo-router';
 import { useFonts } from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -9,7 +9,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { TopoStoreProvider } from '@/state/TopoStore';
-import { stackScreenOptionsForSegments } from '@/navigation/stackScreenOptions';
+import { stackScreenOptionsForPathname } from '@/navigation/stackScreenOptions';
 import { interFontMap, interStyle } from '@/ui/fonts';
 
 SplashScreen.preventAutoHideAsync();
@@ -72,7 +72,7 @@ function RootLayoutWithRuntimeFonts() {
 }
 
 function RootLayoutShell() {
-  const segments = useSegments();
+  const pathname = usePathname();
 
   useEffect(() => {
     SplashScreen.hideAsync();
@@ -85,7 +85,7 @@ function RootLayoutShell() {
           <TopoStoreProvider>
             <StatusBar style="dark" />
             <Stack
-              screenOptions={stackScreenOptionsForSegments(segments)}
+              screenOptions={stackScreenOptionsForPathname(pathname)}
             />
           </TopoStoreProvider>
         </SafeAreaProvider>

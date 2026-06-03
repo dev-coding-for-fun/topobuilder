@@ -40,4 +40,14 @@ describe('getParentHref', () => {
   it('treats /index as the crags list root', () => {
     expect(getParentHref('/index')).toBeNull();
   });
+
+  it('returns the concrete crag route for a concrete editor pathname', () => {
+    expect(getParentHref('/crags/crag_mpu8tt1l_l43lucz1/topos/topo_123/editor')).toBe(
+      '/crags/crag_mpu8tt1l_l43lucz1',
+    );
+  });
+
+  it('does not navigate to unresolved dynamic route patterns', () => {
+    expect(getParentHref('/crags/[cragId]/topos/[topoId]/editor')).toBeNull();
+  });
 });

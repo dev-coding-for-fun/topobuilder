@@ -1,7 +1,7 @@
 import type { NativeStackNavigationOptions } from '@react-navigation/native-stack';
 
 import { NavBackButton } from '@/navigation/NavBackButton';
-import { getParentHrefFromSegments } from '@/navigation/parentRoute';
+import { getParentHref } from '@/navigation/parentRoute';
 
 export const stackScreenOptions: NativeStackNavigationOptions = {
   contentStyle: { backgroundColor: '#F8FAFC' },
@@ -25,10 +25,8 @@ export function parentBackHeaderOptions(parentHref: string): NativeStackNavigati
   };
 }
 
-export function stackScreenOptionsForSegments(
-  segments: readonly string[],
-): NativeStackNavigationOptions {
-  const parentHref = getParentHrefFromSegments(segments);
+export function stackScreenOptionsForPathname(pathname: string): NativeStackNavigationOptions {
+  const parentHref = getParentHref(pathname);
 
   return {
     ...stackScreenOptions,

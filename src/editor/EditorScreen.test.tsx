@@ -17,7 +17,7 @@ jest.mock('expo-router', () => ({
     React.useEffect(effect, [effect]);
   },
   useLocalSearchParams: () => ({ cragId: 'crag-1', topoId: 'project-1' }),
-  useSegments: () => ['crags', 'crag-1', 'topos', 'project-1', 'editor'],
+  usePathname: () => '/crags/crag-1/topos/project-1/editor',
 }));
 
 jest.mock('react-native-safe-area-context', () => ({
