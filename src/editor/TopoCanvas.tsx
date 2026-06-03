@@ -56,6 +56,7 @@ import {
   SelectedLabelHandles,
   SelectedPathHandles,
 } from '@/editor/AnnotationShapes';
+import { SkiaTextFontProvider } from '@/rendering/SkiaTopoRenderer';
 import { interStyle } from '@/ui/fonts';
 
 const MAX_ZOOM = 6;
@@ -1032,50 +1033,52 @@ export function TopoCanvas({
   return (
     <GestureDetector gesture={composedGesture}>
       <Animated.View ref={containerRef} onLayout={handleLayout} style={styles.container}>
-        <Canvas style={StyleSheet.absoluteFill}>
-          <Group transform={groupTransform}>
-            <Group transform={[{ translateX: imageFit.offsetX }, { translateY: imageFit.offsetY }]}>
-              {image ? (
-                <SkiaImage
-                  image={image}
-                  x={0}
-                  y={0}
-                  width={imageFit.width}
-                  height={imageFit.height}
-                  fit="contain"
-                />
-              ) : (
-                <Rect x={0} y={0} width={imageFit.width} height={imageFit.height} color="#CBD5E1" />
-              )}
-              {drawableAnnotations.map((annotation) => (
-                <AnnotationShape
-                  annotation={annotation}
-                  key={annotation.id}
-                  imageScale={imageFit.scale}
-                  size={renderableSize}
-                />
-              ))}
-              {selectedPath ? <SelectedPathHandles points={selectedPath.points} size={renderableSize} /> : null}
-              {selectedStamp ? (
-                <Circle
-                  color="#1D4ED8"
-                  cx={denormalizePoint(selectedStamp.point, renderableSize).x}
-                  cy={denormalizePoint(selectedStamp.point, renderableSize).y}
-                  r={18}
-                  strokeWidth={2}
-                  style="stroke"
-                />
-              ) : null}
-              {selectedLabel ? (
-                <SelectedLabelHandles
-                  annotation={selectedLabel}
-                  imageScale={imageFit.scale}
-                  size={renderableSize}
-                />
-              ) : null}
+        <SkiaTextFontProvider>
+          <Canvas style={StyleSheet.absoluteFill}>
+            <Group transform={groupTransform}>
+              <Group transform={[{ translateX: imageFit.offsetX }, { translateY: imageFit.offsetY }]}>
+                {image ? (
+                  <SkiaImage
+                    image={image}
+                    x={0}
+                    y={0}
+                    width={imageFit.width}
+                    height={imageFit.height}
+                    fit="contain"
+                  />
+                ) : (
+                  <Rect x={0} y={0} width={imageFit.width} height={imageFit.height} color="#CBD5E1" />
+                )}
+                {drawableAnnotations.map((annotation) => (
+                  <AnnotationShape
+                    annotation={annotation}
+                    key={annotation.id}
+                    imageScale={imageFit.scale}
+                    size={renderableSize}
+                  />
+                ))}
+                {selectedPath ? <SelectedPathHandles points={selectedPath.points} size={renderableSize} /> : null}
+                {selectedStamp ? (
+                  <Circle
+                    color="#1D4ED8"
+                    cx={denormalizePoint(selectedStamp.point, renderableSize).x}
+                    cy={denormalizePoint(selectedStamp.point, renderableSize).y}
+                    r={18}
+                    strokeWidth={2}
+                    style="stroke"
+                  />
+                ) : null}
+                {selectedLabel ? (
+                  <SelectedLabelHandles
+                    annotation={selectedLabel}
+                    imageScale={imageFit.scale}
+                    size={renderableSize}
+                  />
+                ) : null}
+              </Group>
             </Group>
-          </Group>
-        </Canvas>
+          </Canvas>
+        </SkiaTextFontProvider>
         {selectedLabelBackdrop ? (
           <View
             pointerEvents="none"

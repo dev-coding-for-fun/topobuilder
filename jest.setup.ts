@@ -4,9 +4,11 @@ jest.mock('@shopify/react-native-skia', () => ({
   Group: 'Group',
   Image: 'Image',
   Line: 'Line',
-  matchFont: jest.fn((font = {}) => ({
+  matchFont: jest.fn((font: { fontSize?: number } = {}, fontMgr?: unknown) => ({
     ...font,
-    measureText: jest.fn(() => ({ width: 0 })),
+    fontMgr,
+    fontSize: font.fontSize ?? 16,
+    measureText: jest.fn((text = '') => ({ width: String(text).length * (font.fontSize ?? 16) * 0.5 })),
   })),
   Path: 'Path',
   Rect: 'Rect',
@@ -19,6 +21,7 @@ jest.mock('@shopify/react-native-skia', () => ({
     },
     Font: jest.fn((_, fontSize) => ({
       fontSize,
+      getTextWidth: jest.fn((text = '') => String(text).length * fontSize * 0.5),
       measureText: jest.fn((text = '') => ({ width: String(text).length * fontSize * 0.5 })),
       setEmbolden: jest.fn(),
     })),
@@ -42,6 +45,12 @@ jest.mock('@shopify/react-native-skia', () => ({
     Typeface: {
       MakeFreeTypeFaceFromData: jest.fn(() => 'sk-typeface'),
     },
+    TypefaceFontProvider: {
+      Make: jest.fn(() => ({
+        registerFont: jest.fn(),
+        matchFamilyStyle: jest.fn(() => 'sk-typeface'),
+      })),
+    },
   },
   ImageFormat: {
     JPEG: 3,
@@ -52,6 +61,8 @@ jest.mock('@shopify/react-native-skia', () => ({
     fontSize,
     measureText: jest.fn((text = '') => ({ width: String(text).length * fontSize * 0.5 })),
   })),
+  useFonts: jest.fn(() => 'sk-font-manager'),
+  useTypeface: jest.fn(() => 'sk-typeface'),
   useImage: () => null,
 }));
 

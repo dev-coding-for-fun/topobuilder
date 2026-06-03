@@ -33,4 +33,10 @@ describe('loadExportSkiaTypefaces', () => {
       Object.keys(SKIA_INTER_FONT_BY_WEIGHT).length,
     );
   });
+
+  it('rejects when a registered export font cannot be loaded into a Skia typeface', async () => {
+    (Skia.Typeface.MakeFreeTypeFaceFromData as jest.Mock).mockReturnValueOnce(null);
+
+    await expect(loadExportSkiaTypefaces()).rejects.toThrow('Export font 400 could not be loaded.');
+  });
 });

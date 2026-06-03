@@ -7,20 +7,24 @@ import {
   RoundedRect,
   Skia,
   Text as SkiaText,
-  useFont,
+  useTypeface,
+  type SkFont,
   type SkImage,
   type SkTypeface,
 } from '@shopify/react-native-skia';
+import { createContext, useContext, useMemo, type ReactNode } from 'react';
 
 import type { RenderTextFontWeight, TopoRenderItem } from './scene';
 import { smoothedRenderPath } from './scene';
 import { SKIA_INTER_FONT_BY_WEIGHT } from './skiaFontRegistry';
 
 /**
- * Mounted editor renders can use Skia's async font hook. Offscreen export
- * renders pass preloaded typefaces into `SkiaTopoStaticScene` instead.
+ * Mounted editor renders can share Skia's async typefaces through
+ * `SkiaTextFontProvider`; standalone scenes fall back to local typefaces.
+ * Offscreen export renders pass preloaded typefaces into `SkiaTopoStaticScene`.
  */
-export type SkiaTextTypefaces = Partial<Record<RenderTextFontWeight, SkTypeface>>;
+export type SkiaTextTypefaces = Record<RenderTextFontWeight, SkTypeface>;
+const SkiaTextTypefacesContext = createContext<SkiaTextTypefaces | null | undefined>(undefined);
 
 export function SkiaTopoImage({
   image,
@@ -41,10 +45,62 @@ export function SkiaTopoScene({
 }: {
   items: TopoRenderItem[];
 }) {
+  const typefaces = useContext(SkiaTextTypefacesContext);
+
+  if (typefaces !== undefined) {
+    return <SkiaTopoSceneContent items={items} typefaces={typefaces} />;
+  }
+
+  return <SkiaTopoSceneWithLocalFonts items={items} />;
+}
+
+export function SkiaTextFontProvider({ children }: { children: ReactNode }) {
+  const typefaces = useSkiaInterTypefaces();
+
+  return (
+    <SkiaTextTypefacesContext.Provider value={typefaces}>
+      {children}
+    </SkiaTextTypefacesContext.Provider>
+  );
+}
+
+function SkiaTopoSceneWithLocalFonts({
+  items,
+}: {
+  items: TopoRenderItem[];
+}) {
+  const typefaces = useSkiaInterTypefaces();
+
+  return <SkiaTopoSceneContent items={items} typefaces={typefaces} />;
+}
+
+function useSkiaInterTypefaces() {
+  const regularTypeface = useTypeface(SKIA_INTER_FONT_BY_WEIGHT['400']);
+  const boldTypeface = useTypeface(SKIA_INTER_FONT_BY_WEIGHT['700']);
+
+  return useMemo(() => {
+    if (!regularTypeface || !boldTypeface) {
+      return null;
+    }
+
+    return {
+      '400': regularTypeface,
+      '700': boldTypeface,
+    } satisfies SkiaTextTypefaces;
+  }, [boldTypeface, regularTypeface]);
+}
+
+function SkiaTopoSceneContent({
+  items,
+  typefaces,
+}: {
+  items: TopoRenderItem[];
+  typefaces: SkiaTextTypefaces | null;
+}) {
   return (
     <Group>
       {items.map((item) => (
-        <SkiaRenderItem item={item} key={item.id} />
+        <SkiaRenderItem item={item} key={item.id} typefaces={typefaces} />
       ))}
     </Group>
   );
@@ -55,7 +111,7 @@ export function SkiaTopoStaticScene({
   typefaces,
 }: {
   items: TopoRenderItem[];
-  typefaces?: SkiaTextTypefaces;
+  typefaces: SkiaTextTypefaces;
 }) {
   return (
     <Group>
@@ -66,14 +122,20 @@ export function SkiaTopoStaticScene({
   );
 }
 
-function SkiaRenderItem({ item }: { item: TopoRenderItem }) {
+function SkiaRenderItem({
+  item,
+  typefaces,
+}: {
+  item: TopoRenderItem;
+  typefaces: SkiaTextTypefaces | null;
+}) {
   const primitive = primitiveRenderItem(item);
   if (primitive) {
     return primitive;
   }
 
   if (item.kind === 'text') {
-    return <SkiaTextRenderItem item={item} />;
+    return typefaces ? <SkiaTextRenderItem item={item} typefaces={typefaces} /> : null;
   }
   return null;
 }
@@ -83,7 +145,7 @@ function SkiaStaticRenderItem({
   typefaces,
 }: {
   item: TopoRenderItem;
-  typefaces?: SkiaTextTypefaces;
+  typefaces: SkiaTextTypefaces;
 }) {
   const primitive = primitiveRenderItem(item);
   if (primitive) {
@@ -91,7 +153,7 @@ function SkiaStaticRenderItem({
   }
 
   if (item.kind === 'text') {
-    return typefaces ? <SkiaStaticTextRenderItem item={item} typefaces={typefaces} /> : null;
+    return <SkiaStaticTextRenderItem item={item} typefaces={typefaces} />;
   }
   return null;
 }
@@ -152,13 +214,19 @@ function primitiveRenderItem(item: TopoRenderItem) {
   return undefined;
 }
 
-function SkiaTextRenderItem({ item }: { item: Extract<TopoRenderItem, { kind: 'text' }> }) {
-  const font = useFont(SKIA_INTER_FONT_BY_WEIGHT[item.fontWeight], item.fontSize);
+function SkiaTextRenderItem({
+  item,
+  typefaces,
+}: {
+  item: Extract<TopoRenderItem, { kind: 'text' }>;
+  typefaces: SkiaTextTypefaces;
+}) {
+  const font = bundledFontFromTypefaces(item, typefaces);
   if (!font) {
     return null;
   }
 
-  const textWidth = item.textAnchor === 'middle' ? font.measureText(item.text).width : 0;
+  const textWidth = item.textAnchor === 'middle' ? textWidthForFont(font, item.text) : 0;
   return (
     <SkiaText
       color={item.color}
@@ -175,14 +243,11 @@ function SkiaStaticTextRenderItem({
   typefaces,
 }: {
   item: Extract<TopoRenderItem, { kind: 'text' }>;
-  typefaces?: SkiaTextTypefaces;
+  typefaces: SkiaTextTypefaces;
 }) {
-  const font = bundledFontFromTypefaces(item, typefaces);
-  if (!font) {
-    return null;
-  }
+  const font = exportFontFromTypefaces(item, typefaces);
 
-  const textWidth = item.textAnchor === 'middle' ? font.measureText(item.text).width : 0;
+  const textWidth = item.textAnchor === 'middle' ? textWidthForFont(font, item.text) : 0;
   return (
     <SkiaText
       color={item.color}
@@ -196,8 +261,23 @@ function SkiaStaticTextRenderItem({
 
 function bundledFontFromTypefaces(
   item: Extract<TopoRenderItem, { kind: 'text' }>,
-  typefaces?: SkiaTextTypefaces,
+  typefaces: SkiaTextTypefaces,
 ) {
-  const typeface = typefaces?.[item.fontWeight];
-  return typeface ? Skia.Font(typeface, item.fontSize) : undefined;
+  return Skia.Font(typefaces[item.fontWeight], item.fontSize);
+}
+
+function exportFontFromTypefaces(
+  item: Extract<TopoRenderItem, { kind: 'text' }>,
+  typefaces: SkiaTextTypefaces,
+) {
+  const typeface = typefaces[item.fontWeight];
+  if (!typeface) {
+    throw new Error(`Export font ${item.fontWeight} could not be loaded.`);
+  }
+
+  return Skia.Font(typeface, item.fontSize);
+}
+
+function textWidthForFont(font: SkFont, text: string) {
+  return font.getTextWidth(text);
 }

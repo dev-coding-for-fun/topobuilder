@@ -40,7 +40,17 @@
       "expo-router",
       "expo-sqlite",
       "expo-asset",
-      "expo-font"
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "node_modules/@expo-google-fonts/inter/400Regular/Inter_400Regular.ttf",
+            "node_modules/@expo-google-fonts/inter/700Bold/Inter_700Bold.ttf",
+            "node_modules/@expo-google-fonts/inter/800ExtraBold/Inter_800ExtraBold.ttf",
+            "node_modules/@expo-google-fonts/inter/900Black/Inter_900Black.ttf"
+          ]
+        }
+      ]
     ],
     "extra": {
       "router": {},

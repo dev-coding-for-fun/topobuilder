@@ -3,7 +3,7 @@ import { useFonts } from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { StyleSheet, Text, TextInput, type StyleProp, type TextStyle } from 'react-native';
+import { Platform, StyleSheet, Text, TextInput, type StyleProp, type TextStyle } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -26,9 +26,9 @@ type ComponentWithDefaults = {
  * already in place by the time the first paint happens. Mutating `defaultProps`
  * after a render would require a forced re-render to take effect.
  *
- * Safe to call before the font files have finished loading: `defaultProps`
- * just stores a family name string; the renderer resolves it on each frame and
- * picks up the real font as soon as `useFonts` finishes.
+ * Safe to call before web font files have finished loading: `defaultProps`
+ * just stores a family name string; the renderer resolves it on each frame.
+ * Native builds embed these fonts with the expo-font config plugin.
  *
  * `StyleSheet.flatten` collapses the merged style into a single object so that
  * a Fast-Refresh re-run won't keep nesting style arrays inside `defaultProps`.
@@ -47,6 +47,14 @@ function installInterDefaults() {
 }
 
 export default function RootLayout() {
+  if (Platform.OS === 'web') {
+    return <RootLayoutWithRuntimeFonts />;
+  }
+
+  return <RootLayoutShell />;
+}
+
+function RootLayoutWithRuntimeFonts() {
   const [fontsLoaded, fontError] = useFonts(interFontMap);
 
   useEffect(() => {
@@ -55,15 +63,17 @@ export default function RootLayout() {
     }
   }, [fontError]);
 
-  useEffect(() => {
-    if (fontsLoaded || fontError) {
-      SplashScreen.hideAsync();
-    }
-  }, [fontsLoaded, fontError]);
-
   if (!fontsLoaded && !fontError) {
     return null;
   }
+
+  return <RootLayoutShell />;
+}
+
+function RootLayoutShell() {
+  useEffect(() => {
+    SplashScreen.hideAsync();
+  }, []);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

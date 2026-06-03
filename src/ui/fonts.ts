@@ -5,13 +5,13 @@ import {
   Inter_900Black,
 } from '@expo-google-fonts/inter';
 import type { FontSource } from 'expo-font';
-import type { TextStyle } from 'react-native';
+import { Platform, type TextStyle } from 'react-native';
 
 export const fontFamilies = {
-  regular: 'Inter_400Regular',
-  bold: 'Inter_700Bold',
-  extraBold: 'Inter_800ExtraBold',
-  black: 'Inter_900Black',
+  regular: Platform.select({ ios: 'Inter-Regular', default: 'Inter_400Regular' }),
+  bold: Platform.select({ ios: 'Inter-Bold', default: 'Inter_700Bold' }),
+  extraBold: Platform.select({ ios: 'Inter-ExtraBold', default: 'Inter_800ExtraBold' }),
+  black: Platform.select({ ios: 'Inter-Black', default: 'Inter_900Black' }),
 } as const;
 
 export const interFontMap: Record<string, FontSource> = {

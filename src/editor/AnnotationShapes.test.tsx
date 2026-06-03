@@ -1,17 +1,12 @@
 import { render } from '@testing-library/react-native';
-import { Skia, useFont } from '@shopify/react-native-skia';
+import { Skia, useTypeface } from '@shopify/react-native-skia';
 
 import { SKIA_INTER_FONT_BY_WEIGHT } from '@/rendering/skiaFontRegistry';
 
 import { AnnotationShape } from './AnnotationShapes';
 
 function mockSkiaInterFontsLoaded() {
-  (useFont as jest.Mock).mockImplementation((_source: unknown, fontSize = 16) => {
-    return {
-      fontSize,
-      measureText: jest.fn((text = '') => ({ width: String(text).length * fontSize * 0.5 })),
-    };
-  });
+  (useTypeface as jest.Mock).mockReturnValue('sk-typeface');
 }
 
 describe('AnnotationShape route lines', () => {
@@ -70,7 +65,7 @@ describe('AnnotationShape route markers', () => {
   });
 
   it('skips route marker label text until bundled Skia fonts have loaded', () => {
-    (useFont as jest.Mock).mockReturnValueOnce(null);
+    (useTypeface as jest.Mock).mockReturnValue(null);
 
     const { UNSAFE_queryByProps } = render(
       <AnnotationShape
@@ -169,7 +164,10 @@ describe('AnnotationShape labels', () => {
       fontSize: 20,
       measureText: jest.fn((text = '') => ({ width: String(text).length * 10 })),
     };
-    (useFont as jest.Mock).mockReturnValueOnce(loadedFont);
+    (useTypeface as jest.Mock)
+      .mockReturnValueOnce('regular-typeface')
+      .mockReturnValueOnce('bold-typeface');
+    (Skia.Font as jest.Mock).mockReturnValueOnce(loadedFont);
 
     const { UNSAFE_getByProps } = render(
       <AnnotationShape
@@ -190,14 +188,14 @@ describe('AnnotationShape labels', () => {
     );
 
     expect(UNSAFE_getByProps({ text: 'Pitch 1' }).props.font).toBe(loadedFont);
-    expect(useFont).toHaveBeenCalledWith(
-      SKIA_INTER_FONT_BY_WEIGHT['700'],
-      20,
-    );
+    expect(useTypeface).toHaveBeenCalledWith(SKIA_INTER_FONT_BY_WEIGHT['400']);
+    expect(useTypeface).toHaveBeenCalledWith(SKIA_INTER_FONT_BY_WEIGHT['700']);
+    expect(Skia.TypefaceFontProvider.Make).not.toHaveBeenCalled();
+    expect(Skia.Font).toHaveBeenCalledWith('bold-typeface', 20);
   });
 
   it('skips deselected labels until bundled Skia fonts have loaded', () => {
-    (useFont as jest.Mock).mockReturnValueOnce(null);
+    (useTypeface as jest.Mock).mockReturnValue(null);
 
     const { UNSAFE_queryByProps } = render(
       <AnnotationShape
@@ -223,7 +221,7 @@ describe('AnnotationShape labels', () => {
 
   it('does not create a system font when bundled Skia fonts are unavailable', () => {
     const makeFont = Skia.Font as jest.Mock;
-    (useFont as jest.Mock).mockReturnValueOnce(null);
+    (useTypeface as jest.Mock).mockReturnValue(null);
 
     render(
       <AnnotationShape
