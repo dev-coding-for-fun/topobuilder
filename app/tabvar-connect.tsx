@@ -3,19 +3,14 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { completeTabvarConnect } from '@/integrations/tabvar/client';
-import {
-  clearPendingTabvarConnectState,
-  loadPendingTabvarConnectState,
-  saveTabvarSession,
-} from '@/integrations/tabvar/sessionStore';
+import { saveTabvarSession } from '@/integrations/tabvar/sessionStore';
 import { Screen } from '@/ui/Screen';
 import { interStyle } from '@/ui/fonts';
 
 export default function TabvarConnectCallbackScreen() {
-  const { ticket, error, state } = useLocalSearchParams<{
+  const { ticket, error } = useLocalSearchParams<{
     ticket?: string;
     error?: string;
-    state?: string;
   }>();
   const [status, setStatus] = useState('Connecting to Tabvar…');
 
@@ -25,36 +20,24 @@ export default function TabvarConnectCallbackScreen() {
     async function completeConnection() {
       const callbackError = firstParam(error);
       if (callbackError) {
-        await clearPendingTabvarConnectState();
         redirectWithError(callbackError);
         return;
       }
 
       const nextTicket = firstParam(ticket);
-      const nextState = firstParam(state);
       if (!nextTicket) {
-        await clearPendingTabvarConnectState();
         redirectWithError('Tabvar did not include a connection ticket.');
-        return;
-      }
-
-      const expectedState = await loadPendingTabvarConnectState();
-      if (!nextState || !expectedState || nextState !== expectedState) {
-        await clearPendingTabvarConnectState();
-        redirectWithError('Tabvar connection request expired. Please try again.');
         return;
       }
 
       try {
         const session = await completeTabvarConnect(nextTicket);
         await saveTabvarSession(session);
-        await clearPendingTabvarConnectState();
         if (mounted) {
           setStatus('Connected. Returning to Settings…');
         }
         router.replace('/settings?tabvar=connected');
       } catch (connectError) {
-        await clearPendingTabvarConnectState();
         redirectWithError(errorMessage(connectError, 'Could not complete Tabvar connection.'));
       }
     }
@@ -64,7 +47,7 @@ export default function TabvarConnectCallbackScreen() {
     return () => {
       mounted = false;
     };
-  }, [error, state, ticket]);
+  }, [error, ticket]);
 
   return (
     <Screen style={styles.screen} testID="tabvar-connect:screen">

@@ -4,12 +4,8 @@ import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
-import { buildTabvarConnectUrl, createTabvarConnectState } from '@/integrations/tabvar/links';
-import {
-  clearTabvarSession,
-  loadTabvarSession,
-  savePendingTabvarConnectState,
-} from '@/integrations/tabvar/sessionStore';
+import { buildTabvarConnectUrl } from '@/integrations/tabvar/links';
+import { clearTabvarSession, loadTabvarSession } from '@/integrations/tabvar/sessionStore';
 import { disconnectTabvar } from '@/integrations/tabvar/client';
 import type { TabvarSession } from '@/integrations/tabvar/types';
 import { Button } from '@/ui/Button';
@@ -143,9 +139,7 @@ function TabvarSyncPanel() {
     setError(undefined);
     setMessage(undefined);
     try {
-      const state = createTabvarConnectState();
-      await savePendingTabvarConnectState(state);
-      await Linking.openURL(buildTabvarConnectUrl(state));
+      await Linking.openURL(buildTabvarConnectUrl());
       setMessage('Finish connecting in the Tabvar browser window.');
     } catch (connectError) {
       setError(errorMessage(connectError, 'Could not open Tabvar.'));

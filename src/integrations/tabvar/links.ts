@@ -4,20 +4,12 @@ import { getTabvarConnectUrl } from './config';
 
 const CALLBACK_PATH = 'tabvar-connect';
 
-export function createTabvarConnectState() {
-  const randomPart = Math.random().toString(36).slice(2);
-  const timePart = Date.now().toString(36);
-  return `${timePart}.${randomPart}`;
+export function buildTabvarCallbackUrl() {
+  return Linking.createURL(CALLBACK_PATH);
 }
 
-export function buildTabvarCallbackUrl(state: string) {
-  return Linking.createURL(CALLBACK_PATH, {
-    queryParams: { state },
-  });
-}
-
-export function buildTabvarConnectUrl(state: string) {
+export function buildTabvarConnectUrl() {
   const url = new URL(getTabvarConnectUrl());
-  url.searchParams.set('return_to', buildTabvarCallbackUrl(state));
+  url.searchParams.set('return_to', buildTabvarCallbackUrl());
   return url.toString();
 }

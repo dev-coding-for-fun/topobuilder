@@ -17,23 +17,21 @@ describe('Tabvar links', () => {
   });
 
   it('builds the callback URL through expo-linking', () => {
-    expect(buildTabvarCallbackUrl('state-123')).toBe('topobuilder://tabvar-connect?state=state-123');
-    expect(Linking.createURL).toHaveBeenCalledWith('tabvar-connect', {
-      queryParams: { state: 'state-123' },
-    });
+    expect(buildTabvarCallbackUrl()).toBe('topobuilder://tabvar-connect');
+    expect(Linking.createURL).toHaveBeenCalledWith('tabvar-connect');
   });
 
   it('uses the dev Tabvar connect URL by default', () => {
-    expect(buildTabvarConnectUrl('state-123')).toBe(
-      'http://localhost:5173/connect/topobuilder?return_to=topobuilder%3A%2F%2Ftabvar-connect%3Fstate%3Dstate-123',
+    expect(buildTabvarConnectUrl()).toBe(
+      'http://localhost:5173/connect/topobuilder?return_to=topobuilder%3A%2F%2Ftabvar-connect',
     );
   });
 
   it('allows the Tabvar connect URL to be overridden', () => {
     process.env.EXPO_PUBLIC_TABVAR_CONNECT_URL = 'https://staging.tabvar.test/connect/topobuilder';
 
-    expect(buildTabvarConnectUrl('state-123')).toBe(
-      'https://staging.tabvar.test/connect/topobuilder?return_to=topobuilder%3A%2F%2Ftabvar-connect%3Fstate%3Dstate-123',
+    expect(buildTabvarConnectUrl()).toBe(
+      'https://staging.tabvar.test/connect/topobuilder?return_to=topobuilder%3A%2F%2Ftabvar-connect',
     );
   });
 });

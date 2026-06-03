@@ -37,8 +37,8 @@ export async function disconnectTabvar(accessToken: string): Promise<void> {
 }
 
 function normalizeConnectResponse(payload: TabvarConnectResponse): TabvarSession {
-  const tabvarUserId = payload.tabvarUserId ?? payload.userId;
-  const accessToken = payload.accessToken ?? payload.token;
+  const tabvarUserId = payload.user?.uid;
+  const accessToken = payload.token;
 
   if (!tabvarUserId || !accessToken) {
     throw new Error('Tabvar returned an incomplete connection response.');
@@ -47,10 +47,8 @@ function normalizeConnectResponse(payload: TabvarConnectResponse): TabvarSession
   return {
     accessToken,
     connectedAt: new Date().toISOString(),
-    displayName: payload.displayName,
-    email: payload.email,
-    expiresAt: payload.expiresAt,
-    refreshToken: payload.refreshToken,
+    displayName: payload.user?.displayName,
+    email: payload.user?.email,
     tabvarUserId,
   };
 }

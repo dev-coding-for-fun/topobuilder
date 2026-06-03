@@ -9,12 +9,11 @@ export type TabvarSession = {
 };
 
 export type TabvarConnectResponse = {
-  tabvarUserId?: string;
-  userId?: string;
-  accessToken?: string;
   token?: string;
-  refreshToken?: string;
-  expiresAt?: string;
-  displayName?: string;
-  email?: string;
+  user?: {
+    uid?: string;
+    displayName?: string;
+    email?: string;
+    role?: string;
+  };
 };

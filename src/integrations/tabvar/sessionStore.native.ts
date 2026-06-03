@@ -3,7 +3,6 @@ import * as SecureStore from 'expo-secure-store';
 import type { TabvarSession } from './types';
 
 const SESSION_KEY = 'tabvar.session';
-const PENDING_STATE_KEY = 'tabvar.pendingConnectState';
 
 async function getItem(key: string) {
   return SecureStore.getItemAsync(key);
@@ -34,16 +33,4 @@ export async function saveTabvarSession(session: TabvarSession): Promise<void> {
 
 export async function clearTabvarSession(): Promise<void> {
   await deleteItem(SESSION_KEY);
-}
-
-export async function savePendingTabvarConnectState(state: string): Promise<void> {
-  await setItem(PENDING_STATE_KEY, state);
-}
-
-export async function loadPendingTabvarConnectState(): Promise<string | undefined> {
-  return (await getItem(PENDING_STATE_KEY)) ?? undefined;
-}
-
-export async function clearPendingTabvarConnectState(): Promise<void> {
-  await deleteItem(PENDING_STATE_KEY);
 }

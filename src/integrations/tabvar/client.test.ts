@@ -12,23 +12,22 @@ describe('Tabvar client', () => {
   it('exchanges a ticket for a normalized Tabvar session', async () => {
     fetchMock.mockResolvedValueOnce({
       json: async () => ({
-        accessToken: 'tabvar-token',
-        displayName: 'Alex',
-        email: 'alex@example.com',
-        expiresAt: '2026-06-03T16:00:00.000Z',
-        refreshToken: 'refresh-token',
-        tabvarUserId: 'user-123',
+        token: 'tb_token_123',
+        user: {
+          displayName: 'Test User',
+          email: 'user@example.com',
+          role: 'member',
+          uid: 'user-1',
+        },
       }),
       ok: true,
     });
 
     await expect(completeTabvarConnect('ticket-123')).resolves.toMatchObject({
-      accessToken: 'tabvar-token',
-      displayName: 'Alex',
-      email: 'alex@example.com',
-      expiresAt: '2026-06-03T16:00:00.000Z',
-      refreshToken: 'refresh-token',
-      tabvarUserId: 'user-123',
+      accessToken: 'tb_token_123',
+      displayName: 'Test User',
+      email: 'user@example.com',
+      tabvarUserId: 'user-1',
     });
 
     expect(fetchMock).toHaveBeenCalledWith('http://localhost:5173/api/topobuilder/connect/complete', {
