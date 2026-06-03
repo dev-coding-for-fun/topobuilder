@@ -73,8 +73,8 @@ test.describe('editor text annotation keyboard input', () => {
     await page.getByTestId('editor:tool-label').click();
     await page.getByTestId('editor-canvas-region').click({ position: { x: 195, y: 360 } });
 
-    // The label TextInput auto-focuses; it has pointerEvents="none" so we type
-    // through the focused element rather than clicking it.
+    // The label TextInput auto-focuses, so keyboard input goes to the live
+    // textarea while the annotation is selected.
     const labelInput = page.locator('textarea');
     await expect(labelInput).toBeVisible();
 

@@ -7,7 +7,7 @@ import {
   useImage,
 } from '@shopify/react-native-skia';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { LayoutChangeEvent, StyleSheet, Text, TextInput, View } from 'react-native';
+import { LayoutChangeEvent, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { runOnJS, useDerivedValue, useSharedValue } from 'react-native-reanimated';
 
@@ -963,6 +963,47 @@ export function TopoCanvas({
     };
   }, []);
 
+  // Web-only: selected labels are edited through a textarea overlay. It must
+  // receive pointer events so users can place the caret, but those same pointer
+  // events should not bubble into gesture-handler as canvas taps/drags.
+  useEffect(() => {
+    if (Platform.OS !== 'web') {
+      return;
+    }
+    if (!selectedLabel) {
+      return;
+    }
+
+    const node = document.querySelector('textarea') as HTMLElement | null;
+    if (!node || typeof node.addEventListener !== 'function') {
+      return;
+    }
+
+    const previousPointerEvents = node.style.getPropertyValue('pointer-events');
+    const previousPointerEventsPriority = node.style.getPropertyPriority('pointer-events');
+    node.style.setProperty('pointer-events', 'auto', 'important');
+
+    const stopGesturePointerActivation = (event: Event) => {
+      event.stopPropagation();
+    };
+    const eventTypes = ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click', 'dblclick', 'touchstart', 'touchend'];
+
+    eventTypes.forEach((eventType) => {
+      node.addEventListener(eventType, stopGesturePointerActivation);
+    });
+
+    return () => {
+      if (previousPointerEvents) {
+        node.style.setProperty('pointer-events', previousPointerEvents, previousPointerEventsPriority);
+      } else {
+        node.style.removeProperty('pointer-events');
+      }
+      eventTypes.forEach((eventType) => {
+        node.removeEventListener(eventType, stopGesturePointerActivation);
+      });
+    };
+  });
+
   const tapGesture = useMemo(
     () =>
       Gesture.Tap()
@@ -1034,7 +1075,7 @@ export function TopoCanvas({
     <GestureDetector gesture={composedGesture}>
       <Animated.View ref={containerRef} onLayout={handleLayout} style={styles.container}>
         <SkiaTextFontProvider>
-          <Canvas style={StyleSheet.absoluteFill}>
+          <Canvas pointerEvents="none" style={StyleSheet.absoluteFill}>
             <Group transform={groupTransform}>
               <Group transform={[{ translateX: imageFit.offsetX }, { translateY: imageFit.offsetY }]}>
                 {image ? (
@@ -1101,7 +1142,7 @@ export function TopoCanvas({
             multiline
             onBlur={onCommitSelectedLabelEdit}
             onChangeText={onChangeSelectedLabelText}
-            pointerEvents="none"
+            pointerEvents="auto"
             style={[
               styles.labelInput,
               {
@@ -1184,11 +1225,13 @@ const styles = StyleSheet.create({
   },
   labelBackdrop: {
     position: 'absolute',
+    zIndex: 1,
   },
   labelInput: {
     backgroundColor: 'transparent',
     ...interStyle('700'),
     padding: 0,
     position: 'absolute',
+    zIndex: 2,
   },
 });
