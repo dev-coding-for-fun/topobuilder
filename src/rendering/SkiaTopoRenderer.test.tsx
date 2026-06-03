@@ -1,8 +1,8 @@
 import { render } from '@testing-library/react-native';
-import { Platform } from 'react-native';
 import { Skia, useFont } from '@shopify/react-native-skia';
 
 import type { TopoRenderItem } from './scene';
+import type { SkiaTextTypefaces } from './SkiaTopoRenderer';
 import { SkiaTopoScene, SkiaTopoStaticScene } from './SkiaTopoRenderer';
 import { SKIA_INTER_FONT_BY_WEIGHT } from './skiaFontRegistry';
 
@@ -22,53 +22,62 @@ describe('SkiaTopoStaticScene', () => {
     jest.clearAllMocks();
   });
 
-  it('renders text with a synchronous Skia font without useFont', () => {
-    (useFont as jest.Mock).mockReturnValueOnce(null);
+  const typefaces = {
+    '400': 'regular-typeface',
+    '700': 'bold-typeface',
+  } as unknown as SkiaTextTypefaces;
 
-    const { UNSAFE_getByProps } = render(<SkiaTopoStaticScene items={[textItem]} />);
+  it('renders text with preloaded bundled Inter typefaces', () => {
+    const { UNSAFE_getByProps } = render(
+      <SkiaTopoStaticScene items={[textItem]} typefaces={typefaces} />,
+    );
 
     expect(useFont).not.toHaveBeenCalled();
-    expect(Skia.Font).toHaveBeenCalledWith(expect.anything(), 48);
+    expect(Skia.Font).toHaveBeenCalledWith('bold-typeface', 48);
     expect(UNSAFE_getByProps({ text: 'Pitch 1' }).props.font.fontSize).toBe(48);
+  });
+
+  it('skips text rather than falling back when static Inter typefaces are missing', () => {
+    const { UNSAFE_queryByProps } = render(<SkiaTopoStaticScene items={[textItem]} />);
+
+    expect(UNSAFE_queryByProps({ text: 'Pitch 1' })).toBeNull();
+    expect(Skia.FontMgr.System).not.toHaveBeenCalled();
+    expect(Skia.Font).not.toHaveBeenCalled();
   });
 });
 
-describe('SkiaTopoScene web font fallback', () => {
+describe('SkiaTopoScene bundled font gate', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  // Regression: `FontMgr.System().matchFamilyStyle` is not implemented on React
-  // Native Web and throws synchronously, which crashed the whole canvas (blank
-  // editor). When the bundled `useFont` hasn't resolved yet on web we must skip
-  // rendering the glyphs rather than fall back to the system font manager.
-  it('never touches the system font manager on web while useFont is unresolved', () => {
-    const originalOS = Platform.OS;
-    Object.defineProperty(Platform, 'OS', { value: 'web', configurable: true });
-    (useFont as jest.Mock).mockReturnValue(null);
+  it('skips text on every platform until bundled Skia fonts are loaded', () => {
+    (useFont as jest.Mock).mockReturnValueOnce(null);
 
-    try {
-      expect(() => render(<SkiaTopoScene items={[textItem]} />)).not.toThrow();
-      expect(useFont).toHaveBeenCalledWith(
-        SKIA_INTER_FONT_BY_WEIGHT[textItem.fontWeight],
-        textItem.fontSize,
-      );
-      expect(Skia.FontMgr.System).not.toHaveBeenCalled();
-    } finally {
-      Object.defineProperty(Platform, 'OS', { value: originalOS, configurable: true });
-    }
+    const { UNSAFE_queryByProps } = render(<SkiaTopoScene items={[textItem]} />);
+
+    expect(useFont).toHaveBeenCalledWith(
+      SKIA_INTER_FONT_BY_WEIGHT[textItem.fontWeight],
+      textItem.fontSize,
+    );
+    expect(UNSAFE_queryByProps({ text: 'Pitch 1' })).toBeNull();
+    expect(Skia.FontMgr.System).not.toHaveBeenCalled();
   });
 
-  it('still uses the system font fallback on native when useFont is unresolved', () => {
-    const originalOS = Platform.OS;
-    Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true });
-    (useFont as jest.Mock).mockReturnValue(null);
+  it('renders text with bundled Inter once Skia fonts are loaded', () => {
+    const loadedFont = {
+      fontSize: 48,
+      measureText: jest.fn((text = '') => ({ width: String(text).length * 24 })),
+    };
+    (useFont as jest.Mock).mockReturnValueOnce(loadedFont);
 
-    try {
-      render(<SkiaTopoScene items={[textItem]} />);
-      expect(Skia.FontMgr.System).toHaveBeenCalled();
-    } finally {
-      Object.defineProperty(Platform, 'OS', { value: originalOS, configurable: true });
-    }
+    const { UNSAFE_getByProps } = render(<SkiaTopoScene items={[textItem]} />);
+
+    expect(useFont).toHaveBeenCalledWith(
+      SKIA_INTER_FONT_BY_WEIGHT[textItem.fontWeight],
+      textItem.fontSize,
+    );
+    expect(UNSAFE_getByProps({ text: 'Pitch 1' }).props.font).toBe(loadedFont);
+    expect(Skia.FontMgr.System).not.toHaveBeenCalled();
   });
 });

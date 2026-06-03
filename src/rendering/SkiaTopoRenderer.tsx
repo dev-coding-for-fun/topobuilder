@@ -11,7 +11,6 @@ import {
   type SkImage,
   type SkTypeface,
 } from '@shopify/react-native-skia';
-import { Platform } from 'react-native';
 
 import type { RenderTextFontWeight, TopoRenderItem } from './scene';
 import { smoothedRenderPath } from './scene';
@@ -92,7 +91,7 @@ function SkiaStaticRenderItem({
   }
 
   if (item.kind === 'text') {
-    return <SkiaStaticTextRenderItem item={item} typefaces={typefaces} />;
+    return typefaces ? <SkiaStaticTextRenderItem item={item} typefaces={typefaces} /> : null;
   }
   return null;
 }
@@ -154,7 +153,7 @@ function primitiveRenderItem(item: TopoRenderItem) {
 }
 
 function SkiaTextRenderItem({ item }: { item: Extract<TopoRenderItem, { kind: 'text' }> }) {
-  const font = useFont(SKIA_INTER_FONT_BY_WEIGHT[item.fontWeight], item.fontSize) ?? systemFont(item);
+  const font = useFont(SKIA_INTER_FONT_BY_WEIGHT[item.fontWeight], item.fontSize);
   if (!font) {
     return null;
   }
@@ -178,7 +177,7 @@ function SkiaStaticTextRenderItem({
   item: Extract<TopoRenderItem, { kind: 'text' }>;
   typefaces?: SkiaTextTypefaces;
 }) {
-  const font = bundledFont(item, typefaces) ?? systemFont(item);
+  const font = bundledFontFromTypefaces(item, typefaces);
   if (!font) {
     return null;
   }
@@ -195,24 +194,10 @@ function SkiaStaticTextRenderItem({
   );
 }
 
-function bundledFont(
+function bundledFontFromTypefaces(
   item: Extract<TopoRenderItem, { kind: 'text' }>,
   typefaces?: SkiaTextTypefaces,
 ) {
   const typeface = typefaces?.[item.fontWeight];
   return typeface ? Skia.Font(typeface, item.fontSize) : undefined;
-}
-
-function systemFont(item: Extract<TopoRenderItem, { kind: 'text' }>) {
-  // `FontMgr.System()`/`matchFamilyStyle` is not implemented on React Native
-  // Web and throws synchronously, which would crash the whole Skia canvas. On
-  // web we rely on the bundled `useFont`/typeface paths instead and simply skip
-  // rendering the glyphs until that font has loaded.
-  if (Platform.OS === 'web') {
-    return undefined;
-  }
-  const typeface = Skia.FontMgr.System().matchFamilyStyle('System', {
-    weight: item.fontWeight === '700' ? 700 : 400,
-  });
-  return Skia.Font(typeface ?? undefined, item.fontSize);
 }

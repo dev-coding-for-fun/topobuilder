@@ -31,8 +31,7 @@ test.describe('editor text annotation keyboard input', () => {
   test('keeps the in-progress label alive when typing a space', async ({ page }) => {
     const pageErrors: string[] = [];
     page.on('pageerror', (error) => pageErrors.push(error.message));
-    // React surfaces render-time throws (e.g. Skia's "Not implemented on React
-    // Native Web" from the system font fallback) via console.error rather than an
+    // React surfaces render-time throws via console.error rather than an
     // uncaught pageerror, so capture those too.
     const consoleErrors: string[] = [];
     page.on('console', (message) => {
@@ -90,10 +89,9 @@ test.describe('editor text annotation keyboard input', () => {
     await expect(labelInput).toHaveValue('Pitch ');
 
     // Commit the label (selecting a tool saves + deselects it) so it becomes a
-    // *drawn* Skia text item rather than the live textarea. On web this is the
-    // path that calls into the font system; a regression here (e.g. calling the
-    // unimplemented FontMgr.System) throws synchronously and blanks the whole
-    // canvas, so we assert the editor and canvas survive with no page errors.
+    // *drawn* Skia text item rather than the live textarea. A regression here
+    // can still blank the canvas, so we assert the editor and canvas survive
+    // with no page errors.
     await page.getByTestId('editor:tool-select').click();
     await expect(labelInput).toBeHidden();
 
