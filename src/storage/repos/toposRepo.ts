@@ -13,6 +13,9 @@ type TopoRow = {
   photo_uri: string | null;
   photo_width: number | null;
   photo_height: number | null;
+  tabvar_dirty: number;
+  tabvar_submission_id: string | null;
+  tabvar_synced_at: string | null;
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -27,6 +30,9 @@ function mapTopo(row: TopoRow): Topo {
     photoUri: row.photo_uri ?? undefined,
     photoWidth: row.photo_width ?? undefined,
     photoHeight: row.photo_height ?? undefined,
+    tabvarDirty: row.tabvar_dirty !== 0,
+    tabvarSubmissionId: row.tabvar_submission_id ?? undefined,
+    tabvarSyncedAt: row.tabvar_synced_at ?? undefined,
     sortOrder: row.sort_order,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -81,6 +87,7 @@ export async function createTopo(
     sectorId: input.sectorId,
     name,
     description: input.description,
+    tabvarDirty: true,
     sortOrder,
     createdAt: now,
     updatedAt: now,
@@ -107,7 +114,12 @@ export async function createTopo(
 
 export async function renameTopo(db: TopoDatabase, id: string, name: string): Promise<void> {
   const now = nowIso();
-  await db.runAsync('UPDATE topos SET name = ?, updated_at = ? WHERE id = ?', name, now, id);
+  await db.runAsync(
+    'UPDATE topos SET name = ?, updated_at = ?, tabvar_dirty = 1 WHERE id = ?',
+    name,
+    now,
+    id,
+  );
 }
 
 export async function updateTopoDescription(
@@ -117,7 +129,7 @@ export async function updateTopoDescription(
 ): Promise<void> {
   const now = nowIso();
   await db.runAsync(
-    'UPDATE topos SET description = ?, updated_at = ? WHERE id = ?',
+    'UPDATE topos SET description = ?, updated_at = ?, tabvar_dirty = 1 WHERE id = ?',
     description ?? null,
     now,
     id,
@@ -132,7 +144,7 @@ export async function attachPhotoToTopo(
   const now = nowIso();
   await db.runAsync(
     `UPDATE topos
-       SET photo_uri = ?, photo_width = ?, photo_height = ?, updated_at = ?
+       SET photo_uri = ?, photo_width = ?, photo_height = ?, updated_at = ?, tabvar_dirty = 1
      WHERE id = ?`,
     photo.uri,
     photo.width,
@@ -169,6 +181,45 @@ export async function loadTopoEditorBundle(
     listAnnotationsForTopo(db, id),
   ]);
   return { topo, routes, annotations };
+}
+
+export async function markToposDirty(db: TopoDatabase, topoIds: string[]): Promise<void> {
+  if (topoIds.length === 0) return;
+  const placeholders = topoIds.map(() => '?').join(', ');
+  await db.runAsync(`UPDATE topos SET tabvar_dirty = 1 WHERE id IN (${placeholders})`, ...topoIds);
+}
+
+export async function markToposForSectorDirty(db: TopoDatabase, sectorId: string): Promise<void> {
+  await db.runAsync('UPDATE topos SET tabvar_dirty = 1 WHERE sector_id = ?', sectorId);
+}
+
+export async function markToposForCragDirty(db: TopoDatabase, cragId: string): Promise<void> {
+  await db.runAsync(
+    `UPDATE topos
+        SET tabvar_dirty = 1
+      WHERE sector_id IN (SELECT id FROM sectors WHERE crag_id = ?)`,
+    cragId,
+  );
+}
+
+export async function markToposClean(
+  db: TopoDatabase,
+  topoIds: string[],
+  submissionId: string,
+): Promise<void> {
+  if (topoIds.length === 0) return;
+  const now = nowIso();
+  const placeholders = topoIds.map(() => '?').join(', ');
+  await db.runAsync(
+    `UPDATE topos
+        SET tabvar_dirty = 0,
+            tabvar_submission_id = ?,
+            tabvar_synced_at = ?
+      WHERE id IN (${placeholders})`,
+    submissionId,
+    now,
+    ...topoIds,
+  );
 }
 
 async function touchAncestors(

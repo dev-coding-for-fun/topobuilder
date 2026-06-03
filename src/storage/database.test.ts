@@ -70,13 +70,13 @@ describe('runMigrations', () => {
     infoSpy.mockRestore();
   });
 
-  it('wipes v0 data, creates v1 schema, migrates to v2, and cleans photos after commit', async () => {
+  it('wipes v0 data, creates the schema, runs migrations, and cleans photos after commit', async () => {
     const db = new FakeDb(0);
 
     await runMigrations(asDb(db));
 
     expect(db.userVersion).toBe(CURRENT_SCHEMA_VERSION);
-    expect(db.transactionCount).toBe(2);
+    expect(db.transactionCount).toBe(3);
     expect(db.execs).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -99,18 +99,26 @@ describe('runMigrations', () => {
           sql: 'PRAGMA user_version = 2;',
           inTransaction: true,
         }),
+        expect.objectContaining({
+          sql: expect.stringContaining('ALTER TABLE topos ADD COLUMN tabvar_dirty'),
+          inTransaction: true,
+        }),
+        expect.objectContaining({
+          sql: 'PRAGMA user_version = 3;',
+          inTransaction: true,
+        }),
       ]),
     );
     expect(clearPhotosDirectory).toHaveBeenCalledTimes(1);
   });
 
-  it('migrates v1 data to v2 with sort order columns and backfill SQL', async () => {
+  it('migrates v1 data through sort order and Tabvar sync columns', async () => {
     const db = new FakeDb(1);
 
     await runMigrations(asDb(db));
 
     expect(db.userVersion).toBe(CURRENT_SCHEMA_VERSION);
-    expect(db.transactionCount).toBe(1);
+    expect(db.transactionCount).toBe(2);
     expect(db.execs).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -131,6 +139,10 @@ describe('runMigrations', () => {
         }),
         expect.objectContaining({
           sql: expect.stringContaining('PARTITION BY topo_id'),
+          inTransaction: true,
+        }),
+        expect.objectContaining({
+          sql: expect.stringContaining('ALTER TABLE topos ADD COLUMN tabvar_dirty'),
           inTransaction: true,
         }),
       ]),
@@ -155,7 +167,7 @@ describe('runMigrations', () => {
     await Promise.all([runMigrations(asDb(db)), runMigrations(asDb(db)), runMigrations(asDb(db))]);
 
     expect(db.userVersion).toBe(CURRENT_SCHEMA_VERSION);
-    expect(db.transactionCount).toBe(2);
+    expect(db.transactionCount).toBe(3);
     expect(db.execs.filter((record) => record.sql.includes('DROP TABLE IF EXISTS'))).toHaveLength(1);
     expect(clearPhotosDirectory).toHaveBeenCalledTimes(1);
   });

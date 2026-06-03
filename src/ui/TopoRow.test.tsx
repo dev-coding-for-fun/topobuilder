@@ -13,6 +13,7 @@ const baseTopo: TopoWithRoutes = {
   photoUri: undefined,
   photoWidth: undefined,
   photoHeight: undefined,
+  tabvarDirty: true,
   sortOrder: 0,
   createdAt: '2026-05-30T00:00:00.000Z',
   updatedAt: '2026-05-30T00:00:00.000Z',

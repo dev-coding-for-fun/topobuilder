@@ -77,46 +77,52 @@ export async function createRoute(
     sortOrder,
   };
 
-  await db.runAsync(
-    `INSERT INTO routes
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `INSERT INTO routes
         (id, topo_id, name, grade, route_type, bolt_count, length_m, fa, description, color, sort_order, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    route.id,
-    route.topoId,
-    route.name,
-    route.grade ?? null,
-    route.routeType ?? null,
-    route.boltCount ?? null,
-    route.lengthM ?? null,
-    route.fa ?? null,
-    route.description ?? null,
-    route.color,
-    route.sortOrder,
-    route.createdAt,
-    route.updatedAt,
-  );
+      route.id,
+      route.topoId,
+      route.name,
+      route.grade ?? null,
+      route.routeType ?? null,
+      route.boltCount ?? null,
+      route.lengthM ?? null,
+      route.fa ?? null,
+      route.description ?? null,
+      route.color,
+      route.sortOrder,
+      route.createdAt,
+      route.updatedAt,
+    );
+    await markTopoDirty(db, route.topoId, now);
+  });
 
   return route;
 }
 
 export async function updateRoute(db: TopoDatabase, route: Route): Promise<void> {
   const now = nowIso();
-  await db.runAsync(
-    `UPDATE routes
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `UPDATE routes
         SET name = ?, grade = ?, route_type = ?, bolt_count = ?, length_m = ?,
             fa = ?, description = ?, color = ?, updated_at = ?
       WHERE id = ?`,
-    route.name,
-    route.grade ?? null,
-    route.routeType ?? null,
-    route.boltCount ?? null,
-    route.lengthM ?? null,
-    route.fa ?? null,
-    route.description ?? null,
-    route.color,
-    now,
-    route.id,
-  );
+      route.name,
+      route.grade ?? null,
+      route.routeType ?? null,
+      route.boltCount ?? null,
+      route.lengthM ?? null,
+      route.fa ?? null,
+      route.description ?? null,
+      route.color,
+      now,
+      route.id,
+    );
+    await markTopoDirtyForRoute(db, route.id, now);
+  });
 }
 
 /**
@@ -125,7 +131,13 @@ export async function updateRoute(db: TopoDatabase, route: Route): Promise<void>
  * relies on that and does not need to clear them manually.
  */
 export async function deleteRoute(db: TopoDatabase, id: string): Promise<void> {
-  await db.runAsync('DELETE FROM routes WHERE id = ?', id);
+  const topo = await db.getFirstAsync<{ topo_id: string }>('SELECT topo_id FROM routes WHERE id = ?', id);
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('DELETE FROM routes WHERE id = ?', id);
+    if (topo?.topo_id) {
+      await markTopoDirty(db, topo.topo_id, nowIso());
+    }
+  });
 }
 
 async function nextRouteSortOrder(db: TopoDatabase, topoId: string): Promise<number> {
@@ -134,4 +146,26 @@ async function nextRouteSortOrder(db: TopoDatabase, topoId: string): Promise<num
     topoId,
   );
   return row?.next_sort_order ?? 0;
+}
+
+async function markTopoDirty(db: TopoDatabase, topoId: string, when: string): Promise<void> {
+  await db.runAsync(
+    'UPDATE topos SET updated_at = ?, tabvar_dirty = 1 WHERE id = ?',
+    when,
+    topoId,
+  );
+}
+
+async function markTopoDirtyForRoute(
+  db: TopoDatabase,
+  routeId: string,
+  when: string,
+): Promise<void> {
+  await db.runAsync(
+    `UPDATE topos
+        SET updated_at = ?, tabvar_dirty = 1
+      WHERE id = (SELECT topo_id FROM routes WHERE id = ?)`,
+    when,
+    routeId,
+  );
 }

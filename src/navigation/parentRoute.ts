@@ -38,7 +38,7 @@ export function getParentHrefFromSegments(segments: readonly string[]): string |
   return null;
 }
 
-/** @deprecated Prefer {@link getParentHrefFromSegments} — pathname alone is unreliable for the index route. */
+/** @deprecated Prefer {@link getParentHrefFromSegments}; pathname alone is unreliable for the index route. */
 export function getParentHref(pathname: string): string | null {
   const path = normalizePathname(pathname);
 

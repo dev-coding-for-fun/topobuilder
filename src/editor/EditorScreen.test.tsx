@@ -11,12 +11,13 @@ import EditorScreen from '../../app/crags/[cragId]/topos/[topoId]/editor';
 
 jest.mock('expo-router', () => ({
   Stack: { Screen: () => null },
-  router: { back: jest.fn(), push: jest.fn() },
+  router: { back: jest.fn(), push: jest.fn(), replace: jest.fn() },
   useFocusEffect: (effect: () => void | (() => void)) => {
     const React = require('react');
     React.useEffect(effect, [effect]);
   },
   useLocalSearchParams: () => ({ cragId: 'crag-1', topoId: 'project-1' }),
+  useSegments: () => ['crags', 'crag-1', 'topos', 'project-1', 'editor'],
 }));
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -161,6 +162,7 @@ function bundleFromProject(p: TopoProject): TopoEditorBundle {
       photoUri: photo?.uri,
       photoWidth: photo?.width,
       photoHeight: photo?.height,
+      tabvarDirty: true,
       sortOrder: 0,
       createdAt: p.createdAt,
       updatedAt: p.updatedAt,
@@ -317,6 +319,9 @@ describe('EditorScreen label editing', () => {
 
     render(<EditorScreen />);
     await waitFor(() => expect(screen.getByTestId('editor:no-photo')).toBeTruthy());
+
+    fireEvent.press(screen.getByLabelText('Go back'));
+    expect(router.replace).toHaveBeenCalledWith('/crags/crag-1');
 
     fireEvent.press(screen.getByTestId('editor:no-photo:camera'));
     expect(router.push).toHaveBeenCalledWith('/crags/crag-1/topos/project-1/camera');

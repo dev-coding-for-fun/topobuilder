@@ -229,6 +229,7 @@ export async function exportTopoPdf(project: TopoProject, photo: PhotoAsset) {
               photoUri: photo.uri,
               photoWidth: photo.width,
               photoHeight: photo.height,
+              tabvarDirty: true,
               sortOrder: 0,
               createdAt: project.createdAt,
               updatedAt: project.updatedAt,

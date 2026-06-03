@@ -100,29 +100,31 @@ export async function upsertAnnotation(
         }
       : undefined;
 
-  await db.runAsync(
-    `INSERT OR REPLACE INTO annotations (
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `INSERT OR REPLACE INTO annotations (
         id, topo_id, route_id, kind, color, label, metadata_json,
         point_json, points_json, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    annotation.id,
-    annotation.topoId,
-    annotation.routeId ?? null,
-    annotation.kind,
-    annotation.color,
-    annotation.label ?? null,
-    metadata ? JSON.stringify(metadata) : null,
-    'point' in annotation ? JSON.stringify(annotation.point) : null,
-    'points' in annotation ? JSON.stringify(annotation.points) : null,
-    annotation.createdAt,
-    annotation.updatedAt,
-  );
+      annotation.id,
+      annotation.topoId,
+      annotation.routeId ?? null,
+      annotation.kind,
+      annotation.color,
+      annotation.label ?? null,
+      metadata ? JSON.stringify(metadata) : null,
+      'point' in annotation ? JSON.stringify(annotation.point) : null,
+      'points' in annotation ? JSON.stringify(annotation.points) : null,
+      annotation.createdAt,
+      annotation.updatedAt,
+    );
 
-  await db.runAsync(
-    'UPDATE topos SET updated_at = ? WHERE id = ?',
-    annotation.updatedAt,
-    annotation.topoId,
-  );
+    await db.runAsync(
+      'UPDATE topos SET updated_at = ?, tabvar_dirty = 1 WHERE id = ?',
+      annotation.updatedAt,
+      annotation.topoId,
+    );
+  });
 }
 
 export async function deleteAnnotation(
@@ -131,6 +133,12 @@ export async function deleteAnnotation(
   topoId: string,
   now: string,
 ): Promise<void> {
-  await db.runAsync('DELETE FROM annotations WHERE id = ?', annotationId);
-  await db.runAsync('UPDATE topos SET updated_at = ? WHERE id = ?', now, topoId);
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('DELETE FROM annotations WHERE id = ?', annotationId);
+    await db.runAsync(
+      'UPDATE topos SET updated_at = ?, tabvar_dirty = 1 WHERE id = ?',
+      now,
+      topoId,
+    );
+  });
 }

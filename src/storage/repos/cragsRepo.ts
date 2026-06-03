@@ -2,6 +2,7 @@ import { createId, nowIso } from '@/domain/ids';
 import type { Crag, CragSummary, Sector } from '@/domain/types';
 
 import type { TopoDatabase } from '../database';
+import { markToposForCragDirty } from './toposRepo';
 
 type CragRow = {
   id: string;
@@ -117,12 +118,10 @@ export async function createCrag(
 
 export async function renameCrag(db: TopoDatabase, id: string, name: string): Promise<void> {
   const now = nowIso();
-  await db.runAsync(
-    'UPDATE crags SET name = ?, updated_at = ? WHERE id = ?',
-    name,
-    now,
-    id,
-  );
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('UPDATE crags SET name = ?, updated_at = ? WHERE id = ?', name, now, id);
+    await markToposForCragDirty(db, id);
+  });
 }
 
 export async function updateCragDescription(

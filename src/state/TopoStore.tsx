@@ -23,6 +23,9 @@ import type {
 } from '@/domain/types';
 import { pickPhotoFromLibrary } from '@/camera/photoCapture';
 import { copyPhotoIntoLibrary } from '@/storage/assetStorage';
+import { submitTabvarGuidebook } from '@/integrations/tabvar/client';
+import { loadTabvarSession } from '@/integrations/tabvar/sessionStore';
+import type { TabvarSubmissionResponse } from '@/integrations/tabvar/types';
 import { getDatabase, runMigrations, type TopoDatabase } from '@/storage/database';
 import {
   createCrag as createCragRepo,
@@ -45,6 +48,7 @@ import {
   deleteTopo as deleteTopoRepo,
   loadTopoEditorBundle,
   listToposForSector,
+  markToposClean,
   renameTopo as renameTopoRepo,
   updateTopoDescription as updateTopoDescriptionRepo,
 } from '@/storage/repos/toposRepo';
@@ -112,6 +116,7 @@ type TopoStoreValue = {
   loadTopoEditor: (id: string) => Promise<TopoEditorBundle | undefined>;
   attachPhotoFromLibrary: (topoId: string) => Promise<boolean>;
   attachPhotoFromUri: (input: { topoId: string; uri: string; width: number; height: number }) => Promise<void>;
+  submitToTabvar: (request: GuidebookExportRequest) => Promise<TabvarSubmissionResponse>;
 
   // Routes
   createRoute: (topoId: string, defaults?: RouteFieldUpdate) => Promise<Route>;
@@ -365,6 +370,25 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
     [db, refresh],
   );
 
+  const submitToTabvar = useCallback(
+    async (request: GuidebookExportRequest) => {
+      const dbRef = requireDb();
+      const session = await loadTabvarSession();
+      if (!session) {
+        throw new Error('Connect Tabvar before submitting topos.');
+      }
+      const bundle = await loadGuidebookExportBundle(dbRef, request);
+      if (!bundle) {
+        throw new Error('Could not load topo data for Tabvar submission.');
+      }
+      const { response, submittedTopoIds } = await submitTabvarGuidebook(bundle, session.accessToken);
+      await markToposClean(dbRef, submittedTopoIds, response.id);
+      await refresh();
+      return response;
+    },
+    [db, refresh],
+  );
+
   // ── Routes ──────────────────────────────────────────────────────────────
 
   const createRoute = useCallback(
@@ -466,6 +490,7 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
       loadTopoEditor,
       attachPhotoFromLibrary,
       attachPhotoFromUri,
+      submitToTabvar,
       createRoute,
       updateRouteField,
       deleteRoute,
@@ -499,6 +524,7 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
       renameSector,
       renameTopo,
       storageError,
+      submitToTabvar,
       updateAnnotation,
       updateRouteField,
       updateTopoDescription,

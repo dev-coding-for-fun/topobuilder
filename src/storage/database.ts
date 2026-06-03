@@ -7,7 +7,7 @@ export type TopoDatabase = SQLite.SQLiteDatabase;
 
 const DATABASE_NAME = 'topobuilder.db';
 
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 type MigrationStep = {
   from: number;
@@ -125,6 +125,9 @@ const V1_SCHEMA = `
     photo_uri    TEXT,
     photo_width  INTEGER,
     photo_height INTEGER,
+    tabvar_dirty INTEGER NOT NULL DEFAULT 1,
+    tabvar_submission_id TEXT,
+    tabvar_synced_at TEXT,
     created_at   TEXT NOT NULL,
     updated_at   TEXT NOT NULL,
     FOREIGN KEY (sector_id) REFERENCES sectors(id) ON DELETE CASCADE
@@ -251,6 +254,17 @@ const migrations: MigrationStep[] = [
                FROM ordered
               WHERE ordered.id = routes.id
            );
+      `);
+    },
+  },
+  {
+    from: 2,
+    to: 3,
+    run: async (db) => {
+      await db.execAsync(`
+        ALTER TABLE topos ADD COLUMN tabvar_dirty INTEGER NOT NULL DEFAULT 1;
+        ALTER TABLE topos ADD COLUMN tabvar_submission_id TEXT;
+        ALTER TABLE topos ADD COLUMN tabvar_synced_at TEXT;
       `);
     },
   },

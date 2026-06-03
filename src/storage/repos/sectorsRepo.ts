@@ -2,6 +2,7 @@ import { createId, nowIso } from '@/domain/ids';
 import type { Sector } from '@/domain/types';
 
 import type { TopoDatabase } from '../database';
+import { markToposForSectorDirty } from './toposRepo';
 
 type SectorRow = {
   id: string;
@@ -73,7 +74,10 @@ export async function createSector(
 
 export async function renameSector(db: TopoDatabase, id: string, name: string): Promise<void> {
   const now = nowIso();
-  await db.runAsync('UPDATE sectors SET name = ?, updated_at = ? WHERE id = ?', name, now, id);
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('UPDATE sectors SET name = ?, updated_at = ? WHERE id = ?', name, now, id);
+    await markToposForSectorDirty(db, id);
+  });
 }
 
 export async function updateSectorDescription(

@@ -57,6 +57,9 @@ export type Topo = {
   photoUri?: string;
   photoWidth?: number;
   photoHeight?: number;
+  tabvarDirty: boolean;
+  tabvarSubmissionId?: string;
+  tabvarSyncedAt?: string;
   sortOrder: number;
   createdAt: string;
   updatedAt: string;

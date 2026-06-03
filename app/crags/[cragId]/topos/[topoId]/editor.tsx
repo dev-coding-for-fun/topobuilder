@@ -53,6 +53,8 @@ import { RouteMarkerNumberControl } from '@/editor/RouteMarkerNumberControl';
 import { StampSizeControl } from '@/editor/StampSizeControl';
 import { ToolPalette } from '@/editor/ToolPalette';
 import { TopoCanvas } from '@/editor/TopoCanvas';
+import { NavBackButton } from '@/navigation/NavBackButton';
+import { useNavigateToParent } from '@/navigation/navigateToParent';
 import { useTopoStore } from '@/state/TopoStore';
 import { Button } from '@/ui/Button';
 import { interStyle } from '@/ui/fonts';
@@ -87,6 +89,7 @@ function photoFromTopo(topo: Topo) {
 
 export default function EditorScreen() {
   const { cragId, topoId } = useLocalSearchParams<{ cragId: string; topoId: string }>();
+  const navigateToParent = useNavigateToParent();
   const { height: windowHeight } = useWindowDimensions();
   const {
     isReady,
@@ -843,6 +846,7 @@ export default function EditorScreen() {
     return (
       <View style={[styles.root, styles.center]} testID="editor:loading">
         <Stack.Screen options={{ headerShown: false }} />
+        <EditorBackOverlay onBack={navigateToParent} />
         <Text style={styles.loadingText}>Loading editor…</Text>
       </View>
     );
@@ -852,6 +856,7 @@ export default function EditorScreen() {
     return (
       <View style={[styles.root, styles.center, { backgroundColor: '#0F172A' }]} testID="editor:no-photo">
         <Stack.Screen options={{ headerShown: false }} />
+        <EditorBackOverlay onBack={navigateToParent} />
         <Text style={styles.loadingText}>This topo has no photo yet.</Text>
         <Text style={styles.noPhotoCopy}>
           {Platform.OS === 'web'
@@ -961,7 +966,7 @@ export default function EditorScreen() {
           canRedo={false}
           canUndo={draftPoints.length > 0 || savedAnnotations.length > 0}
           canDelete={Boolean(selectedAnnotation)}
-          onBack={() => router.replace(`/crags/${cragId}`)}
+          onBack={navigateToParent}
           onDelete={() => {
             void deleteSelectedAnnotation();
           }}
@@ -1064,6 +1069,14 @@ export default function EditorScreen() {
   );
 }
 
+function EditorBackOverlay({ onBack }: { onBack: () => void }) {
+  return (
+    <SafeAreaView edges={['top']} pointerEvents="box-none" style={styles.topOverlay}>
+      <NavBackButton onPress={onBack} style={styles.editorBackButton} tone="onDark" />
+    </SafeAreaView>
+  );
+}
+
 const styles = StyleSheet.create({
   bottomOverlay: {
     bottom: 0,
@@ -1077,6 +1090,10 @@ const styles = StyleSheet.create({
   center: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  editorBackButton: {
+    marginHorizontal: 16,
+    marginVertical: 10,
   },
   contextControls: {
     alignItems: 'center',
