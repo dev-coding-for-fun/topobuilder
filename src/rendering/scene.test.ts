@@ -1,5 +1,6 @@
 import type { Annotation } from '@/domain/types';
 
+import type { TopoRenderItem } from './scene';
 import { annotationsInRenderOrder, buildTopoRenderScene, smoothedRenderPath } from './scene';
 
 const base = {
@@ -121,32 +122,41 @@ describe('buildTopoRenderScene', () => {
   });
 
   it('keeps artifact label backdrops proportional when downscaling high-resolution photos', () => {
-    const scene = buildTopoRenderScene({
-      annotations: [
-        {
-          ...base,
-          id: 'label-1',
-          kind: 'label',
-          label: 'Pitch 1',
-          labelFontSize: 80,
-          point: { x: 0.3, y: 0.4 },
-        },
-      ],
-      size: { width: 2400, height: 1800 },
-      sourcePhoto: { width: 4000, height: 3000 },
+    const sourcePhoto = { width: 4000, height: 3000 };
+    const downscaledSize = { width: 2400, height: 1800 };
+    const label: Annotation = {
+      ...base,
+      id: 'label-1',
+      kind: 'label',
+      label: 'Pitch 1',
+      labelFontSize: 80,
+      point: { x: 0.3, y: 0.4 },
+    };
+    const sourceScene = buildTopoRenderScene({
+      annotations: [label],
+      size: sourcePhoto,
+      sourcePhoto,
       target: 'artifact',
     });
+    const downscaledScene = buildTopoRenderScene({
+      annotations: [label],
+      size: downscaledSize,
+      sourcePhoto,
+      target: 'artifact',
+    });
+    const exportScale = downscaledSize.width / sourcePhoto.width;
 
-    expect(scene.find((item) => item.id === 'label-1:text:0')).toMatchObject({
-      kind: 'text',
-      fontSize: 48,
-      text: 'Pitch 1',
-    });
-    expect(scene.find((item) => item.id === 'label-1:backdrop')).toMatchObject({
-      kind: 'roundedRect',
-      height: 74.88,
-      width: 215.04,
-    });
+    const sourceText = expectRenderItem(sourceScene, 'label-1:text:0', 'text');
+    const downscaledText = expectRenderItem(downscaledScene, 'label-1:text:0', 'text');
+    const sourceBackdrop = expectRenderItem(sourceScene, 'label-1:backdrop', 'roundedRect');
+    const downscaledBackdrop = expectRenderItem(downscaledScene, 'label-1:backdrop', 'roundedRect');
+
+    expect(downscaledText.text).toBe('Pitch 1');
+    expect(downscaledText.fontSize).toBeCloseTo(sourceText.fontSize * exportScale);
+    expect(downscaledBackdrop.height).toBeCloseTo(sourceBackdrop.height * exportScale);
+    expect(downscaledBackdrop.width).toBeCloseTo(sourceBackdrop.width * exportScale);
+    expect(downscaledBackdrop.x).toBeCloseTo(sourceBackdrop.x * exportScale);
+    expect(downscaledBackdrop.y).toBeCloseTo(sourceBackdrop.y * exportScale);
   });
 
   it('creates smoothed path data from render points', () => {
@@ -159,3 +169,16 @@ describe('buildTopoRenderScene', () => {
     ).toBe('M 0 0 Q 50 100 75 50 L 100 0');
   });
 });
+
+function expectRenderItem<TKind extends TopoRenderItem['kind']>(
+  scene: TopoRenderItem[],
+  id: string,
+  kind: TKind,
+) {
+  const item = scene.find((candidate) => candidate.id === id);
+  expect(item).toMatchObject({ id, kind });
+  if (!item || item.kind !== kind) {
+    throw new Error(`Expected ${id} to be a ${kind} render item`);
+  }
+  return item as Extract<TopoRenderItem, { kind: TKind }>;
+}
