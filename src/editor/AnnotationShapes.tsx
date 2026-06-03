@@ -10,6 +10,7 @@ import { denormalizePoint, normalizedToScreenPoint } from '@/domain/geometry';
 import {
   displayFontSize,
   labelFontSize,
+  labelBoundsLeadingInset,
   labelHandlePoints,
   labelText,
   measureLabelBounds,
@@ -175,13 +176,15 @@ export function screenFrameForLabel({
     },
   });
   const point = normalizedToScreenPoint(annotation.point, imageFit, transform);
+  const leadingInset = labelBoundsLeadingInset(fontSize);
 
   return {
     fontSize,
     height: bounds.height,
+    leadingInset,
     lineHeight: fontSize * 1.2,
     width: bounds.width,
-    x: point.x,
+    x: point.x - leadingInset,
     y: point.y,
   };
 }

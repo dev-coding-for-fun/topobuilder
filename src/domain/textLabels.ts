@@ -7,7 +7,8 @@ export const DEFAULT_SCREEN_LABEL_FONT_SIZE = 16;
 export const MIN_LABEL_FONT_SIZE = 8;
 export const MAX_LABEL_FONT_SIZE = 220;
 export const LABEL_LINE_HEIGHT = 1.2;
-export const LABEL_AVERAGE_CHAR_WIDTH = 0.58;
+export const LABEL_AVERAGE_CHAR_WIDTH = 0.52;
+const LABEL_BOUNDS_LEADING_INSET_RATIO = 0.12;
 
 export type LabelBounds = {
   x: number;
@@ -49,6 +50,10 @@ export function measureLabelText(text: string, fontSize: number) {
   };
 }
 
+export function labelBoundsLeadingInset(fontSize: number) {
+  return Math.min(6, Math.max(1, fontSize * LABEL_BOUNDS_LEADING_INSET_RATIO));
+}
+
 export function measureLabelBounds(input: {
   point: NormalizedPoint;
   text: string;
@@ -57,10 +62,11 @@ export function measureLabelBounds(input: {
 }) {
   const anchor = denormalizePoint(input.point, input.size);
   const measured = measureLabelText(input.text || ' ', input.fontSize);
+  const leadingInset = labelBoundsLeadingInset(input.fontSize);
   return {
-    x: anchor.x,
+    x: anchor.x - leadingInset,
     y: anchor.y,
-    width: measured.width,
+    width: measured.width + leadingInset,
     height: measured.height,
   };
 }

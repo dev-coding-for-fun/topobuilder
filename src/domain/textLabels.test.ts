@@ -30,6 +30,19 @@ describe('text label helpers', () => {
     expect(oneLine.width).toBeGreaterThan(multiline.width);
   });
 
+  it('adds leading selection room without adding trailing padding', () => {
+    const bounds = measureLabelBounds({
+      point: { x: 0.1, y: 0.2 },
+      text: 'Pitch',
+      fontSize: 20,
+      size: { width: 1000, height: 500 },
+    });
+
+    expect(bounds.x).toBeCloseTo(97.6);
+    expect(bounds.width).toBeCloseTo(54.4);
+    expect(bounds.x + bounds.width).toBeCloseTo(152);
+  });
+
   it('derives photo-relative font size from current screen zoom', () => {
     const unzoomed = photoFontSizeFromScreen({
       imageFit: { scale: 0.5 },

@@ -1151,6 +1151,7 @@ export function TopoCanvas({
                 height: selectedLabelFrame.height,
                 left: selectedLabelFrame.x,
                 lineHeight: selectedLabelFrame.lineHeight,
+                paddingLeft: selectedLabelFrame.leadingInset,
                 top: selectedLabelFrame.y,
                 width: selectedLabelFrame.width,
               },
