@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 
 import type { GuidebookExportBundle, GuidebookExportRequest } from '@/domain/types';
 import { exportGuidebookPdf } from '@/export/pdf';
+import { loadTabvarSession } from '@/integrations/tabvar/sessionStore';
 import { useTopoStore } from '@/state/TopoStore';
 import { BottomSheet } from '@/ui/BottomSheet';
 import { Button } from '@/ui/Button';
@@ -26,11 +27,16 @@ const KIND_COPY: Record<ShareScope['kind'], string> = {
 };
 
 export function ShareSheet({ scope, onClose }: Props) {
-  const { loadGuidebookExport } = useTopoStore();
+  const { loadGuidebookExport, submitToTabvar } = useTopoStore();
   const [bundle, setBundle] = useState<GuidebookExportBundle>();
   const [isExporting, setIsExporting] = useState(false);
+  const [isCheckingTabvar, setIsCheckingTabvar] = useState(false);
+  const [isSubmittingTabvar, setIsSubmittingTabvar] = useState(false);
   const [pdfUri, setPdfUri] = useState<string>();
   const [exportError, setExportError] = useState<string>();
+  const [tabvarConnected, setTabvarConnected] = useState(false);
+  const [tabvarError, setTabvarError] = useState<string>();
+  const [tabvarResult, setTabvarResult] = useState<string>();
 
   // Load a complete export bundle up front so the PDF action can use the same
   // one-column guidebook renderer for Crag, Sector, and Topo scopes.
@@ -55,14 +61,51 @@ export function ShareSheet({ scope, onClose }: Props) {
     };
   }, [loadGuidebookExport, scope]);
 
+  useEffect(() => {
+    setIsCheckingTabvar(false);
+    setIsSubmittingTabvar(false);
+    setTabvarConnected(false);
+    setTabvarError(undefined);
+    setTabvarResult(undefined);
+    if (!scope) return;
+    let active = true;
+    setIsCheckingTabvar(true);
+    void loadTabvarSession()
+      .then((session) => {
+        if (active) setTabvarConnected(Boolean(session));
+      })
+      .catch((error) => {
+        if (active) {
+          setTabvarError(error instanceof Error ? error.message : 'Could not check Tabvar connection.');
+        }
+      })
+      .finally(() => {
+        if (active) setIsCheckingTabvar(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [scope]);
+
   const isTopoScope = scope?.kind === 'topo';
   const pdfEnabled = Boolean(scope) && Boolean(bundle) && !isExporting;
+  const tabvarEnabled =
+    Boolean(scope) && Boolean(bundle) && tabvarConnected && !isCheckingTabvar && !isSubmittingTabvar;
 
   function pdfSubtitle(): string {
     if (isExporting) return 'Generating…';
     if (pdfUri) return 'Saved — tap to generate again';
     if (!bundle) return 'Loading export data…';
     return 'Guidebook-style PDF';
+  }
+
+  function tabvarSubtitle(): string {
+    if (isCheckingTabvar) return 'Checking connection…';
+    if (!tabvarConnected) return 'Connect in Settings to submit';
+    if (isSubmittingTabvar) return 'Submitting to Tabvar…';
+    if (tabvarResult) return 'Submitted — topos marked synced';
+    if (!bundle) return 'Loading topo data…';
+    return 'Submit to Tabvar';
   }
 
   async function handleExportPdf() {
@@ -76,6 +119,21 @@ export function ShareSheet({ scope, onClose }: Props) {
       setExportError(error instanceof Error ? error.message : 'Could not generate the PDF.');
     } finally {
       setIsExporting(false);
+    }
+  }
+
+  async function handleSubmitTabvar() {
+    if (!scope) return;
+    setIsSubmittingTabvar(true);
+    setTabvarError(undefined);
+    setTabvarResult(undefined);
+    try {
+      const response = await submitToTabvar(guidebookRequestForScope(scope));
+      setTabvarResult(`Submitted to Tabvar (${response.id}).`);
+    } catch (error) {
+      setTabvarError(error instanceof Error ? error.message : 'Could not submit to Tabvar.');
+    } finally {
+      setIsSubmittingTabvar(false);
     }
   }
 
@@ -93,9 +151,21 @@ export function ShareSheet({ scope, onClose }: Props) {
         </Text>
 
         <Section title="Connected services">
-          <Text style={styles.emptyServices} testID="share:services-empty">
-            No connected services yet. Add one in Settings.
-          </Text>
+          <ExportOption
+            disabled={!tabvarEnabled}
+            icon="cloud-upload-outline"
+            label="Tabvar"
+            onPress={() => {
+              void handleSubmitTabvar();
+            }}
+            subtitle={tabvarSubtitle()}
+            testID="share:submit-tabvar"
+            trailing={
+              isCheckingTabvar || isSubmittingTabvar ? (
+                <ActivityIndicator color="#6B7280" size="small" />
+              ) : undefined
+            }
+          />
         </Section>
 
         <Section title="Export file">
@@ -140,6 +210,16 @@ export function ShareSheet({ scope, onClose }: Props) {
         {exportError ? (
           <Text style={styles.resultError} testID="share:export-error">
             {exportError}
+          </Text>
+        ) : null}
+        {tabvarResult ? (
+          <Text style={styles.resultOk} testID="share:submit-tabvar-result">
+            {tabvarResult}
+          </Text>
+        ) : null}
+        {tabvarError ? (
+          <Text style={styles.resultError} testID="share:submit-tabvar-error">
+            {tabvarError}
           </Text>
         ) : null}
 
@@ -243,12 +323,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     ...interStyle('400'),
-  },
-  emptyServices: {
-    color: '#6B7280',
-    fontSize: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
   },
   option: {
     alignItems: 'center',
