@@ -2,12 +2,18 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Linking from 'expo-linking';
 import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { buildTabvarConnectUrl } from '@/integrations/tabvar/links';
 import { clearTabvarSession, loadTabvarSession } from '@/integrations/tabvar/sessionStore';
 import { disconnectTabvar } from '@/integrations/tabvar/client';
 import type { TabvarSession } from '@/integrations/tabvar/types';
+import {
+  DEFAULT_EXPORT_DISCLAIMER_SETTINGS,
+  type ExportDisclaimerSettings,
+  loadExportDisclaimerSettings,
+  saveExportDisclaimerSettings,
+} from '@/settings/exportDisclaimer';
 import { Button } from '@/ui/Button';
 import { Screen } from '@/ui/Screen';
 import { interStyle } from '@/ui/fonts';
@@ -49,6 +55,7 @@ export default function SettingsScreen() {
         </Section>
 
         <Section title="App preferences">
+          <ExportDisclaimerPanel />
           <ToggleRow
             disabled
             onValueChange={() => undefined}
@@ -79,6 +86,66 @@ export default function SettingsScreen() {
         </Section>
       </ScrollView>
     </Screen>
+  );
+}
+
+function ExportDisclaimerPanel() {
+  const [settings, setSettings] = useState<ExportDisclaimerSettings>(DEFAULT_EXPORT_DISCLAIMER_SETTINGS);
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    let mounted = true;
+    loadExportDisclaimerSettings()
+      .then((nextSettings) => {
+        if (mounted) {
+          setSettings(nextSettings);
+        }
+      })
+      .catch((loadError) => {
+        if (mounted) {
+          setError(errorMessage(loadError, 'Could not load export disclaimer settings.'));
+        }
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  function updateSettings(nextSettings: ExportDisclaimerSettings) {
+    setSettings(nextSettings);
+    setError(undefined);
+    saveExportDisclaimerSettings(nextSettings).catch((saveError) => {
+      setError(errorMessage(saveError, 'Could not save export disclaimer settings.'));
+    });
+  }
+
+  return (
+    <View style={styles.disclaimerPanel} testID="settings:export-disclaimer">
+      <ToggleRow
+        onValueChange={(enabled) => updateSettings({ ...settings, enabled })}
+        subtitle="Add this safety notice to every exported PDF"
+        testID="settings:export-disclaimer-enabled"
+        title="Export disclaimer"
+        value={settings.enabled}
+      />
+      <View style={styles.disclaimerEditor}>
+        <TextInput
+          editable={settings.enabled}
+          multiline
+          onChangeText={(text) => updateSettings({ ...settings, text })}
+          placeholder="Disclaimer text"
+          style={[styles.disclaimerInput, !settings.enabled && styles.disclaimerInputDisabled]}
+          testID="settings:export-disclaimer-text"
+          textAlignVertical="top"
+          value={settings.text}
+        />
+        {error ? (
+          <Text style={styles.preferenceError} testID="settings:export-disclaimer-error">
+            {error}
+          </Text>
+        ) : null}
+      </View>
+    </View>
   );
 }
 
@@ -305,6 +372,37 @@ function errorMessage(error: unknown, fallback: string) {
 }
 
 const styles = StyleSheet.create({
+  disclaimerEditor: {
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+  },
+  disclaimerInput: {
+    backgroundColor: '#F9FAFB',
+    borderColor: '#D1D5DB',
+    borderRadius: 10,
+    borderWidth: 1,
+    color: '#111827',
+    fontSize: 14,
+    lineHeight: 20,
+    minHeight: 132,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    ...interStyle('400'),
+  },
+  disclaimerInputDisabled: {
+    backgroundColor: '#F3F4F6',
+    color: '#9CA3AF',
+  },
+  disclaimerPanel: {
+    borderBottomColor: '#E5E7EB',
+    borderBottomWidth: 1,
+  },
+  preferenceError: {
+    color: '#B91C1C',
+    fontSize: 13,
+    lineHeight: 18,
+  },
   pressed: {
     opacity: 0.6,
   },

@@ -3,6 +3,11 @@ import * as Sharing from 'expo-sharing';
 
 import type { GuidebookExportBundle, TopoProject } from '@/domain/types';
 import { renderTopoRasterBase64 } from '@/rendering/artifact';
+import {
+  DEFAULT_EXPORT_DISCLAIMER_SETTINGS,
+  DEFAULT_EXPORT_DISCLAIMER_TEXT,
+  loadExportDisclaimerSettings,
+} from '@/settings/exportDisclaimer';
 
 import { buildGuidebookHtml, exportGuidebookPdf, exportTopoPdf } from './pdf';
 
@@ -23,6 +28,14 @@ jest.mock('@/rendering/artifact', () => ({
     width: 1800,
   })),
 }));
+
+jest.mock('@/settings/exportDisclaimer', () => {
+  const actual = jest.requireActual('@/settings/exportDisclaimer');
+  return {
+    ...actual,
+    loadExportDisclaimerSettings: jest.fn(async () => actual.DEFAULT_EXPORT_DISCLAIMER_SETTINGS),
+  };
+});
 
 const project: TopoProject = {
   id: 'project-1',
@@ -59,6 +72,7 @@ const project: TopoProject = {
 describe('exportTopoPdf', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (loadExportDisclaimerSettings as jest.Mock).mockResolvedValue(DEFAULT_EXPORT_DISCLAIMER_SETTINGS);
   });
 
   it('embeds a Skia-rasterized topo image in the exported PDF HTML', async () => {
@@ -179,6 +193,8 @@ describe('guidebook PDF export', () => {
     const html = await buildGuidebookHtml(guidebookBundle);
 
     expect(html).toContain('Granite Canyon');
+    expect(html).toContain('Climbing disclaimer');
+    expect(html).toContain(DEFAULT_EXPORT_DISCLAIMER_TEXT);
     expect(html).toContain('Main Wall');
     expect(html).toContain('Left Slab');
     expect(html).toContain('Pine Line');
@@ -189,6 +205,23 @@ describe('guidebook PDF export', () => {
     expect(html).toContain('No topos listed in this sector.');
     expect(html).toContain('<img src="data:image/jpeg;base64,encoded-topo-raster" />');
     expect(renderTopoRasterBase64).toHaveBeenCalledTimes(1);
+  });
+
+  it('omits the disclaimer when export disclaimer settings are disabled', async () => {
+    const html = await buildGuidebookHtml(guidebookBundle, {
+      disclaimer: { enabled: false, text: DEFAULT_EXPORT_DISCLAIMER_TEXT },
+    });
+
+    expect(html).not.toContain('Climbing disclaimer');
+    expect(html).not.toContain(DEFAULT_EXPORT_DISCLAIMER_TEXT);
+  });
+
+  it('renders custom disclaimer text with escaping and line breaks', async () => {
+    const html = await buildGuidebookHtml(guidebookBundle, {
+      disclaimer: { enabled: true, text: 'Use judgment <always>\nCheck anchors.' },
+    });
+
+    expect(html).toContain('Use judgment &lt;always&gt;<br />Check anchors.');
   });
 
   it('generates and shares guidebook PDFs when sharing is available', async () => {

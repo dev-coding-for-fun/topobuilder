@@ -10,8 +10,17 @@ import type {
   TopoProject,
 } from '@/domain/types';
 import { renderTopoRasterBase64 } from '@/rendering/artifact';
+import {
+  DEFAULT_EXPORT_DISCLAIMER_SETTINGS,
+  type ExportDisclaimerSettings,
+  loadExportDisclaimerSettings,
+} from '@/settings/exportDisclaimer';
 
 const PDF_IMAGE_WIDTH = 900;
+
+export type GuidebookExportOptions = {
+  disclaimer?: ExportDisclaimerSettings;
+};
 
 function escapeHtml(value: string) {
   return value
@@ -109,6 +118,18 @@ function routeListHtml(routes: Route[]) {
   `;
 }
 
+function disclaimerHtml(settings: ExportDisclaimerSettings | undefined) {
+  const disclaimer = settings ?? DEFAULT_EXPORT_DISCLAIMER_SETTINGS;
+  if (!disclaimer.enabled || !disclaimer.text.trim()) return '';
+
+  return `
+    <aside class="disclaimer-box">
+      <div class="disclaimer-title">Climbing disclaimer</div>
+      <div class="disclaimer-copy">${paragraphs(disclaimer.text)}</div>
+    </aside>
+  `;
+}
+
 async function topoSectionHtml(topo: GuidebookTopo) {
   return `
     <section class="topo-section">
@@ -147,7 +168,7 @@ function guidebookTitle(bundle: GuidebookExportBundle) {
   return bundle.crag.name;
 }
 
-export async function buildGuidebookHtml(bundle: GuidebookExportBundle) {
+export async function buildGuidebookHtml(bundle: GuidebookExportBundle, options: GuidebookExportOptions = {}) {
   const sectorSections = await Promise.all(bundle.crag.sectors.map((sector) => sectorSectionHtml(sector)));
   const title = guidebookTitle(bundle);
   const context =
@@ -170,6 +191,10 @@ export async function buildGuidebookHtml(bundle: GuidebookExportBundle) {
           h2 { border-bottom: 1px solid #D1D5DB; font-size: 24px; margin: 32px 0 10px; padding-bottom: 6px; }
           h3 { font-size: 19px; margin: 22px 0 8px; }
           p { margin: 0 0 10px; }
+          .disclaimer-box { background: #FFF7ED; border: 1px solid #FDBA74; border-radius: 12px; margin: 16px 0 20px; max-width: 900px; padding: 12px 14px; }
+          .disclaimer-copy { color: #7C2D12; font-size: 13px; line-height: 1.45; }
+          .disclaimer-copy p:last-child { margin-bottom: 0; }
+          .disclaimer-title { color: #9A3412; font-size: 12px; font-weight: 700; letter-spacing: 0.5px; margin-bottom: 5px; text-transform: uppercase; }
           .context, .placeholder, .route-meta, .route-fa { color: #6B7280; }
           .topo-image { margin: 12px 0 14px; max-width: 900px; }
           .topo-image img { display: block; height: auto; width: 100%; }
@@ -183,6 +208,7 @@ export async function buildGuidebookHtml(bundle: GuidebookExportBundle) {
       <body>
         <h1>${escapeHtml(title)}</h1>
         ${context}
+        ${disclaimerHtml(options.disclaimer)}
         ${bundle.scope === 'crag' ? paragraphs(bundle.crag.description) : ''}
         ${
           sectorSections.length > 0
@@ -194,8 +220,9 @@ export async function buildGuidebookHtml(bundle: GuidebookExportBundle) {
   `;
 }
 
-export async function exportGuidebookPdf(bundle: GuidebookExportBundle) {
-  const html = await buildGuidebookHtml(bundle);
+export async function exportGuidebookPdf(bundle: GuidebookExportBundle, options?: GuidebookExportOptions) {
+  const resolvedOptions = options ?? { disclaimer: await loadExportDisclaimerSettings() };
+  const html = await buildGuidebookHtml(bundle, resolvedOptions);
   const result = await Print.printToFileAsync({ html });
   if (await Sharing.isAvailableAsync()) {
     await Sharing.shareAsync(result.uri, { mimeType: 'application/pdf', UTI: '.pdf' });
