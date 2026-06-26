@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Stack, router } from 'expo-router';
+import { Tabs, router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -37,7 +37,7 @@ export default function CragsListScreen() {
 
   return (
     <Screen edges={['left', 'right', 'bottom']} style={styles.screen} testID="crags:screen">
-      <Stack.Screen
+      <Tabs.Screen
         options={{
           title: 'Crags',
           headerRight: () => (

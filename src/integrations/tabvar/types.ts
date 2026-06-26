@@ -84,3 +84,119 @@ export type TabvarSubmissionResponse = {
   id: string;
   status: string;
 };
+
+export type TabvarCatalogAttachment = {
+  id: number;
+  url?: string;
+  name?: string;
+  type?: string;
+};
+
+export type TabvarIssueAttachment = {
+  id: number;
+  url: string;
+  name: string;
+  type: string;
+};
+
+export type TabvarIssueStatus =
+  | 'In Moderation'
+  | 'Reported'
+  | 'Viewed'
+  | 'Completed'
+  | 'Archived'
+  | 'Deleted';
+
+export type TabvarCragCatalogItem = {
+  id: number;
+  name: string;
+  slug?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  notes?: string | null;
+  statsActiveIssueCount?: number | null;
+  statsIssueFlagged?: number | null;
+  statsPublicIssueCount?: number | null;
+  createdAt?: string | null;
+  attachments?: TabvarCatalogAttachment[];
+};
+
+export type TabvarSectorCatalogItem = {
+  id: number;
+  cragId: number;
+  name: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  notes?: string | null;
+  sortOrder?: number | null;
+  createdAt?: string | null;
+  attachments?: TabvarCatalogAttachment[];
+};
+
+export type TabvarRouteCatalogItem = {
+  id: number;
+  cragId: number;
+  sectorId: number;
+  name: string;
+  altNames?: string | null;
+  gradeYds?: string | null;
+  status?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  notes?: string | null;
+  sortOrder?: number | null;
+  boltCount?: number | null;
+  pitchCount?: number | null;
+  routeLength?: number | null;
+  climbStyle?: string | null;
+  year?: number | null;
+  routeBuiltDate?: string | null;
+  firstAscentBy?: string | null;
+  firstAscentDate?: string | null;
+  cragName?: string | null;
+  sectorName?: string | null;
+  createdAt?: string | null;
+  attachments?: TabvarCatalogAttachment[];
+};
+
+export type TabvarIssue = {
+  id: number;
+  routeId: number;
+  cragId?: number | null;
+  issueType: string;
+  subIssueType?: string | null;
+  status: TabvarIssueStatus;
+  lastStatus?: TabvarIssueStatus | null;
+  description?: string | null;
+  boltsAffected?: string | null;
+  isFlagged?: boolean | null;
+  flaggedMessage?: string | null;
+  reportedBy?: string | null;
+  reportedByUid?: string | null;
+  createdAt?: string | null;
+  updatedAt: string;
+  lastModified?: string | null;
+  approvedAt?: string | null;
+  archivedAt?: string | null;
+  attachments?: TabvarIssueAttachment[];
+};
+
+export type TabvarCragsResponse = {
+  crags: TabvarCragCatalogItem[];
+  serverTime: string;
+};
+
+export type TabvarSectorsResponse = {
+  sectors: TabvarSectorCatalogItem[];
+  serverTime: string;
+};
+
+export type TabvarRoutesResponse = {
+  routes: TabvarRouteCatalogItem[];
+  serverTime: string;
+};
+
+export type TabvarIssuesResponse = {
+  issues: TabvarIssue[];
+  serverTime: string;
+};

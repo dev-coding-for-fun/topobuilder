@@ -7,7 +7,7 @@ export type TopoDatabase = SQLite.SQLiteDatabase;
 
 const DATABASE_NAME = 'topobuilder.db';
 
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;
 
 type MigrationStep = {
   from: number;
@@ -41,7 +41,9 @@ async function openWithRetry(): Promise<TopoDatabase> {
   let lastError: unknown;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
-      return await SQLite.openDatabaseAsync(DATABASE_NAME);
+      const db = await SQLite.openDatabaseAsync(DATABASE_NAME);
+      await configureDatabase(db);
+      return db;
     } catch (error) {
       lastError = error;
       if (!isLockedError(error)) {
@@ -56,6 +58,10 @@ async function openWithRetry(): Promise<TopoDatabase> {
       : '';
   const baseMessage = lastError instanceof Error ? lastError.message : String(lastError);
   throw new Error(`Failed to open SQLite database after ${maxAttempts} attempts.${hint} ${baseMessage}`);
+}
+
+async function configureDatabase(db: TopoDatabase): Promise<void> {
+  await db.execAsync('PRAGMA journal_mode = WAL;');
 }
 
 if (Platform.OS === 'web' && typeof window !== 'undefined' && !('__topoDbUnloadBound' in globalRef)) {
@@ -97,8 +103,6 @@ export async function resetDatabaseConnection(): Promise<void> {
 }
 
 const V1_SCHEMA = `
-  PRAGMA journal_mode = WAL;
-
   CREATE TABLE IF NOT EXISTS crags (
     id          TEXT PRIMARY KEY NOT NULL,
     name        TEXT NOT NULL,
@@ -125,9 +129,6 @@ const V1_SCHEMA = `
     photo_uri    TEXT,
     photo_width  INTEGER,
     photo_height INTEGER,
-    tabvar_dirty INTEGER NOT NULL DEFAULT 1,
-    tabvar_submission_id TEXT,
-    tabvar_synced_at TEXT,
     created_at   TEXT NOT NULL,
     updated_at   TEXT NOT NULL,
     FOREIGN KEY (sector_id) REFERENCES sectors(id) ON DELETE CASCADE
@@ -261,10 +262,119 @@ const migrations: MigrationStep[] = [
     from: 2,
     to: 3,
     run: async (db) => {
+      await addColumnIfMissing(db, 'topos', 'tabvar_dirty', 'INTEGER NOT NULL DEFAULT 1');
+      await addColumnIfMissing(db, 'topos', 'tabvar_submission_id', 'TEXT');
+      await addColumnIfMissing(db, 'topos', 'tabvar_synced_at', 'TEXT');
+    },
+  },
+  {
+    from: 3,
+    to: 4,
+    run: async (db) => {
       await db.execAsync(`
-        ALTER TABLE topos ADD COLUMN tabvar_dirty INTEGER NOT NULL DEFAULT 1;
-        ALTER TABLE topos ADD COLUMN tabvar_submission_id TEXT;
-        ALTER TABLE topos ADD COLUMN tabvar_synced_at TEXT;
+        CREATE TABLE IF NOT EXISTS tabvar_sync_state (
+          resource       TEXT PRIMARY KEY NOT NULL,
+          cursor         TEXT,
+          server_time    TEXT,
+          last_synced_at TEXT,
+          last_error     TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS tabvar_sync_jobs (
+          id           TEXT PRIMARY KEY NOT NULL,
+          job_kind     TEXT NOT NULL,
+          started_at   TEXT NOT NULL,
+          completed_at TEXT,
+          error         TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS tabvar_crags (
+          id                         INTEGER PRIMARY KEY NOT NULL,
+          name                       TEXT NOT NULL,
+          slug                       TEXT,
+          latitude                   REAL,
+          longitude                  REAL,
+          notes                      TEXT,
+          stats_active_issue_count   INTEGER,
+          stats_issue_flagged        INTEGER,
+          stats_public_issue_count   INTEGER,
+          created_at                 TEXT,
+          raw_json                   TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS tabvar_sectors (
+          id          INTEGER PRIMARY KEY NOT NULL,
+          crag_id     INTEGER NOT NULL,
+          name        TEXT NOT NULL,
+          latitude    REAL,
+          longitude   REAL,
+          notes       TEXT,
+          sort_order  INTEGER,
+          created_at  TEXT,
+          raw_json    TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS tabvar_routes (
+          id                 INTEGER PRIMARY KEY NOT NULL,
+          crag_id            INTEGER NOT NULL,
+          sector_id          INTEGER NOT NULL,
+          name               TEXT NOT NULL,
+          alt_names          TEXT,
+          grade_yds          TEXT,
+          status             TEXT,
+          latitude           REAL,
+          longitude          REAL,
+          notes              TEXT,
+          sort_order         INTEGER,
+          bolt_count         INTEGER,
+          pitch_count        INTEGER,
+          route_length       INTEGER,
+          climb_style        TEXT,
+          year               INTEGER,
+          route_built_date   TEXT,
+          first_ascent_by    TEXT,
+          first_ascent_date  TEXT,
+          crag_name          TEXT,
+          sector_name        TEXT,
+          created_at         TEXT,
+          raw_json           TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS tabvar_issues (
+          id                INTEGER PRIMARY KEY NOT NULL,
+          route_id          INTEGER NOT NULL,
+          crag_id           INTEGER NOT NULL,
+          issue_type        TEXT NOT NULL,
+          sub_issue_type    TEXT,
+          status            TEXT NOT NULL,
+          last_status       TEXT,
+          description       TEXT,
+          bolts_affected    TEXT,
+          is_flagged        INTEGER NOT NULL DEFAULT 0,
+          flagged_message   TEXT,
+          reported_by       TEXT,
+          reported_by_uid   TEXT,
+          created_at        TEXT,
+          updated_at        TEXT NOT NULL,
+          last_modified     TEXT,
+          approved_at       TEXT,
+          archived_at       TEXT,
+          raw_json          TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS tabvar_issue_attachments (
+          id        INTEGER PRIMARY KEY NOT NULL,
+          issue_id  INTEGER NOT NULL,
+          url       TEXT NOT NULL,
+          name      TEXT NOT NULL,
+          mime_type TEXT NOT NULL,
+          FOREIGN KEY (issue_id) REFERENCES tabvar_issues(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_tabvar_issues_crag_id ON tabvar_issues(crag_id);
+        CREATE INDEX IF NOT EXISTS idx_tabvar_issues_route_id ON tabvar_issues(route_id);
+        CREATE INDEX IF NOT EXISTS idx_tabvar_routes_crag_id ON tabvar_routes(crag_id);
+        CREATE INDEX IF NOT EXISTS idx_tabvar_routes_sector_id ON tabvar_routes(sector_id);
       `);
     },
   },
@@ -278,6 +388,20 @@ async function readUserVersion(db: TopoDatabase): Promise<number> {
 async function writeUserVersion(db: TopoDatabase, version: number): Promise<void> {
   // PRAGMA does not accept bound parameters; the value is inlined and is integer-safe.
   await db.execAsync(`PRAGMA user_version = ${version};`);
+}
+
+async function addColumnIfMissing(
+  db: TopoDatabase,
+  table: string,
+  column: string,
+  definition: string,
+): Promise<void> {
+  const columns = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(${table})`);
+  if (columns.some((row) => row.name === column)) {
+    return;
+  }
+
+  await db.execAsync(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition};`);
 }
 
 /**

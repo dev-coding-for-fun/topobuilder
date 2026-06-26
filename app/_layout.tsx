@@ -9,6 +9,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { TopoStoreProvider } from '@/state/TopoStore';
+import { IssueStoreProvider } from '@/state/IssueStore';
 import { stackScreenOptionsForPathname } from '@/navigation/stackScreenOptions';
 import { interFontMap, interStyle } from '@/ui/fonts';
 
@@ -83,10 +84,14 @@ function RootLayoutShell() {
       <KeyboardProvider>
         <SafeAreaProvider>
           <TopoStoreProvider>
-            <StatusBar style="dark" />
-            <Stack
-              screenOptions={stackScreenOptionsForPathname(pathname)}
-            />
+            <IssueStoreProvider>
+              <StatusBar style="dark" />
+              <Stack
+                screenOptions={stackScreenOptionsForPathname(pathname)}
+              >
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              </Stack>
+            </IssueStoreProvider>
           </TopoStoreProvider>
         </SafeAreaProvider>
       </KeyboardProvider>

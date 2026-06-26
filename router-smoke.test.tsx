@@ -14,6 +14,25 @@ jest.mock('@/state/TopoStore', () => ({
   })),
 }));
 
+jest.mock('@/state/IssueStore', () => ({
+  IssueStoreProvider: ({ children }: { children: React.ReactNode }) => children,
+  useIssueStore: jest.fn(() => ({
+    cragSummaries: [],
+    isConnected: false,
+    isReady: true,
+    isSyncing: false,
+    loadIssueDetail: jest.fn(),
+    loadIssuesForCrag: jest.fn(),
+    refresh: jest.fn(),
+    storageError: undefined,
+    syncError: undefined,
+  })),
+}));
+
+jest.mock('@/issues/sync', () => ({
+  startInitialIssueSync: jest.fn(),
+}));
+
 jest.mock('@shopify/react-native-skia/lib/module/renderer/Offscreen', () => ({
   drawAsImage: jest.fn(),
 }));
@@ -28,9 +47,13 @@ jest.mock('expo-router', () => {
   const Stack = Object.assign(({ children }: { children?: React.ReactNode }) => children ?? null, {
     Screen: () => null,
   });
+  const Tabs = Object.assign(({ children }: { children?: React.ReactNode }) => children ?? null, {
+    Screen: () => null,
+  });
 
   return {
     Stack,
+    Tabs,
     router: {
       push: jest.fn(),
       replace: jest.fn(),
@@ -58,9 +81,13 @@ jest.mock('react-native-keyboard-controller', () => {
 
 describe('Expo Router route imports', () => {
   it('loads the app shell and primary routes without import-time errors', () => {
-    expect(require('./_layout')).toHaveProperty('default', expect.any(Function));
-    expect(require('./index')).toHaveProperty('default', expect.any(Function));
-    expect(require('./settings/index')).toHaveProperty('default', expect.any(Function));
-    expect(require('./tabvar-connect')).toHaveProperty('default', expect.any(Function));
+    expect(require('./app/_layout')).toHaveProperty('default', expect.any(Function));
+    expect(require('./app/(tabs)/_layout')).toHaveProperty('default', expect.any(Function));
+    expect(require('./app/(tabs)/index')).toHaveProperty('default', expect.any(Function));
+    expect(require('./app/(tabs)/issues/_layout')).toHaveProperty('default', expect.any(Function));
+    expect(require('./app/(tabs)/issues/index')).toHaveProperty('default', expect.any(Function));
+    expect(require('./app/(tabs)/issues/crags/[cragId]/index')).toHaveProperty('default', expect.any(Function));
+    expect(require('./app/settings/index')).toHaveProperty('default', expect.any(Function));
+    expect(require('./app/tabvar-connect')).toHaveProperty('default', expect.any(Function));
   });
 });

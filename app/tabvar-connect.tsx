@@ -4,8 +4,11 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { completeTabvarConnect } from '@/integrations/tabvar/client';
 import { saveTabvarSession } from '@/integrations/tabvar/sessionStore';
+import { startInitialIssueSync } from '@/issues/sync';
 import { Screen } from '@/ui/Screen';
 import { interStyle } from '@/ui/fonts';
+
+const ticketCompletions = new Map<string, Promise<void>>();
 
 export default function TabvarConnectCallbackScreen() {
   const { ticket, error } = useLocalSearchParams<{
@@ -31,8 +34,7 @@ export default function TabvarConnectCallbackScreen() {
       }
 
       try {
-        const session = await completeTabvarConnect(nextTicket);
-        await saveTabvarSession(session);
+        await completeTicketOnce(nextTicket);
         if (mounted) {
           setStatus('Connected. Returning to Settings…');
         }
@@ -58,6 +60,28 @@ export default function TabvarConnectCallbackScreen() {
       </View>
     </Screen>
   );
+}
+
+export function _resetTabvarConnectTicketCacheForTests() {
+  ticketCompletions.clear();
+}
+
+function completeTicketOnce(ticket: string): Promise<void> {
+  const existing = ticketCompletions.get(ticket);
+  if (existing) return existing;
+
+  const completion = completeAndPersistTicket(ticket).catch((error) => {
+    ticketCompletions.delete(ticket);
+    throw error;
+  });
+  ticketCompletions.set(ticket, completion);
+  return completion;
+}
+
+async function completeAndPersistTicket(ticket: string): Promise<void> {
+  const session = await completeTabvarConnect(ticket);
+  await saveTabvarSession(session);
+  startInitialIssueSync();
 }
 
 function firstParam(value: string | string[] | undefined) {

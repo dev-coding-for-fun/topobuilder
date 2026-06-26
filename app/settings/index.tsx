@@ -8,6 +8,7 @@ import { buildTabvarConnectUrl } from '@/integrations/tabvar/links';
 import { clearTabvarSession, loadTabvarSession } from '@/integrations/tabvar/sessionStore';
 import { disconnectTabvar } from '@/integrations/tabvar/client';
 import type { TabvarSession } from '@/integrations/tabvar/types';
+import { resyncTabvarIssues } from '@/issues/sync';
 import {
   DEFAULT_EXPORT_DISCLAIMER_SETTINGS,
   type ExportDisclaimerSettings,
@@ -156,7 +157,7 @@ function TabvarSyncPanel() {
   }>();
   const [session, setSession] = useState<TabvarSession>();
   const [isLoading, setIsLoading] = useState(true);
-  const [busyAction, setBusyAction] = useState<'connect' | 'disconnect'>();
+  const [busyAction, setBusyAction] = useState<'connect' | 'disconnect' | 'resync'>();
   const [message, setMessage] = useState<string>();
   const [error, setError] = useState<string>();
 
@@ -235,6 +236,20 @@ function TabvarSyncPanel() {
     }
   }
 
+  async function handleResync() {
+    setBusyAction('resync');
+    setError(undefined);
+    setMessage(undefined);
+    try {
+      await resyncTabvarIssues();
+      setMessage('Route issues resynced from Tabvar.');
+    } catch (resyncError) {
+      setError(errorMessage(resyncError, 'Could not resync route issues.'));
+    } finally {
+      setBusyAction(undefined);
+    }
+  }
+
   const identity = session ? tabvarIdentity(session) : undefined;
   const isBusy = !!busyAction;
 
@@ -271,13 +286,22 @@ function TabvarSyncPanel() {
 
       <View style={styles.tabvarActions}>
         {session ? (
-          <Button
-            disabled={isBusy}
-            label={busyAction === 'disconnect' ? 'Disconnecting…' : 'Disconnect'}
-            onPress={handleDisconnect}
-            testID="settings:tabvar-disconnect"
-            variant="secondary"
-          />
+          <>
+            <Button
+              disabled={isBusy}
+              label={busyAction === 'resync' ? 'Resyncing…' : 'Resync route issues'}
+              onPress={handleResync}
+              testID="settings:tabvar-resync"
+              variant="secondary"
+            />
+            <Button
+              disabled={isBusy}
+              label={busyAction === 'disconnect' ? 'Disconnecting…' : 'Disconnect'}
+              onPress={handleDisconnect}
+              testID="settings:tabvar-disconnect"
+              variant="secondary"
+            />
+          </>
         ) : (
           <Button
             disabled={isBusy || isLoading}
@@ -458,6 +482,7 @@ const styles = StyleSheet.create({
   },
   tabvarActions: {
     alignItems: 'flex-start',
+    gap: 8,
     paddingTop: 4,
   },
   tabvarBody: {

@@ -2,6 +2,13 @@ const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
 
+// Expo Router's require.context picks up every file under app/, including tests.
+config.resolver.blockList = [
+  ...(Array.isArray(config.resolver.blockList) ? config.resolver.blockList : []),
+  /[/\\]app[/\\].*\.(test|spec)\.(js|jsx|ts|tsx)$/,
+  /[/\\]app[/\\].*[/\\]__tests__[/\\].*$/,
+];
+
 if (!config.resolver.assetExts.includes('wasm')) {
   config.resolver.assetExts.push('wasm');
 }

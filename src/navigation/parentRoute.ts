@@ -17,6 +17,10 @@ export function getParentHrefFromSegments(segments: readonly string[]): string |
     return '/settings';
   }
 
+  if (path[0] === 'issues' && path.length === 3 && path[1] === 'crags') {
+    return '/issues';
+  }
+
   if (path[0] === 'crags' && path.length === 2) {
     return '/';
   }
