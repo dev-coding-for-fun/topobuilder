@@ -1,6 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { issueCardShadow, issueColors } from '@/issues/colors';
 import type { IssueCragSummary } from '@/storage/repos/tabvarIssuesRepo';
 import { interStyle } from '@/ui/fonts';
 
@@ -11,7 +12,6 @@ type Props = {
 
 export function IssueCragCard({ summary, onOpen }: Props) {
   const updated = formatRelative(summary.newestUpdatedAt);
-  const flagged = summary.flaggedCount > 0 ? ` · ${summary.flaggedCount} flagged` : '';
 
   return (
     <Pressable
@@ -21,17 +21,24 @@ export function IssueCragCard({ summary, onOpen }: Props) {
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
       testID={`issues:crag-card:${summary.cragId}`}
     >
+      <View style={styles.count}>
+        <Text style={styles.countText}>{summary.issueCount}</Text>
+      </View>
+
       <View style={styles.body}>
         <Text numberOfLines={1} style={styles.title}>
           {summary.name}
         </Text>
-        <Text style={styles.meta}>
-          {summary.issueCount} {summary.issueCount === 1 ? 'issue' : 'issues'}
-          {flagged}
+        <Text numberOfLines={1} style={styles.meta}>
+          {summary.issueCount === 1 ? 'issue' : 'issues'}
+          {summary.flaggedCount > 0 ? (
+            <Text style={styles.flagged}>{` · ${summary.flaggedCount} flagged`}</Text>
+          ) : null}
+          {updated ? ` · updated ${updated}` : ''}
         </Text>
-        {updated ? <Text style={styles.subMeta}>Updated {updated}</Text> : null}
       </View>
-      <Ionicons color="#6B7280" name="chevron-forward" size={20} />
+
+      <Ionicons color={issueColors.faint} name="chevron-forward" size={18} />
     </Pressable>
   );
 }
@@ -55,31 +62,49 @@ function formatRelative(iso?: string): string | undefined {
 const styles = StyleSheet.create({
   body: {
     flex: 1,
-    gap: 4,
+    gap: 3,
   },
   card: {
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: issueColors.card,
+    borderColor: issueColors.border,
     borderRadius: 16,
+    borderWidth: 1,
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
     paddingHorizontal: 14,
     paddingVertical: 14,
+    ...issueCardShadow,
   },
   cardPressed: {
     opacity: 0.7,
   },
-  meta: {
-    color: '#4B5563',
-    fontSize: 14,
+  count: {
+    alignItems: 'center',
+    backgroundColor: issueColors.fill,
+    borderColor: issueColors.fillBorder,
+    borderRadius: 10,
+    borderWidth: 1,
+    height: 40,
+    justifyContent: 'center',
+    minWidth: 40,
+    paddingHorizontal: 6,
   },
-  subMeta: {
-    color: '#9CA3AF',
-    fontSize: 12,
+  countText: {
+    color: issueColors.ink,
+    fontSize: 16,
+    ...interStyle('800'),
+  },
+  flagged: {
+    color: issueColors.flag,
+  },
+  meta: {
+    color: issueColors.muted,
+    fontSize: 13,
   },
   title: {
-    color: '#111827',
-    fontSize: 17,
+    color: issueColors.ink,
+    fontSize: 16,
     ...interStyle('800'),
   },
 });

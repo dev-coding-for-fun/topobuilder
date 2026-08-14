@@ -200,3 +200,31 @@ export type TabvarIssuesResponse = {
   issues: TabvarIssue[];
   serverTime: string;
 };
+
+export type TabvarIssueSyncOp = 'create' | 'update' | 'status';
+
+export type TabvarIssueSyncFields = {
+  routeId?: number;
+  issueType?: string;
+  subIssueType?: string | null;
+  description?: string | null;
+  boltsAffected?: string | null;
+  status?: string;
+  lastStatus?: string | null;
+  isFlagged?: boolean;
+  flaggedMessage?: string | null;
+};
+
+export type TabvarIssueSyncRequest = {
+  op: TabvarIssueSyncOp;
+  externalId?: string;
+  issueId?: number;
+  baseUpdatedAt?: string;
+  fields?: TabvarIssueSyncFields;
+};
+
+export type TabvarIssueSyncResponse = {
+  status: 'applied' | 'conflict';
+  serverId: number;
+  issue: TabvarIssue | null;
+};

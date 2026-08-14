@@ -1,17 +1,21 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
+import { loadTabvarSession, subscribeTabvarSession } from '@/integrations/tabvar/sessionStore';
+import { createIssue as createIssueMutation, type CreateIssueInput } from '@/issues/create';
+import { saveIssueEdits, type IssueEdits, type SaveIssueResult } from '@/issues/save';
 import { isIssueSyncInFlight, syncTabvarIssues } from '@/issues/sync';
-import { loadTabvarSession } from '@/integrations/tabvar/sessionStore';
 import { getDatabase, runMigrations, type TopoDatabase } from '@/storage/database';
 import {
   getCurrentSyncJob,
   getIssueDetail,
   getSyncError,
   listIssueCragSummaries,
+  listIssueRoutes,
   listIssuesForCrag,
   type IssueCragSummary,
   type IssueDetail,
   type IssueListItem,
+  type IssueRouteOption,
   type TabvarSyncJobState,
 } from '@/storage/repos/tabvarIssuesRepo';
 
@@ -25,7 +29,10 @@ type IssueStoreValue = {
   cragSummaries: IssueCragSummary[];
   refresh: () => Promise<void>;
   loadIssuesForCrag: (cragId: number) => Promise<IssueListItem[]>;
+  loadIssueRoutes: () => Promise<IssueRouteOption[]>;
   loadIssueDetail: (issueId: number) => Promise<IssueDetail | undefined>;
+  createIssue: (input: CreateIssueInput) => Promise<IssueDetail>;
+  saveIssue: (issue: IssueListItem, edits: IssueEdits) => Promise<SaveIssueResult>;
 };
 
 const IssueStoreContext = createContext<IssueStoreValue | undefined>(undefined);
@@ -79,6 +86,37 @@ export function IssueStoreProvider({ children }: { children: React.ReactNode }) 
     };
   }, [reload]);
 
+  useEffect(() => {
+    if (!db) return undefined;
+    let cancelled = false;
+
+    async function handleSessionChanged(dbRef: TopoDatabase) {
+      await reload(dbRef);
+      if (cancelled) return;
+      const session = await loadTabvarSession();
+      if (cancelled || !session) return;
+      setSyncing(true);
+      try {
+        await syncTabvarIssues('initial');
+      } catch {
+        // Sync persists the error; reload below exposes it.
+      } finally {
+        if (!cancelled) {
+          await reload(dbRef);
+        }
+      }
+    }
+
+    const unsubscribe = subscribeTabvarSession(() => {
+      void handleSessionChanged(db);
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [db, reload]);
+
   function requireDb(): TopoDatabase {
     if (!db) throw new Error('Issue database is not ready');
     return db;
@@ -104,31 +142,67 @@ export function IssueStoreProvider({ children }: { children: React.ReactNode }) 
     [db],
   );
 
+  const loadIssueRoutes = useCallback(async () => listIssueRoutes(requireDb()), [db]);
+
   const loadIssueDetail = useCallback(
     async (issueId: number) => getIssueDetail(requireDb(), issueId),
     [db],
   );
 
+  const createIssue = useCallback(
+    async (input: CreateIssueInput) => {
+      const dbRef = requireDb();
+      const session = await loadTabvarSession();
+      if (!session) {
+        throw new Error('Connect TABVAR before creating route issues.');
+      }
+      const issue = await createIssueMutation(dbRef, input, session.accessToken);
+      await reload(dbRef);
+      return issue;
+    },
+    [db, reload],
+  );
+
+  const saveIssue = useCallback(
+    async (issue: IssueListItem, edits: IssueEdits) => {
+      const dbRef = requireDb();
+      const session = await loadTabvarSession();
+      if (!session) {
+        throw new Error('Connect TABVAR before editing route issues.');
+      }
+      const result = await saveIssueEdits(dbRef, issue, edits, session.accessToken);
+      await reload(dbRef);
+      return result;
+    },
+    [db, reload],
+  );
+
   const value = useMemo<IssueStoreValue>(
     () => ({
       cragSummaries,
+      createIssue,
       isConnected,
       isReady: Boolean(db),
       isSyncing: syncing,
+      loadIssueRoutes,
       loadIssueDetail,
       loadIssuesForCrag,
       refresh,
+      saveIssue,
       storageError,
       syncError,
       syncJob,
     }),
     [
       cragSummaries,
+      createIssue,
       db,
       isConnected,
+      loadIssueRoutes,
       loadIssueDetail,
       loadIssuesForCrag,
       refresh,
+      saveIssue,
       storageError,
       syncError,
       syncJob,

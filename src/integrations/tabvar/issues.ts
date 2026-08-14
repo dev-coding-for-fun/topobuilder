@@ -1,6 +1,9 @@
 import { getTabvarApiBaseUrl } from './config';
 import type {
   TabvarCragsResponse,
+  TabvarIssue,
+  TabvarIssueSyncRequest,
+  TabvarIssueSyncResponse,
   TabvarIssuesResponse,
   TabvarRoutesResponse,
   TabvarSectorsResponse,
@@ -10,6 +13,17 @@ const CRAGS_PATH = '/api/v1/crags';
 const SECTORS_PATH = '/api/v1/sectors';
 const ROUTES_PATH = '/api/v1/routes';
 const ISSUES_PATH = '/api/v1/issues';
+const ISSUE_SYNC_PATH = '/api/v1/issues/sync';
+
+export class TabvarIssueConflictError extends Error {
+  issue: TabvarIssue;
+
+  constructor(issue: TabvarIssue) {
+    super('This issue was updated elsewhere. The latest version is now shown.');
+    this.name = 'TabvarIssueConflictError';
+    this.issue = issue;
+  }
+}
 
 export function pullTabvarCrags(
   accessToken: string,
@@ -55,6 +69,33 @@ export function pullTabvarIssues(
   );
 }
 
+export async function pushTabvarIssue(
+  accessToken: string,
+  mutation: TabvarIssueSyncRequest,
+): Promise<TabvarIssue> {
+  const response = await fetch(`${getTabvarApiBaseUrl()}${ISSUE_SYNC_PATH}`, {
+    body: JSON.stringify(mutation),
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    method: 'POST',
+  });
+
+  const payload = await readJson(response);
+  if (response.status === 409 && isSyncResponse(payload) && payload.issue) {
+    throw new TabvarIssueConflictError(payload.issue);
+  }
+  if (!response.ok) {
+    throw new Error(messageFromPayload(payload, `Tabvar issue ${mutation.op} failed.`, response.status));
+  }
+  if (!isSyncResponse(payload) || !payload.issue) {
+    throw new Error(`Tabvar returned an incomplete issue ${mutation.op} response.`);
+  }
+  return payload.issue;
+}
+
 function pathWithSince(path: string, since?: string) {
   return since ? `${path}?since=${encodeURIComponent(since)}` : path;
 }
@@ -76,10 +117,25 @@ async function getJson<T>(path: string, accessToken: string, fallback: string): 
 }
 
 async function errorMessage(response: Response, fallback: string) {
+  return messageFromPayload(await readJson(response), fallback, response.status);
+}
+
+async function readJson(response: Response): Promise<unknown> {
   try {
-    const payload = (await response.json()) as { error?: string; message?: string };
-    return payload.message || payload.error || `${fallback} (${response.status})`;
+    return await response.json();
   } catch {
-    return `${fallback} (${response.status})`;
+    return undefined;
   }
+}
+
+function messageFromPayload(payload: unknown, fallback: string, status: number) {
+  if (payload && typeof payload === 'object') {
+    const { error, message } = payload as { error?: string; message?: string };
+    return message || error || `${fallback} (${status})`;
+  }
+  return `${fallback} (${status})`;
+}
+
+function isSyncResponse(payload: unknown): payload is TabvarIssueSyncResponse {
+  return Boolean(payload && typeof payload === 'object' && 'status' in payload && 'serverId' in payload);
 }

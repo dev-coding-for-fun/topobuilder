@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { CragCard } from '@/ui/CragCard';
+import { FloatingActionButton } from '@/ui/FloatingActionButton';
 import { NameEntrySheet } from '@/ui/NameEntrySheet';
 import { Screen } from '@/ui/Screen';
 import { ShareSheet, type ShareScope } from '@/ui/ShareSheet';
@@ -109,18 +110,12 @@ export default function CragsListScreen() {
         )}
       />
 
-      <Pressable
-        accessibilityLabel="New crag"
-        accessibilityRole="button"
+      <FloatingActionButton
         disabled={!isReady}
-        hitSlop={8}
+        label="New crag"
         onPress={() => setShowNewCrag(true)}
-        style={({ pressed }) => [styles.fab, pressed && styles.fabPressed, !isReady && styles.fabDisabled]}
         testID="crags:new-crag-fab"
-      >
-        <Ionicons color="#FFFFFF" name="add" size={28} />
-        <Text style={styles.fabLabel}>New crag</Text>
-      </Pressable>
+      />
 
       <NameEntrySheet
         confirmLabel="Create crag"
@@ -160,34 +155,6 @@ const styles = StyleSheet.create({
     color: '#B91C1C',
     fontSize: 14,
     paddingHorizontal: 18,
-  },
-  fab: {
-    alignItems: 'center',
-    backgroundColor: '#1F2937',
-    borderRadius: 999,
-    bottom: 28,
-    flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 22,
-    paddingVertical: 14,
-    position: 'absolute',
-    right: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  fabDisabled: {
-    opacity: 0.5,
-  },
-  fabLabel: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    ...interStyle('700'),
-  },
-  fabPressed: {
-    opacity: 0.85,
   },
   iconButton: {
     alignItems: 'center',

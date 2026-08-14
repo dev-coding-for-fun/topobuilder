@@ -1,6 +1,9 @@
 import * as FileSystem from 'expo-file-system/legacy';
 
+import { notifyTabvarSessionChanged } from './sessionStore.events';
 import type { TabvarSession } from './types';
+
+export { subscribeTabvarSession } from './sessionStore.events';
 
 const SESSION_KEY = 'tabvar.session';
 
@@ -49,8 +52,10 @@ export async function loadTabvarSession(): Promise<TabvarSession | undefined> {
 
 export async function saveTabvarSession(session: TabvarSession): Promise<void> {
   await setItem(SESSION_KEY, JSON.stringify(session));
+  notifyTabvarSessionChanged();
 }
 
 export async function clearTabvarSession(): Promise<void> {
   await deleteItem(SESSION_KEY);
+  notifyTabvarSessionChanged();
 }

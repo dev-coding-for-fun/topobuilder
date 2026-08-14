@@ -3,6 +3,7 @@ import {
   pullTabvarIssues,
   pullTabvarRoutes,
   pullTabvarSectors,
+  pushTabvarIssue,
 } from './issues';
 
 describe('Tabvar issue client', () => {
@@ -204,6 +205,87 @@ describe('Tabvar issue client', () => {
     });
 
     await expect(pullTabvarIssues('bad-token')).rejects.toThrow('Invalid token');
+  });
+
+  it('pushes an issue content update with bearer auth', async () => {
+    fetchMock.mockResolvedValueOnce({
+      json: async () => ({
+        issue: { ...issuePayload, description: 'Updated spinner' },
+        serverId: 123,
+        status: 'applied',
+      }),
+      ok: true,
+      status: 200,
+    });
+
+    await expect(
+      pushTabvarIssue('tabvar-token', {
+        baseUpdatedAt: '2026-06-09 10:00:00',
+        fields: { description: 'Updated spinner' },
+        issueId: 123,
+        op: 'update',
+      }),
+    ).resolves.toMatchObject({ description: 'Updated spinner', id: 123 });
+
+    expect(fetchMock).toHaveBeenCalledWith('http://localhost:5173/api/v1/issues/sync', {
+      body: JSON.stringify({
+        baseUpdatedAt: '2026-06-09 10:00:00',
+        fields: { description: 'Updated spinner' },
+        issueId: 123,
+        op: 'update',
+      }),
+      headers: {
+        Accept: 'application/json',
+        Authorization: 'Bearer tabvar-token',
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+    });
+  });
+
+  it('pushes a status change', async () => {
+    fetchMock.mockResolvedValueOnce({
+      json: async () => ({
+        issue: { ...issuePayload, status: 'Completed' },
+        serverId: 123,
+        status: 'applied',
+      }),
+      ok: true,
+      status: 200,
+    });
+
+    await expect(
+      pushTabvarIssue('tabvar-token', {
+        baseUpdatedAt: '2026-06-09 10:00:00',
+        fields: { status: 'Completed' },
+        issueId: 123,
+        op: 'status',
+      }),
+    ).resolves.toMatchObject({ status: 'Completed' });
+  });
+
+  it('throws a conflict error with the current server issue', async () => {
+    fetchMock.mockResolvedValueOnce({
+      json: async () => ({
+        issue: { ...issuePayload, description: 'Server version' },
+        serverId: 123,
+        status: 'conflict',
+      }),
+      ok: false,
+      status: 409,
+    });
+
+    await expect(
+      pushTabvarIssue('tabvar-token', {
+        baseUpdatedAt: '2026-06-09 09:00:00',
+        fields: { description: 'Stale edit' },
+        issueId: 123,
+        op: 'update',
+      }),
+    ).rejects.toMatchObject({
+      issue: { description: 'Server version' },
+      name: 'TabvarIssueConflictError',
+    });
   });
 });
 

@@ -71,6 +71,14 @@ jest.mock('@expo-google-fonts/inter', () => ({
   Inter_700Bold: 700,
 }));
 
+jest.mock('react-native-keyboard-controller', () => {
+  const { ScrollView } = require('react-native');
+  return {
+    KeyboardAwareScrollView: ScrollView,
+    KeyboardProvider: ({ children }: { children: React.ReactNode }) => children,
+  };
+});
+
 jest.mock('react-native-reanimated', () => ({
   __esModule: true,
   default: { View: require('react-native').View },

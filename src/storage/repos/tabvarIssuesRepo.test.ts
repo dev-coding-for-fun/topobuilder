@@ -5,6 +5,7 @@ import {
   getSyncCursor,
   listIssueCragSummaries,
   listIssuesForCrag,
+  applyTabvarIssue,
   upsertTabvarCrags,
   upsertTabvarRoutes,
   upsertTabvarSectors,
@@ -252,5 +253,21 @@ describe('tabvarIssuesRepo', () => {
       },
     ]);
     expect(db.getAllCalls[0].args).toEqual([7]);
+  });
+
+  it('applies a single issue without updating the sync cursor', async () => {
+    const db = new FakeDb();
+
+    await applyTabvarIssue(asDb(db), {
+      cragId: 7,
+      id: 123,
+      issueType: 'Bolts',
+      routeId: 456,
+      status: 'Completed',
+      updatedAt: '2026-06-09 12:00:00',
+    });
+
+    expect(db.runCalls[0].sql).toContain('INSERT INTO tabvar_issues');
+    expect(db.runCalls.some((call) => call.sql.includes('tabvar_sync_state'))).toBe(false);
   });
 });

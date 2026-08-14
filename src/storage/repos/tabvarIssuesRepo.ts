@@ -56,6 +56,17 @@ export type IssueDetail = IssueListItem & {
   attachments: IssueAttachment[];
 };
 
+export type IssueRouteOption = {
+  id: number;
+  cragId: number;
+  cragName: string;
+  name: string;
+  sectorName?: string;
+  gradeYds?: string;
+  boltCount?: number;
+  pitchCount?: number;
+};
+
 export type IssueAttachment = {
   id: number;
   issueId: number;
@@ -107,6 +118,17 @@ type IssueListRow = {
   created_at: string | null;
   updated_at: string;
   attachment_count: number;
+};
+
+type IssueRouteRow = {
+  id: number;
+  crag_id: number;
+  crag_name: string;
+  name: string;
+  sector_name: string | null;
+  grade_yds: string | null;
+  bolt_count: number | null;
+  pitch_count: number | null;
 };
 
 type IssueDetailRow = IssueListRow & {
@@ -290,83 +312,7 @@ export async function upsertTabvarIssues(
 ): Promise<void> {
   await db.withTransactionAsync(async () => {
     for (const issue of issues) {
-      if (issue.status === 'Deleted') {
-        await db.runAsync('DELETE FROM tabvar_issues WHERE id = ?', issue.id);
-        continue;
-      }
-
-      const cragId = issue.cragId ?? (await resolveCragIdForRoute(db, issue.routeId));
-      if (cragId == null) {
-        console.warn(
-          `[issues] Skipping issue ${issue.id}; TABVAR did not include cragId and route ${issue.routeId} is not in the local catalog.`,
-        );
-        continue;
-      }
-
-      await db.runAsync(
-        `INSERT INTO tabvar_issues (
-          id, route_id, crag_id, issue_type, sub_issue_type, status, last_status,
-          description, bolts_affected, is_flagged, flagged_message, reported_by,
-          reported_by_uid, created_at, updated_at, last_modified, approved_at,
-          archived_at, raw_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-          route_id = excluded.route_id,
-          crag_id = excluded.crag_id,
-          issue_type = excluded.issue_type,
-          sub_issue_type = excluded.sub_issue_type,
-          status = excluded.status,
-          last_status = excluded.last_status,
-          description = excluded.description,
-          bolts_affected = excluded.bolts_affected,
-          is_flagged = excluded.is_flagged,
-          flagged_message = excluded.flagged_message,
-          reported_by = excluded.reported_by,
-          reported_by_uid = excluded.reported_by_uid,
-          created_at = excluded.created_at,
-          updated_at = excluded.updated_at,
-          last_modified = excluded.last_modified,
-          approved_at = excluded.approved_at,
-          archived_at = excluded.archived_at,
-          raw_json = excluded.raw_json`,
-        issue.id,
-        issue.routeId,
-        cragId,
-        issue.issueType,
-        issue.subIssueType ?? null,
-        issue.status,
-        issue.lastStatus ?? null,
-        issue.description ?? null,
-        issue.boltsAffected ?? null,
-        issue.isFlagged ? 1 : 0,
-        issue.flaggedMessage ?? null,
-        issue.reportedBy ?? null,
-        issue.reportedByUid ?? null,
-        issue.createdAt ?? null,
-        issue.updatedAt,
-        issue.lastModified ?? null,
-        issue.approvedAt ?? null,
-        issue.archivedAt ?? null,
-        JSON.stringify(issue),
-      );
-
-      await db.runAsync('DELETE FROM tabvar_issue_attachments WHERE issue_id = ?', issue.id);
-      for (const attachment of issue.attachments ?? []) {
-        await db.runAsync(
-          `INSERT INTO tabvar_issue_attachments (id, issue_id, url, name, mime_type)
-           VALUES (?, ?, ?, ?, ?)
-           ON CONFLICT(id) DO UPDATE SET
-             issue_id = excluded.issue_id,
-             url = excluded.url,
-             name = excluded.name,
-             mime_type = excluded.mime_type`,
-          attachment.id,
-          issue.id,
-          attachment.url,
-          attachment.name,
-          attachment.type,
-        );
-      }
+      await writeTabvarIssue(db, issue);
     }
 
     await saveSyncState(db, ISSUE_SYNC_RESOURCE, {
@@ -376,6 +322,92 @@ export async function upsertTabvarIssues(
       serverTime,
     });
   });
+}
+
+export async function applyTabvarIssue(db: TopoDatabase, issue: TabvarIssue): Promise<void> {
+  await db.withTransactionAsync(async () => {
+    await writeTabvarIssue(db, issue);
+  });
+}
+
+async function writeTabvarIssue(db: TopoDatabase, issue: TabvarIssue): Promise<void> {
+  if (issue.status === 'Deleted') {
+    await db.runAsync('DELETE FROM tabvar_issues WHERE id = ?', issue.id);
+    return;
+  }
+
+  const cragId = issue.cragId ?? (await resolveCragIdForRoute(db, issue.routeId));
+  if (cragId == null) {
+    console.warn(
+      `[issues] Skipping issue ${issue.id}; TABVAR did not include cragId and route ${issue.routeId} is not in the local catalog.`,
+    );
+    return;
+  }
+
+  await db.runAsync(
+    `INSERT INTO tabvar_issues (
+      id, route_id, crag_id, issue_type, sub_issue_type, status, last_status,
+      description, bolts_affected, is_flagged, flagged_message, reported_by,
+      reported_by_uid, created_at, updated_at, last_modified, approved_at,
+      archived_at, raw_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      route_id = excluded.route_id,
+      crag_id = excluded.crag_id,
+      issue_type = excluded.issue_type,
+      sub_issue_type = excluded.sub_issue_type,
+      status = excluded.status,
+      last_status = excluded.last_status,
+      description = excluded.description,
+      bolts_affected = excluded.bolts_affected,
+      is_flagged = excluded.is_flagged,
+      flagged_message = excluded.flagged_message,
+      reported_by = excluded.reported_by,
+      reported_by_uid = excluded.reported_by_uid,
+      created_at = excluded.created_at,
+      updated_at = excluded.updated_at,
+      last_modified = excluded.last_modified,
+      approved_at = excluded.approved_at,
+      archived_at = excluded.archived_at,
+      raw_json = excluded.raw_json`,
+    issue.id,
+    issue.routeId,
+    cragId,
+    issue.issueType,
+    issue.subIssueType ?? null,
+    issue.status,
+    issue.lastStatus ?? null,
+    issue.description ?? null,
+    issue.boltsAffected ?? null,
+    issue.isFlagged ? 1 : 0,
+    issue.flaggedMessage ?? null,
+    issue.reportedBy ?? null,
+    issue.reportedByUid ?? null,
+    issue.createdAt ?? null,
+    issue.updatedAt,
+    issue.lastModified ?? null,
+    issue.approvedAt ?? null,
+    issue.archivedAt ?? null,
+    JSON.stringify(issue),
+  );
+
+  await db.runAsync('DELETE FROM tabvar_issue_attachments WHERE issue_id = ?', issue.id);
+  for (const attachment of issue.attachments ?? []) {
+    await db.runAsync(
+      `INSERT INTO tabvar_issue_attachments (id, issue_id, url, name, mime_type)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         issue_id = excluded.issue_id,
+         url = excluded.url,
+         name = excluded.name,
+         mime_type = excluded.mime_type`,
+      attachment.id,
+      issue.id,
+      attachment.url,
+      attachment.name,
+      attachment.type,
+    );
+  }
 }
 
 async function resolveCragIdForRoute(
@@ -523,6 +555,36 @@ export async function listIssueCragSummaries(db: TopoDatabase): Promise<IssueCra
     statsActiveIssueCount: row.stats_active_issue_count ?? undefined,
     statsIssueFlagged: row.stats_issue_flagged ?? undefined,
     statsPublicIssueCount: row.stats_public_issue_count ?? undefined,
+  }));
+}
+
+export async function listIssueRoutes(db: TopoDatabase): Promise<IssueRouteOption[]> {
+  const rows = await db.getAllAsync<IssueRouteRow>(`
+    SELECT
+      routes.id,
+      routes.crag_id,
+      COALESCE(routes.crag_name, crags.name, 'Crag #' || routes.crag_id) AS crag_name,
+      routes.name,
+      COALESCE(sectors.name, routes.sector_name) AS sector_name,
+      routes.grade_yds,
+      routes.bolt_count,
+      routes.pitch_count
+    FROM tabvar_routes routes
+    LEFT JOIN tabvar_crags crags ON crags.id = routes.crag_id
+    LEFT JOIN tabvar_sectors sectors ON sectors.id = routes.sector_id
+    WHERE routes.status IS NULL OR routes.status != 'Deleted'
+    ORDER BY crag_name ASC, sector_name ASC, routes.sort_order ASC, routes.name ASC
+  `);
+
+  return rows.map((row) => ({
+    boltCount: row.bolt_count ?? undefined,
+    cragId: row.crag_id,
+    cragName: row.crag_name,
+    gradeYds: row.grade_yds ?? undefined,
+    id: row.id,
+    name: row.name,
+    pitchCount: row.pitch_count ?? undefined,
+    sectorName: row.sector_name ?? undefined,
   }));
 }
 

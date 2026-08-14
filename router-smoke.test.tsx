@@ -24,6 +24,7 @@ jest.mock('@/state/IssueStore', () => ({
     loadIssueDetail: jest.fn(),
     loadIssuesForCrag: jest.fn(),
     refresh: jest.fn(),
+    saveIssue: jest.fn(),
     storageError: undefined,
     syncError: undefined,
   })),

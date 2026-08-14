@@ -1,15 +1,55 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Stack, router } from 'expo-router';
-import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { FlatList, Pressable, RefreshControl, StyleSheet } from 'react-native';
 
+import { issueColors } from '@/issues/colors';
+import type { CreateIssueInput } from '@/issues/create';
+import { IssueCreateSheet } from '@/issues/components/IssueCreateSheet';
 import { IssueCragCard } from '@/issues/components/IssueCragCard';
+import { IssueEmptyState } from '@/issues/components/IssueEmptyState';
+import { IssueErrorBanner } from '@/issues/components/IssueErrorBanner';
 import { useIssueStore } from '@/state/IssueStore';
+import type { IssueRouteOption } from '@/storage/repos/tabvarIssuesRepo';
+import { FloatingActionButton } from '@/ui/FloatingActionButton';
 import { Screen } from '@/ui/Screen';
-import { interStyle } from '@/ui/fonts';
 
 export default function IssuesCragListScreen() {
-  const { cragSummaries, isConnected, isReady, isSyncing, refresh, storageError, syncError } =
-    useIssueStore();
+  const {
+    cragSummaries,
+    createIssue,
+    isConnected,
+    isReady,
+    isSyncing,
+    loadIssueRoutes,
+    refresh,
+    storageError,
+    syncError,
+  } = useIssueStore();
+  const [showCreateIssue, setShowCreateIssue] = useState(false);
+  const [routes, setRoutes] = useState<IssueRouteOption[]>([]);
+  const [routesLoading, setRoutesLoading] = useState(false);
+  const [routesError, setRoutesError] = useState<string>();
+
+  async function handleOpenCreateIssue() {
+    setShowCreateIssue(true);
+    setRoutes([]);
+    setRoutesLoading(true);
+    setRoutesError(undefined);
+    try {
+      setRoutes(await loadIssueRoutes());
+    } catch (error) {
+      setRoutesError(error instanceof Error ? error.message : 'Could not load routes.');
+    } finally {
+      setRoutesLoading(false);
+    }
+  }
+
+  async function handleCreateIssue(input: CreateIssueInput) {
+    const issue = await createIssue(input);
+    setShowCreateIssue(false);
+    router.push(`/issues/crags/${issue.cragId}`);
+  }
 
   return (
     <Screen edges={['left', 'right', 'bottom']} style={styles.screen} testID="issues:crags:screen">
@@ -25,14 +65,14 @@ export default function IssuesCragListScreen() {
               style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
               testID="issues:settings-button"
             >
-              <Ionicons color="#111827" name="settings-outline" size={22} />
+              <Ionicons color={issueColors.ink} name="settings-outline" size={22} />
             </Pressable>
           ),
         }}
       />
 
-      {storageError ? <Text style={styles.error}>{storageError}</Text> : null}
-      {syncError ? <Text style={styles.error}>{syncError}</Text> : null}
+      <IssueErrorBanner message={storageError} />
+      <IssueErrorBanner message={syncError} />
 
       <FlatList
         contentContainerStyle={styles.listContent}
@@ -40,17 +80,28 @@ export default function IssuesCragListScreen() {
         keyExtractor={(item) => String(item.cragId)}
         ListEmptyComponent={
           !isReady ? (
-            <Empty body="Preparing local issue storage…" />
+            <IssueEmptyState body="Preparing local issue storage…" loading />
           ) : !isConnected ? (
-            <Empty
+            <IssueEmptyState
               body="Use the settings gear to connect a TABVAR account, then synced issue crags will appear here."
+              icon="link-outline"
               testID="issues:not-connected"
               title="Connect TABVAR to view route issues"
             />
           ) : isSyncing ? (
-            <Empty body="Pulling TABVAR crags, routes, and issues…" testID="issues:syncing" title="Syncing issues" />
+            <IssueEmptyState
+              body="Pulling TABVAR crags, routes, and issues…"
+              loading
+              testID="issues:syncing"
+              title="Syncing issues"
+            />
           ) : (
-            <Empty body="Pull down to check TABVAR again." testID="issues:empty" title="No route issues" />
+            <IssueEmptyState
+              body="Pull down to check TABVAR again."
+              icon="checkmark-circle-outline"
+              testID="issues:empty"
+              title="No route issues"
+            />
           )
         }
         refreshControl={
@@ -63,51 +114,32 @@ export default function IssuesCragListScreen() {
           />
         }
         renderItem={({ item }) => (
-          <IssueCragCard
-            onOpen={() => router.push(`/issues/crags/${item.cragId}`)}
-            summary={item}
-          />
+          <IssueCragCard onOpen={() => router.push(`/issues/crags/${item.cragId}`)} summary={item} />
         )}
+      />
+
+      <FloatingActionButton
+        disabled={!isReady || !isConnected || isSyncing}
+        label="New issue"
+        onPress={() => {
+          void handleOpenCreateIssue();
+        }}
+        testID="issues:new-issue-fab"
+      />
+
+      <IssueCreateSheet
+        onCancel={() => setShowCreateIssue(false)}
+        onConfirm={handleCreateIssue}
+        routes={routes}
+        routesError={routesError}
+        routesLoading={routesLoading}
+        visible={showCreateIssue}
       />
     </Screen>
   );
 }
 
-function Empty({ body, testID, title }: { body: string; testID?: string; title?: string }) {
-  return (
-    <View style={styles.empty} testID={testID}>
-      {title ? <Text style={styles.emptyTitle}>{title}</Text> : null}
-      <Text style={styles.emptyBody}>{body}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  empty: {
-    alignItems: 'center',
-    flex: 1,
-    gap: 10,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  emptyBody: {
-    color: '#4B5563',
-    fontSize: 15,
-    lineHeight: 22,
-    textAlign: 'center',
-  },
-  emptyTitle: {
-    color: '#111827',
-    fontSize: 20,
-    textAlign: 'center',
-    ...interStyle('800'),
-  },
-  error: {
-    color: '#B91C1C',
-    fontSize: 14,
-    paddingHorizontal: 18,
-    paddingTop: 8,
-  },
   iconButton: {
     alignItems: 'center',
     height: 36,
@@ -118,13 +150,14 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   listContent: {
+    flexGrow: 1,
     gap: 10,
     paddingBottom: 120,
     paddingHorizontal: 18,
     paddingTop: 12,
   },
   screen: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: issueColors.screen,
     flex: 1,
   },
 });
