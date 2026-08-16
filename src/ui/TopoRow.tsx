@@ -1,5 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { TopoWithRoutes } from '@/domain/types';
 import { interStyle } from '@/ui/fonts';
@@ -45,7 +46,8 @@ export function TopoRow({ topo, onOpen, onShare, onMenu }: Props) {
           {topo.photoUri ? (
             <Image
               accessibilityIgnoresInvertColors
-              resizeMode="cover"
+              contentFit="cover"
+              recyclingKey={topo.photoUri}
               source={{ uri: topo.photoUri }}
               style={styles.thumbImage}
               testID={`crag-detail:topo:${topo.id}:thumb-image`}

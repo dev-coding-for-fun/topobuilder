@@ -54,9 +54,9 @@ describe('IssueDetailSheet', () => {
     expect(screen.getByTestId('issues:detail:description').props.value).toBe('Spinner on bolt 2');
     expect(screen.getByTestId('issues:detail:flagged').props.value).toBe('Needs review');
     expect(screen.getByTestId('issues:detail:attachment:11')).toBeTruthy();
-    expect(screen.getByTestId('issues:detail:attachment:11:image').props.source).toEqual({
-      uri: 'https://example.test/photo.jpg',
-    });
+    expect(screen.getByTestId('issues:detail:attachment:11:image').props.source).toEqual([
+      { uri: 'https://example.test/photo.jpg' },
+    ]);
     expect(screen.queryByText('photo.jpg')).toBeNull();
     expect(screen.queryByText('image/jpeg')).toBeNull();
     expect(screen.queryByTestId('issues:detail:resolve')).toBeNull();

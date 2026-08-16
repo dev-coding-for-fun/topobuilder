@@ -28,9 +28,9 @@ describe('TopoRow', () => {
   it('renders a photo thumbnail when the topo has a photo', () => {
     renderRow({ ...baseTopo, photoUri: 'file://topo-photo.jpg' });
 
-    expect(screen.getByTestId('crag-detail:topo:topo-1:thumb-image').props.source).toEqual({
-      uri: 'file://topo-photo.jpg',
-    });
+    expect(screen.getByTestId('crag-detail:topo:topo-1:thumb-image').props.source).toEqual([
+      { uri: 'file://topo-photo.jpg' },
+    ]);
   });
 
   it('keeps the placeholder thumbnail when the topo has no photo', () => {
