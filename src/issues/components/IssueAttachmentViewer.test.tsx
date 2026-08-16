@@ -20,7 +20,9 @@ describe('IssueAttachmentViewer', () => {
     );
 
     expect(screen.getByText('photo.jpg')).toBeTruthy();
-    expect(screen.getByTestId('issues:attachment-viewer:image')).toBeTruthy();
+    expect(screen.getByTestId('issues:attachment-viewer:image').props.source).toEqual({
+      uri: 'https://example.test/photo.jpg',
+    });
     expect(screen.getByTestId('issues:attachment-viewer:close')).toBeTruthy();
   });
 });

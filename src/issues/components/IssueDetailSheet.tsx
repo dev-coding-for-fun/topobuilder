@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { issueColors } from '@/issues/colors';
 import type { IssueEdits, SaveIssueResult } from '@/issues/save';
@@ -8,6 +8,7 @@ import type { IssueAttachment, IssueDetail } from '@/storage/repos/tabvarIssuesR
 import { BottomSheet } from '@/ui/BottomSheet';
 import { Button } from '@/ui/Button';
 import { interStyle } from '@/ui/fonts';
+import { IssueAttachmentImage } from './IssueAttachmentImage';
 
 type Props = {
   issue?: IssueDetail;
@@ -143,12 +144,13 @@ export function IssueDetailSheet({ issue, onClose, onOpenAttachment, onSave }: P
                       testID={`issues:detail:attachment:${attachment.id}`}
                     >
                       {attachment.mimeType.startsWith('image/') ? (
-                        <Image
+                        <IssueAttachmentImage
                           accessibilityIgnoresInvertColors
+                          accessibilityLabel={attachment.name}
+                          imageStyle={styles.attachmentImage}
                           resizeMode="cover"
-                          source={{ uri: attachment.url }}
-                          style={styles.attachmentImage}
                           testID={`issues:detail:attachment:${attachment.id}:image`}
+                          uri={attachment.url}
                         />
                       ) : (
                         <View style={styles.attachmentFallback}>

@@ -1,9 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { IssueAttachment } from '@/storage/repos/tabvarIssuesRepo';
 import { interStyle } from '@/ui/fonts';
+import { IssueAttachmentImage } from './IssueAttachmentImage';
 
 type Props = {
   attachment?: IssueAttachment;
@@ -30,12 +31,12 @@ export function IssueAttachmentViewer({ attachment, onClose }: Props) {
         </View>
 
         {attachment ? (
-          <Image
+          <IssueAttachmentImage
             accessibilityLabel={attachment.name}
+            imageStyle={styles.image}
             resizeMode="contain"
-            source={{ uri: attachment.url }}
-            style={styles.image}
             testID="issues:attachment-viewer:image"
+            uri={attachment.url}
           />
         ) : null}
       </SafeAreaView>
