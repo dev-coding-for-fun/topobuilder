@@ -13,7 +13,8 @@
     "deploy:web": "expo export --platform web && wrangler deploy",
     "test:web": "node scripts/web-smoke.js",
     "test": "jest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "postinstall": "npx setup-skia-web public"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
