@@ -2,7 +2,7 @@ import { Stack, usePathname } from 'expo-router';
 import { useFonts } from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { StrictMode, useEffect } from 'react';
 import { Platform, StyleSheet, Text, TextInput, type StyleProp, type TextStyle } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -49,11 +49,11 @@ function installInterDefaults() {
 }
 
 export default function RootLayout() {
-  if (Platform.OS === 'web') {
-    return <RootLayoutWithRuntimeFonts />;
-  }
-
-  return <RootLayoutShell />;
+  return (
+    <StrictMode>
+      {Platform.OS === 'web' ? <RootLayoutWithRuntimeFonts /> : <RootLayoutShell />}
+    </StrictMode>
+  );
 }
 
 function RootLayoutWithRuntimeFonts() {
