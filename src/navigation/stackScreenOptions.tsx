@@ -1,9 +1,15 @@
-import type { NativeStackNavigationOptions } from '@react-navigation/native-stack';
+import type { ComponentProps } from 'react';
+import { Stack } from 'expo-router';
 
 import { NavBackButton } from '@/navigation/NavBackButton';
 import { getParentHref } from '@/navigation/parentRoute';
 
-export const stackScreenOptions: NativeStackNavigationOptions = {
+type StackScreenOptions = Exclude<
+  NonNullable<ComponentProps<typeof Stack>['screenOptions']>,
+  Function
+>;
+
+export const stackScreenOptions: StackScreenOptions = {
   contentStyle: { backgroundColor: '#F8FAFC' },
   headerBackVisible: false,
   headerShadowVisible: false,
@@ -12,20 +18,20 @@ export const stackScreenOptions: NativeStackNavigationOptions = {
 };
 
 /** Crags list — never show a stack/history back control. */
-export const rootHeaderOptions: NativeStackNavigationOptions = {
+export const rootHeaderOptions: StackScreenOptions = {
   headerBackVisible: false,
   headerLeft: () => null,
   gestureEnabled: false,
 };
 
-export function parentBackHeaderOptions(parentHref: string): NativeStackNavigationOptions {
+export function parentBackHeaderOptions(parentHref: string): StackScreenOptions {
   return {
     headerBackVisible: false,
     headerLeft: () => <NavBackButton href={parentHref} />,
   };
 }
 
-export function stackScreenOptionsForPathname(pathname: string): NativeStackNavigationOptions {
+export function stackScreenOptionsForPathname(pathname: string): StackScreenOptions {
   const parentHref = getParentHref(pathname);
 
   return {

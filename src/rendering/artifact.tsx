@@ -46,6 +46,9 @@ export async function renderTopoRasterBase64(
     </Group>,
     size,
   );
+  if (!renderedImage) {
+    throw new Error('Topo scene could not be rasterized for export.');
+  }
 
   return {
     base64: renderedImage.encodeToBase64(options.format ?? ImageFormat.JPEG, options.quality ?? 92),
