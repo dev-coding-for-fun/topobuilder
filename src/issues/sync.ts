@@ -21,6 +21,8 @@ import {
   type TabvarSyncJobKind,
 } from '@/storage/repos/tabvarIssuesRepo';
 
+import { flushIssueOutbox, type IssueOutboxTrigger } from './outbox';
+
 let activeSync: Promise<void> | undefined;
 
 export function isIssueSyncInFlight(): boolean {
@@ -33,10 +35,13 @@ export function startInitialIssueSync(): void {
   });
 }
 
-export function syncTabvarIssues(kind: TabvarSyncJobKind): Promise<void> {
+export function syncTabvarIssues(
+  kind: TabvarSyncJobKind,
+  flushTrigger: IssueOutboxTrigger = kind,
+): Promise<void> {
   if (activeSync) return activeSync;
 
-  activeSync = trackActiveSync(runIssueSync(kind));
+  activeSync = trackActiveSync(runIssueSync(kind, { flushTrigger }));
   return activeSync;
 }
 
@@ -44,12 +49,12 @@ export function resyncTabvarIssues(): Promise<void> {
   if (activeSync) {
     const queued = activeSync
       .catch(() => undefined)
-      .then(() => runIssueSync('manual', { resetFirst: true }));
+      .then(() => runIssueSync('manual', { flushTrigger: 'manual', resetFirst: true }));
     activeSync = trackActiveSync(queued);
     return activeSync;
   }
 
-  activeSync = trackActiveSync(runIssueSync('manual', { resetFirst: true }));
+  activeSync = trackActiveSync(runIssueSync('manual', { flushTrigger: 'manual', resetFirst: true }));
   return activeSync;
 }
 
@@ -64,7 +69,7 @@ function trackActiveSync(sync: Promise<void>): Promise<void> {
 
 async function runIssueSync(
   kind: TabvarSyncJobKind,
-  options?: { resetFirst?: boolean },
+  options?: { flushTrigger?: IssueOutboxTrigger; resetFirst?: boolean },
 ): Promise<void> {
   const db = await prepareDb();
   if (options?.resetFirst) {
@@ -78,6 +83,8 @@ async function runIssueSync(
     if (!session) {
       throw new Error('Connect TABVAR before syncing route issues.');
     }
+
+    await flushIssueOutbox(db, session.accessToken, options?.flushTrigger ?? kind);
 
     const [cragsCursor, sectorsCursor, routesCursor, issuesCursor] = options?.resetFirst
       ? []

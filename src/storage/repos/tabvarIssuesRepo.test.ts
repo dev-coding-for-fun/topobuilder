@@ -6,6 +6,7 @@ import {
   listIssueCragSummaries,
   listIssuesForCrag,
   applyTabvarIssue,
+  insertIssueAttachments,
   upsertTabvarCrags,
   upsertTabvarRoutes,
   upsertTabvarSectors,
@@ -239,14 +240,17 @@ describe('tabvarIssuesRepo', () => {
         cragId: 7,
         createdAt: '2026-06-01 00:00:00',
         description: 'Spinner on bolt 2',
+        flaggedMessage: undefined,
         gradeYds: '5.11a',
         id: 123,
         isFlagged: false,
+        issueKey: 'server:123',
         issueType: 'Bolts',
         reportedBy: 'Jane Doe',
         routeId: 456,
         routeName: 'Solar Flare',
         sectorName: 'Main Wall',
+        serverId: 123,
         status: 'Reported',
         subIssueType: 'Rusted',
         updatedAt: '2026-06-09 10:00:00',
@@ -269,5 +273,26 @@ describe('tabvarIssuesRepo', () => {
 
     expect(db.runCalls[0].sql).toContain('INSERT INTO tabvar_issues');
     expect(db.runCalls.some((call) => call.sql.includes('tabvar_sync_state'))).toBe(false);
+    expect(db.runCalls.some((call) => call.sql.includes('tabvar_issue_attachments'))).toBe(false);
+  });
+
+  it('inserts uploaded attachments without replacing existing ones', async () => {
+    const db = new FakeDb();
+
+    await insertIssueAttachments(asDb(db), 123, [
+      {
+        id: 12,
+        name: 'new.jpg',
+        type: 'image/jpeg',
+        url: 'https://example.test/new.jpg',
+      },
+    ]);
+
+    expect(db.runCalls).toEqual([
+      {
+        args: [12, 123, 'https://example.test/new.jpg', 'new.jpg', 'image/jpeg'],
+        sql: expect.stringContaining('INSERT INTO tabvar_issue_attachments'),
+      },
+    ]);
   });
 });

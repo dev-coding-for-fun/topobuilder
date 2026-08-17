@@ -2,12 +2,15 @@ import { getTabvarApiBaseUrl } from './config';
 import type {
   TabvarCragsResponse,
   TabvarIssue,
+  TabvarIssueAttachmentsResponse,
   TabvarIssueSyncRequest,
   TabvarIssueSyncResponse,
   TabvarIssuesResponse,
   TabvarRoutesResponse,
   TabvarSectorsResponse,
+  TabvarUploadImage,
 } from './types';
+import { appendTopoUpload } from './uploadPart';
 
 const CRAGS_PATH = '/api/v1/crags';
 const SECTORS_PATH = '/api/v1/sectors';
@@ -96,6 +99,39 @@ export async function pushTabvarIssue(
   return payload.issue;
 }
 
+export async function uploadTabvarIssueAttachments(
+  accessToken: string,
+  issueId: number,
+  photos: TabvarUploadImage[],
+): Promise<TabvarIssueAttachmentsResponse> {
+  if (photos.length === 0) {
+    return { attachments: [] };
+  }
+
+  const formData = new FormData();
+  for (const photo of photos) {
+    await appendTopoUpload(formData, 'photos', photo);
+  }
+
+  const response = await fetch(`${getTabvarApiBaseUrl()}/api/v1/issues/${issueId}/attachments`, {
+    body: formData,
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    method: 'POST',
+  });
+
+  const payload = await readJson(response);
+  if (!response.ok) {
+    throw new Error(messageFromPayload(payload, 'Tabvar issue attachment upload failed.', response.status));
+  }
+  if (!isAttachmentsResponse(payload)) {
+    throw new Error('Tabvar returned an incomplete issue attachment response.');
+  }
+  return payload;
+}
+
 function pathWithSince(path: string, since?: string) {
   return since ? `${path}?since=${encodeURIComponent(since)}` : path;
 }
@@ -134,6 +170,15 @@ function messageFromPayload(payload: unknown, fallback: string, status: number) 
     return message || error || `${fallback} (${status})`;
   }
   return `${fallback} (${status})`;
+}
+
+function isAttachmentsResponse(payload: unknown): payload is TabvarIssueAttachmentsResponse {
+  return Boolean(
+    payload &&
+      typeof payload === 'object' &&
+      'attachments' in payload &&
+      Array.isArray((payload as TabvarIssueAttachmentsResponse).attachments),
+  );
 }
 
 function isSyncResponse(payload: unknown): payload is TabvarIssueSyncResponse {

@@ -10,6 +10,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { TopoStoreProvider } from '@/state/TopoStore';
 import { IssueStoreProvider } from '@/state/IssueStore';
+import { registerIssueSyncRuntime } from '@/issues/syncRuntime';
 import { stackScreenOptionsForPathname } from '@/navigation/stackScreenOptions';
 import { interFontMap, interStyle } from '@/ui/fonts';
 
@@ -78,6 +79,8 @@ function RootLayoutShell() {
   useEffect(() => {
     SplashScreen.hideAsync();
   }, []);
+
+  useEffect(() => registerIssueSyncRuntime(), []);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

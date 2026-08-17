@@ -4,3 +4,4 @@ export * from './toposRepo';
 export * from './routesRepo';
 export * from './annotationsRepo';
 export * from './tabvarIssuesRepo';
+export * from './issueOutboxRepo';

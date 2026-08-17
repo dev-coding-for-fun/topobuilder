@@ -1,9 +1,9 @@
-import type { TabvarSubmissionImage } from './types';
+import type { TabvarUploadImage } from './types';
 
 export async function appendTopoUpload(
   formData: FormData,
   fieldName: string,
-  image: TabvarSubmissionImage,
+  image: TabvarUploadImage,
 ): Promise<void> {
   formData.append(
     fieldName,

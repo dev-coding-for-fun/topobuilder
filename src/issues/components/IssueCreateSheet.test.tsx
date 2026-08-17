@@ -12,7 +12,17 @@ jest.mock('@/ui/BottomSheet', () => ({
     visible: boolean;
   }) => (visible ? <>{children}</> : null),
 }));
+jest.mock('@/camera/photoCapture', () => ({
+  canCaptureIssuePhotoWithCamera: jest.fn(() => true),
+  pickIssuePhotoFromLibrary: jest.fn(),
+  takeIssuePhotoWithCamera: jest.fn(),
+}));
 
+import {
+  canCaptureIssuePhotoWithCamera,
+  pickIssuePhotoFromLibrary,
+  takeIssuePhotoWithCamera,
+} from '@/camera/photoCapture';
 import type { IssueRouteOption } from '@/storage/repos/tabvarIssuesRepo';
 
 import { IssueCreateSheet } from './IssueCreateSheet';
@@ -119,5 +129,83 @@ describe('IssueCreateSheet route picker', () => {
       expect(screen.getByTestId('issues:create-sheet:route-picker:route:456')).toBeTruthy();
       expect(screen.queryByTestId('issues:create-sheet:route-picker:route:458')).toBeNull();
     });
+  });
+});
+
+const pickerAsset = {
+  fileName: 'new.jpg',
+  fileSize: 2048,
+  height: 800,
+  mimeType: 'image/jpeg',
+  uri: 'file:///new.jpg',
+  width: 600,
+};
+
+describe('IssueCreateSheet attachments', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (canCaptureIssuePhotoWithCamera as jest.Mock).mockReturnValue(true);
+    (pickIssuePhotoFromLibrary as jest.Mock).mockResolvedValue(undefined);
+    (takeIssuePhotoWithCamera as jest.Mock).mockResolvedValue(undefined);
+  });
+
+  it('shows the split camera and gallery add tile', () => {
+    render(
+      <IssueCreateSheet onCancel={jest.fn()} onConfirm={jest.fn()} routes={routes} visible />,
+    );
+
+    expect(screen.getByTestId('issues:create-sheet:add-attachment')).toBeTruthy();
+    expect(screen.getByTestId('issues:create-sheet:add-attachment:camera')).toBeTruthy();
+    expect(screen.getByTestId('issues:create-sheet:add-attachment:gallery')).toBeTruthy();
+  });
+
+  it('hides the camera half on web so gallery fills the add tile', () => {
+    (canCaptureIssuePhotoWithCamera as jest.Mock).mockReturnValue(false);
+    render(
+      <IssueCreateSheet onCancel={jest.fn()} onConfirm={jest.fn()} routes={routes} visible />,
+    );
+
+    expect(screen.queryByTestId('issues:create-sheet:add-attachment:camera')).toBeNull();
+    expect(screen.getByTestId('issues:create-sheet:add-attachment:gallery')).toBeTruthy();
+  });
+
+  it('stages a gallery photo and submits it with the new issue', async () => {
+    const onConfirm = jest.fn().mockResolvedValue(undefined);
+    (pickIssuePhotoFromLibrary as jest.Mock).mockResolvedValue(pickerAsset);
+    render(
+      <IssueCreateSheet onCancel={jest.fn()} onConfirm={onConfirm} routes={routes} visible />,
+    );
+
+    fireEvent.press(screen.getByTestId('issues:create-sheet:route'));
+    fireEvent.press(screen.getByTestId('issues:create-sheet:route-picker:crag:7'));
+    fireEvent.press(screen.getByTestId('issues:create-sheet:route-picker:sector:7:Main Wall'));
+    fireEvent.press(screen.getByTestId('issues:create-sheet:route-picker:route:456'));
+    fireEvent.press(screen.getByTestId('issues:create-sheet:type:Bolts'));
+    fireEvent.press(screen.getByTestId('issues:create-sheet:add-attachment:gallery'));
+
+    await waitFor(() => expect(screen.getByTestId('issues:create-sheet:attachment:0')).toBeTruthy());
+    expect(screen.getByTestId('issues:create-sheet:attachment:0:image').props.source).toEqual([
+      { uri: 'file:///new.jpg' },
+    ]);
+
+    fireEvent.press(screen.getByTestId('issues:create-sheet:submit'));
+
+    await waitFor(() =>
+      expect(onConfirm).toHaveBeenCalledWith({
+        boltsAffected: '',
+        description: '',
+        issueType: 'Bolts',
+        photos: [
+          {
+            fileSize: 2048,
+            filename: 'new.jpg',
+            mimeType: 'image/jpeg',
+            uri: 'file:///new.jpg',
+          },
+        ],
+        routeId: 456,
+        subIssueType: undefined,
+      }),
+    );
   });
 });

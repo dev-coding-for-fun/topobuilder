@@ -9,6 +9,7 @@ import { IssueDetailSheet } from '@/issues/components/IssueDetailSheet';
 import { IssueEmptyState } from '@/issues/components/IssueEmptyState';
 import { IssueErrorBanner } from '@/issues/components/IssueErrorBanner';
 import { IssueRow } from '@/issues/components/IssueRow';
+import type { IssuePhotoUpload } from '@/issues/attachments';
 import type { CreateIssueInput } from '@/issues/create';
 import type { IssueEdits } from '@/issues/save';
 import { getIssueResolutionAction } from '@/issues/statusWorkflow';
@@ -25,6 +26,7 @@ import { Screen } from '@/ui/Screen';
 export default function CragIssuesScreen() {
   const { cragId } = useLocalSearchParams<{ cragId: string }>();
   const {
+    addIssueAttachment,
     createIssue,
     isConnected,
     isReady,
@@ -33,6 +35,7 @@ export default function CragIssuesScreen() {
     loadIssueRoutes,
     loadIssuesForCrag,
     refresh,
+    removePendingAttachment,
     saveIssue,
     syncError,
   } = useIssueStore();
@@ -41,7 +44,7 @@ export default function CragIssuesScreen() {
   const [issues, setIssues] = useState<IssueListItem[]>([]);
   const [selectedIssue, setSelectedIssue] = useState<IssueDetail>();
   const [selectedAttachment, setSelectedAttachment] = useState<IssueAttachment>();
-  const [resolvingId, setResolvingId] = useState<number>();
+  const [resolvingId, setResolvingId] = useState<number | string>();
   const [actionError, setActionError] = useState<string>();
   const [showCreateIssue, setShowCreateIssue] = useState(false);
   const [routes, setRoutes] = useState<IssueRouteOption[]>([]);
@@ -102,6 +105,13 @@ export default function CragIssuesScreen() {
     return result;
   }
 
+  async function handleAddAttachment(issue: IssueDetail, photo: IssuePhotoUpload) {
+    const updated = await addIssueAttachment(issue.id, photo);
+    applyIssueInPlace(issue.id, updated);
+    setSelectedIssue(updated);
+    return updated;
+  }
+
   async function handleOpenCreateIssue() {
     setShowCreateIssue(true);
     setRoutes([]);
@@ -125,7 +135,7 @@ export default function CragIssuesScreen() {
     await reload();
   }
 
-  function applyIssueInPlace(issueId: number, updated?: IssueDetail) {
+  function applyIssueInPlace(issueId: number | string, updated?: IssueDetail) {
     setIssues((current) => {
       if (!updated) {
         return current.filter((item) => item.id !== issueId);
@@ -209,8 +219,16 @@ export default function CragIssuesScreen() {
 
       <IssueDetailSheet
         issue={selectedIssue}
+        onAddAttachment={handleAddAttachment}
         onClose={() => setSelectedIssue(undefined)}
         onOpenAttachment={setSelectedAttachment}
+        onRemovePendingAttachment={async (attachmentId) => {
+          await removePendingAttachment(attachmentId);
+          if (selectedIssue) {
+            setSelectedIssue(await loadIssueDetail(selectedIssue.id));
+          }
+          await reload();
+        }}
         onSave={handleSaveIssue}
       />
       <IssueAttachmentViewer

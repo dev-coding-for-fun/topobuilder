@@ -18,6 +18,10 @@ jest.mock('@/storage/database', () => ({
   runMigrations: jest.fn(),
 }));
 
+jest.mock('@/issues/outbox', () => ({
+  flushIssueOutbox: jest.fn(),
+}));
+
 jest.mock('@/storage/repos/tabvarIssuesRepo', () => ({
   clearTabvarIssueSyncData: jest.fn(),
   finishSyncJob: jest.fn(),

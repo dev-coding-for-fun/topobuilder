@@ -16,12 +16,17 @@ jest.mock('@/storage/database', () => ({
   runMigrations: jest.fn(),
 }));
 
-jest.mock('@/storage/repos/tabvarIssuesRepo', () => ({
+jest.mock('@/storage/repos', () => ({
+  deletePendingAttachment: jest.fn(),
   getCurrentSyncJob: jest.fn(),
-  getIssueDetail: jest.fn(),
+  getIssueDetailWithPending: jest.fn(),
+  getPendingIssueCount: jest.fn(),
   getSyncError: jest.fn(),
+  insertIssueAttachments: jest.fn(),
   listIssueCragSummaries: jest.fn(),
-  listIssuesForCrag: jest.fn(),
+  listIssueRoutes: jest.fn(),
+  listIssuesForCragWithPending: jest.fn(),
+  listUnsyncedIssues: jest.fn(),
 }));
 
 import { loadTabvarSession, subscribeTabvarSession } from '@/integrations/tabvar/sessionStore';
@@ -30,8 +35,9 @@ import { getDatabase } from '@/storage/database';
 import {
   getCurrentSyncJob,
   getSyncError,
+  getPendingIssueCount,
   listIssueCragSummaries,
-} from '@/storage/repos/tabvarIssuesRepo';
+} from '@/storage/repos';
 
 import { IssueStoreProvider, useIssueStore } from './IssueStore';
 
@@ -54,6 +60,7 @@ describe('IssueStore', () => {
     (getDatabase as jest.Mock).mockResolvedValue({});
     (listIssueCragSummaries as jest.Mock).mockResolvedValue([]);
     (getCurrentSyncJob as jest.Mock).mockResolvedValue(undefined);
+    (getPendingIssueCount as jest.Mock).mockResolvedValue(0);
     (getSyncError as jest.Mock).mockResolvedValue(undefined);
     (isIssueSyncInFlight as jest.Mock).mockReturnValue(false);
     (subscribeTabvarSession as jest.Mock).mockImplementation(() => jest.fn());

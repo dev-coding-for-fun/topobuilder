@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Stack, router } from 'expo-router';
 import { useState } from 'react';
-import { FlatList, Pressable, RefreshControl, StyleSheet } from 'react-native';
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text } from 'react-native';
 
 import { issueColors } from '@/issues/colors';
 import type { CreateIssueInput } from '@/issues/create';
@@ -22,6 +22,7 @@ export default function IssuesCragListScreen() {
     isReady,
     isSyncing,
     loadIssueRoutes,
+    pendingIssueCount,
     refresh,
     storageError,
     syncError,
@@ -73,6 +74,27 @@ export default function IssuesCragListScreen() {
 
       <IssueErrorBanner message={storageError} />
       <IssueErrorBanner message={syncError} />
+
+      {pendingIssueCount > 0 ? (
+        <Pressable
+          accessibilityLabel="Open unsynced issues"
+          accessibilityRole="button"
+          disabled={isSyncing}
+          onPress={() => router.push('/issues/unsynced')}
+          style={({ pressed }) => [
+            styles.unsyncedButton,
+            isSyncing && styles.unsyncedButtonDisabled,
+            pressed && styles.iconButtonPressed,
+          ]}
+          testID="issues:unsynced-button"
+        >
+          <Text style={styles.unsyncedButtonText}>
+            {isSyncing
+              ? 'sync in progress'
+              : `${pendingIssueCount} unsynced issue${pendingIssueCount === 1 ? '' : 's'}`}
+          </Text>
+        </Pressable>
+      ) : null}
 
       <FlatList
         contentContainerStyle={styles.listContent}
@@ -159,5 +181,23 @@ const styles = StyleSheet.create({
   screen: {
     backgroundColor: issueColors.screen,
     flex: 1,
+  },
+  unsyncedButton: {
+    alignItems: 'center',
+    backgroundColor: issueColors.ink,
+    borderRadius: 12,
+    justifyContent: 'center',
+    marginHorizontal: 18,
+    marginTop: 12,
+    minHeight: 44,
+    paddingHorizontal: 14,
+  },
+  unsyncedButtonDisabled: {
+    opacity: 0.55,
+  },
+  unsyncedButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

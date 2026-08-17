@@ -66,12 +66,15 @@ export type TabvarSubmission =
   | TabvarSectorSubmission
   | TabvarTopoSubmission;
 
-export type TabvarSubmissionImage = {
-  fileKey: string;
+export type TabvarUploadImage = {
   filename: string;
   mimeType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
-  topoId: string;
   uri: string;
+};
+
+export type TabvarSubmissionImage = TabvarUploadImage & {
+  fileKey: string;
+  topoId: string;
 };
 
 export type BuiltTabvarSubmission = {
@@ -97,6 +100,10 @@ export type TabvarIssueAttachment = {
   url: string;
   name: string;
   type: string;
+};
+
+export type TabvarIssueAttachmentsResponse = {
+  attachments: TabvarIssueAttachment[];
 };
 
 export type TabvarIssueStatus =

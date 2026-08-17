@@ -14,7 +14,11 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSCameraUsageDescription": "TopoBuilder uses the camera to capture rock face photos for offline topo markup.",
-        "NSPhotoLibraryUsageDescription": "TopoBuilder imports rock face photos so you can mark up climbing routes offline."
+        "NSPhotoLibraryUsageDescription": "TopoBuilder imports rock face photos so you can mark up climbing routes offline.",
+        "UIBackgroundModes": [
+          "processing",
+          "fetch"
+        ]
       }
     },
     "android": {
@@ -57,7 +61,9 @@
         }
       ],
       "expo-status-bar",
-      "expo-image"
+      "expo-image",
+      "expo-background-task",
+      "expo-notifications"
     ],
     "extra": {
       "router": {},

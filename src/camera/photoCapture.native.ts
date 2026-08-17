@@ -1,5 +1,4 @@
 import * as ImagePicker from 'expo-image-picker';
-import { VisionCamera } from 'react-native-vision-camera';
 
 export async function requestPhotoLibraryPermission() {
   const result = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -25,5 +24,43 @@ export async function pickPhotoFromLibrary() {
 }
 
 export async function requestCameraPermission() {
-  return VisionCamera.requestCameraPermission();
+  const result = await ImagePicker.requestCameraPermissionsAsync();
+  return result.granted;
+}
+
+export function canCaptureIssuePhotoWithCamera() {
+  return true;
+}
+
+const ISSUE_PHOTO_OPTIONS: ImagePicker.ImagePickerOptions = {
+  mediaTypes: ['images'],
+  quality: 0.8,
+};
+
+export async function pickIssuePhotoFromLibrary() {
+  const hasPermission = await requestPhotoLibraryPermission();
+  if (!hasPermission) {
+    throw new Error('Photo library permission is required to attach a photo.');
+  }
+
+  const result = await ImagePicker.launchImageLibraryAsync(ISSUE_PHOTO_OPTIONS);
+  if (result.canceled || !result.assets[0]) {
+    return undefined;
+  }
+
+  return result.assets[0];
+}
+
+export async function takeIssuePhotoWithCamera() {
+  const permission = await ImagePicker.requestCameraPermissionsAsync();
+  if (!permission.granted) {
+    throw new Error('Camera permission is required to attach a photo.');
+  }
+
+  const result = await ImagePicker.launchCameraAsync(ISSUE_PHOTO_OPTIONS);
+  if (result.canceled || !result.assets[0]) {
+    return undefined;
+  }
+
+  return result.assets[0];
 }

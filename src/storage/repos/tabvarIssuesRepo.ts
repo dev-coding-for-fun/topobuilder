@@ -1,9 +1,11 @@
 import type {
   TabvarCragCatalogItem,
   TabvarIssue,
+  TabvarIssueAttachment,
   TabvarRouteCatalogItem,
   TabvarSectorCatalogItem,
 } from '@/integrations/tabvar/types';
+import { serverIssueKey, type IssueKey } from '@/issues/keys';
 
 import type { TopoDatabase } from '../database';
 
@@ -28,7 +30,11 @@ export type IssueCragSummary = {
 };
 
 export type IssueListItem = {
-  id: number;
+  id: number | string;
+  issueKey?: IssueKey;
+  serverId?: number;
+  localExternalId?: string;
+  pendingSync?: boolean;
   cragId: number;
   routeId: number;
   routeName: string;
@@ -68,11 +74,13 @@ export type IssueRouteOption = {
 };
 
 export type IssueAttachment = {
-  id: number;
-  issueId: number;
+  id: number | string;
+  issueId: number | string;
   url: string;
   name: string;
   mimeType: string;
+  pendingSync?: boolean;
+  localUri?: string;
 };
 
 type SyncStateRow = {
@@ -330,6 +338,19 @@ export async function applyTabvarIssue(db: TopoDatabase, issue: TabvarIssue): Pr
   });
 }
 
+export async function insertIssueAttachments(
+  db: TopoDatabase,
+  issueId: number,
+  attachments: TabvarIssueAttachment[],
+): Promise<void> {
+  if (attachments.length === 0) return;
+  await db.withTransactionAsync(async () => {
+    for (const attachment of attachments) {
+      await upsertIssueAttachment(db, issueId, attachment);
+    }
+  });
+}
+
 async function writeTabvarIssue(db: TopoDatabase, issue: TabvarIssue): Promise<void> {
   if (issue.status === 'Deleted') {
     await db.runAsync('DELETE FROM tabvar_issues WHERE id = ?', issue.id);
@@ -391,23 +412,33 @@ async function writeTabvarIssue(db: TopoDatabase, issue: TabvarIssue): Promise<v
     JSON.stringify(issue),
   );
 
+  if (issue.attachments === undefined) return;
+
   await db.runAsync('DELETE FROM tabvar_issue_attachments WHERE issue_id = ?', issue.id);
-  for (const attachment of issue.attachments ?? []) {
-    await db.runAsync(
-      `INSERT INTO tabvar_issue_attachments (id, issue_id, url, name, mime_type)
-       VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET
-         issue_id = excluded.issue_id,
-         url = excluded.url,
-         name = excluded.name,
-         mime_type = excluded.mime_type`,
-      attachment.id,
-      issue.id,
-      attachment.url,
-      attachment.name,
-      attachment.type,
-    );
+  for (const attachment of issue.attachments) {
+    await upsertIssueAttachment(db, issue.id, attachment);
   }
+}
+
+async function upsertIssueAttachment(
+  db: TopoDatabase,
+  issueId: number,
+  attachment: TabvarIssueAttachment,
+): Promise<void> {
+  await db.runAsync(
+    `INSERT INTO tabvar_issue_attachments (id, issue_id, url, name, mime_type)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       issue_id = excluded.issue_id,
+       url = excluded.url,
+       name = excluded.name,
+       mime_type = excluded.mime_type`,
+    attachment.id,
+    issueId,
+    attachment.url,
+    attachment.name,
+    attachment.type,
+  );
 }
 
 async function resolveCragIdForRoute(
@@ -588,6 +619,40 @@ export async function listIssueRoutes(db: TopoDatabase): Promise<IssueRouteOptio
   }));
 }
 
+export async function getIssueRouteOption(
+  db: TopoDatabase,
+  routeId: number,
+): Promise<IssueRouteOption | undefined> {
+  const rows = await db.getAllAsync<IssueRouteRow>(
+    `
+    SELECT
+      id,
+      crag_id,
+      COALESCE(crag_name, 'Crag #' || crag_id) AS crag_name,
+      name,
+      sector_name,
+      grade_yds,
+      bolt_count,
+      pitch_count
+    FROM tabvar_routes
+    WHERE id = ?
+  `,
+    routeId,
+  );
+  const row = rows[0];
+  if (!row) return undefined;
+  return {
+    boltCount: row.bolt_count ?? undefined,
+    cragId: row.crag_id,
+    cragName: row.crag_name,
+    gradeYds: row.grade_yds ?? undefined,
+    id: row.id,
+    name: row.name,
+    pitchCount: row.pitch_count ?? undefined,
+    sectorName: row.sector_name ?? undefined,
+  };
+}
+
 export async function listIssuesForCrag(
   db: TopoDatabase,
   cragId: number,
@@ -705,7 +770,9 @@ function mapIssueListItem(row: IssueListRow): IssueListItem {
     flaggedMessage: row.flagged_message ?? undefined,
     gradeYds: row.grade_yds ?? undefined,
     id: row.id,
+    issueKey: serverIssueKey(row.id),
     isFlagged: row.is_flagged !== 0,
+    serverId: row.id,
     issueType: row.issue_type,
     reportedBy: row.reported_by ?? undefined,
     routeId: row.route_id,

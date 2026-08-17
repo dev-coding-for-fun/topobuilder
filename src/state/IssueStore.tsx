@@ -1,23 +1,28 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import { loadTabvarSession, subscribeTabvarSession } from '@/integrations/tabvar/sessionStore';
+import { addIssueAttachment as addIssueAttachmentMutation, type IssuePhotoUpload } from '@/issues/attachments';
 import { createIssue as createIssueMutation, type CreateIssueInput } from '@/issues/create';
 import { saveIssueEdits, type IssueEdits, type SaveIssueResult } from '@/issues/save';
 import { isIssueSyncInFlight, syncTabvarIssues } from '@/issues/sync';
 import { getDatabase, runMigrations, type TopoDatabase } from '@/storage/database';
 import {
   getCurrentSyncJob,
-  getIssueDetail,
   getSyncError,
+  deletePendingAttachment,
+  getIssueDetailWithPending,
+  getPendingIssueCount,
   listIssueCragSummaries,
   listIssueRoutes,
-  listIssuesForCrag,
+  listIssuesForCragWithPending,
+  listUnsyncedIssues,
   type IssueCragSummary,
   type IssueDetail,
   type IssueListItem,
   type IssueRouteOption,
   type TabvarSyncJobState,
-} from '@/storage/repos/tabvarIssuesRepo';
+  type UnsyncedIssueListItem,
+} from '@/storage/repos';
 
 type IssueStoreValue = {
   isReady: boolean;
@@ -27,11 +32,15 @@ type IssueStoreValue = {
   syncError?: string;
   syncJob?: TabvarSyncJobState;
   cragSummaries: IssueCragSummary[];
+  pendingIssueCount: number;
   refresh: () => Promise<void>;
   loadIssuesForCrag: (cragId: number) => Promise<IssueListItem[]>;
   loadIssueRoutes: () => Promise<IssueRouteOption[]>;
-  loadIssueDetail: (issueId: number) => Promise<IssueDetail | undefined>;
+  loadIssueDetail: (issueId: number | string) => Promise<IssueDetail | undefined>;
+  loadUnsyncedIssues: () => Promise<UnsyncedIssueListItem[]>;
   createIssue: (input: CreateIssueInput) => Promise<IssueDetail>;
+  addIssueAttachment: (issueId: number | string, photo: IssuePhotoUpload) => Promise<IssueDetail>;
+  removePendingAttachment: (attachmentId: string) => Promise<void>;
   saveIssue: (issue: IssueListItem, edits: IssueEdits) => Promise<SaveIssueResult>;
 };
 
@@ -42,19 +51,22 @@ export function IssueStoreProvider({ children }: { children: React.ReactNode }) 
   const [storageError, setStorageError] = useState<string>();
   const [isConnected, setIsConnected] = useState(false);
   const [cragSummaries, setCragSummaries] = useState<IssueCragSummary[]>([]);
+  const [pendingIssueCount, setPendingIssueCount] = useState(0);
   const [syncJob, setSyncJob] = useState<TabvarSyncJobState>();
   const [syncError, setSyncError] = useState<string>();
   const [syncing, setSyncing] = useState(false);
 
   const reload = useCallback(async (dbRef: TopoDatabase) => {
-    const [session, summaries, job, error] = await Promise.all([
+    const [session, summaries, pendingCount, job, error] = await Promise.all([
       loadTabvarSession(),
       listIssueCragSummaries(dbRef),
+      getPendingIssueCount(dbRef),
       getCurrentSyncJob(dbRef),
       getSyncError(dbRef),
     ]);
     setIsConnected(Boolean(session));
     setCragSummaries(summaries);
+    setPendingIssueCount(pendingCount);
     setSyncJob(job);
     setSyncError(error);
     setSyncing(isIssueSyncInFlight() || Boolean(job && !job.completedAt));
@@ -138,16 +150,18 @@ export function IssueStoreProvider({ children }: { children: React.ReactNode }) 
   }, [db, reload]);
 
   const loadIssuesForCrag = useCallback(
-    async (cragId: number) => listIssuesForCrag(requireDb(), cragId),
+    async (cragId: number) => listIssuesForCragWithPending(requireDb(), cragId),
     [db],
   );
 
   const loadIssueRoutes = useCallback(async () => listIssueRoutes(requireDb()), [db]);
 
   const loadIssueDetail = useCallback(
-    async (issueId: number) => getIssueDetail(requireDb(), issueId),
+    async (issueId: number | string) => getIssueDetailWithPending(requireDb(), issueId),
     [db],
   );
+
+  const loadUnsyncedIssues = useCallback(async () => listUnsyncedIssues(requireDb()), [db]);
 
   const createIssue = useCallback(
     async (input: CreateIssueInput) => {
@@ -157,6 +171,20 @@ export function IssueStoreProvider({ children }: { children: React.ReactNode }) 
         throw new Error('Connect TABVAR before creating route issues.');
       }
       const issue = await createIssueMutation(dbRef, input, session.accessToken);
+      await reload(dbRef);
+      return issue;
+    },
+    [db, reload],
+  );
+
+  const addIssueAttachment = useCallback(
+    async (issueId: number | string, photo: IssuePhotoUpload) => {
+      const dbRef = requireDb();
+      const session = await loadTabvarSession();
+      if (!session) {
+        throw new Error('Connect TABVAR before adding issue photos.');
+      }
+      const issue = await addIssueAttachmentMutation(dbRef, issueId, photo, session.accessToken);
       await reload(dbRef);
       return issue;
     },
@@ -177,8 +205,18 @@ export function IssueStoreProvider({ children }: { children: React.ReactNode }) 
     [db, reload],
   );
 
+  const removePendingAttachment = useCallback(
+    async (attachmentId: string) => {
+      const dbRef = requireDb();
+      await deletePendingAttachment(dbRef, attachmentId);
+      await reload(dbRef);
+    },
+    [db, reload],
+  );
+
   const value = useMemo<IssueStoreValue>(
     () => ({
+      addIssueAttachment,
       cragSummaries,
       createIssue,
       isConnected,
@@ -187,13 +225,17 @@ export function IssueStoreProvider({ children }: { children: React.ReactNode }) 
       loadIssueRoutes,
       loadIssueDetail,
       loadIssuesForCrag,
+      loadUnsyncedIssues,
+      pendingIssueCount,
       refresh,
+      removePendingAttachment,
       saveIssue,
       storageError,
       syncError,
       syncJob,
     }),
     [
+      addIssueAttachment,
       cragSummaries,
       createIssue,
       db,
@@ -201,7 +243,10 @@ export function IssueStoreProvider({ children }: { children: React.ReactNode }) 
       loadIssueRoutes,
       loadIssueDetail,
       loadIssuesForCrag,
+      loadUnsyncedIssues,
+      pendingIssueCount,
       refresh,
+      removePendingAttachment,
       saveIssue,
       storageError,
       syncError,

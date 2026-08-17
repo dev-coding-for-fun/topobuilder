@@ -1,56 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import type { IssuePhotoUpload } from '@/issues/attachments';
 import { issueColors } from '@/issues/colors';
+import { IssueAttachmentsField } from '@/issues/components/IssueAttachmentsField';
+import { ISSUE_TYPES, SUB_ISSUES_BY_TYPE } from '@/issues/options';
 import type { CreateIssueInput } from '@/issues/create';
 import type { IssueRouteOption } from '@/storage/repos/tabvarIssuesRepo';
 import { BottomSheet } from '@/ui/BottomSheet';
 import { Button } from '@/ui/Button';
 import { interStyle } from '@/ui/fonts';
-
-const ISSUE_TYPES = [
-  { label: 'Bolts (#)', value: 'Bolts' },
-  { label: 'All Bolts', value: 'All Bolts' },
-  { label: 'Anchor', value: 'Anchor' },
-  { label: 'Rock', value: 'Rock' },
-] as const;
-
-const SUB_ISSUES_BY_TYPE: Record<string, string[]> = {
-  Anchor: [
-    'Loose nut',
-    'Loose bolt',
-    'Loose glue-in',
-    'Rusted',
-    'Outdated',
-    'Worn',
-    'Missing (bolt and hanger)',
-    'Missing (hanger)',
-    'Other',
-  ],
-  Bolts: [
-    'Loose nut',
-    'Loose bolt',
-    'Loose glue-in',
-    'Rusted',
-    'Outdated',
-    'Worn',
-    'Missing (bolt and hanger)',
-    'Missing (hanger)',
-    'Other',
-  ],
-  'All Bolts': [
-    'Loose nut',
-    'Loose bolt',
-    'Loose glue-in',
-    'Rusted',
-    'Outdated',
-    'Worn',
-    'Missing (bolt and hanger)',
-    'Missing (hanger)',
-    'Other',
-  ],
-  Rock: ['Loose block', 'Loose flake', 'Other'],
-};
 
 type Props = {
   visible: boolean;
@@ -80,6 +39,7 @@ export function IssueCreateSheet({
   const [subIssueType, setSubIssueType] = useState<string>();
   const [description, setDescription] = useState('');
   const [boltsAffected, setBoltsAffected] = useState('');
+  const [photos, setPhotos] = useState<IssuePhotoUpload[]>([]);
   const [routePickerVisible, setRoutePickerVisible] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -91,6 +51,7 @@ export function IssueCreateSheet({
       setSubIssueType(undefined);
       setDescription('');
       setBoltsAffected('');
+      setPhotos([]);
       setRoutePickerVisible(false);
       setBusy(false);
       setError(undefined);
@@ -117,6 +78,7 @@ export function IssueCreateSheet({
         boltsAffected: issueType === 'Bolts' ? boltsAffected : undefined,
         description,
         issueType,
+        photos,
         routeId: route.id,
         subIssueType,
       });
@@ -253,6 +215,26 @@ export function IssueCreateSheet({
               value={description}
             />
           </View>
+
+          <IssueAttachmentsField
+            busy={busy}
+            onAddPhoto={(photo) => {
+              setError(undefined);
+              setPhotos((current) => [...current, photo]);
+            }}
+            onError={setError}
+            photos={photos.map((photo, index) => ({
+              key: `${photo.uri}:${index}`,
+              mimeType: photo.mimeType,
+              name: photo.filename,
+              onRemove: () => {
+                setPhotos((current) => current.filter((_, currentIndex) => currentIndex !== index));
+              },
+              testID: `${testID}:attachment:${index}`,
+              uri: photo.uri,
+            }))}
+            testID={testID}
+          />
 
           {error ? (
             <Text style={styles.error} testID={`${testID}:error`}>

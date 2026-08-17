@@ -4,6 +4,7 @@ import {
   pullTabvarRoutes,
   pullTabvarSectors,
   pushTabvarIssue,
+  uploadTabvarIssueAttachments,
 } from './issues';
 
 describe('Tabvar issue client', () => {
@@ -285,6 +286,37 @@ describe('Tabvar issue client', () => {
     ).rejects.toMatchObject({
       issue: { description: 'Server version' },
       name: 'TabvarIssueConflictError',
+    });
+  });
+
+  it('uploads issue photos as multipart form data', async () => {
+    fetchMock.mockResolvedValueOnce({
+      json: async () => ({
+        attachments: [{ id: 12, name: 'photo.jpg', type: 'image/jpeg', url: 'https://example.test/photo.jpg' }],
+      }),
+      ok: true,
+      status: 201,
+    });
+
+    await expect(
+      uploadTabvarIssueAttachments('tabvar-token', 123, [
+        {
+          filename: 'photo.jpg',
+          mimeType: 'image/jpeg',
+          uri: 'file:///photo.jpg',
+        },
+      ]),
+    ).resolves.toEqual({
+      attachments: [{ id: 12, name: 'photo.jpg', type: 'image/jpeg', url: 'https://example.test/photo.jpg' }],
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('http://localhost:5173/api/v1/issues/123/attachments', {
+      body: expect.any(FormData),
+      headers: {
+        Accept: 'application/json',
+        Authorization: 'Bearer tabvar-token',
+      },
+      method: 'POST',
     });
   });
 });
