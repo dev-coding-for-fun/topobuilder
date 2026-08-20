@@ -132,34 +132,44 @@ export async function queuePendingIssueCreate(
 ): Promise<IssueDetail> {
   const externalId = createId('issue');
   const createdAt = nowIso();
-  await db.withTransactionAsync(async () => {
-    await db.runAsync(
-      `INSERT INTO pending_issues (
-        external_id, route_id, crag_id, issue_type, sub_issue_type, status,
-        description, bolts_affected, is_flagged, flagged_message, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      externalId,
-      fields.routeId,
-      fields.cragId,
-      fields.issueType,
-      fields.subIssueType ?? null,
-      fields.status,
-      fields.description ?? null,
-      fields.boltsAffected ?? null,
-      fields.isFlagged ? 1 : 0,
-      fields.flaggedMessage ?? null,
-      createdAt,
-      createdAt,
-    );
-  });
+  const issueKey = localIssueKey(externalId);
+  const persistedPhotos: IssuePhotoUpload[] = [];
+  try {
+    for (const photo of photos) {
+      persistedPhotos.push(await persistIssuePhoto(photo));
+    }
+    await db.withTransactionAsync(async () => {
+      await db.runAsync(
+        `INSERT INTO pending_issues (
+          external_id, route_id, crag_id, issue_type, sub_issue_type, status,
+          description, bolts_affected, is_flagged, flagged_message, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        externalId,
+        fields.routeId,
+        fields.cragId,
+        fields.issueType,
+        fields.subIssueType ?? null,
+        fields.status,
+        fields.description ?? null,
+        fields.boltsAffected ?? null,
+        fields.isFlagged ? 1 : 0,
+        fields.flaggedMessage ?? null,
+        createdAt,
+        createdAt,
+      );
+      for (const photo of persistedPhotos) {
+        await insertPendingAttachmentRow(db, issueKey, photo);
+      }
+    });
 
-  for (const photo of photos) {
-    await queuePendingAttachment(db, localIssueKey(externalId), photo);
+    const detail = await getPendingIssueDetail(db, issueKey);
+    if (!detail) throw new Error('Could not load the queued issue.');
+    return detail;
+  } catch (error) {
+    await deletePendingIssueCreate(db, externalId).catch(() => undefined);
+    await Promise.all(persistedPhotos.map((photo) => deleteIssuePhoto(photo.uri)));
+    throw error;
   }
-
-  const detail = await getPendingIssueDetail(db, localIssueKey(externalId));
-  if (!detail) throw new Error('Could not load the queued issue.');
-  return detail;
 }
 
 export async function queuePendingIssueEdit(
@@ -221,6 +231,14 @@ export async function queuePendingAttachment(
   photo: IssuePhotoUpload,
 ): Promise<PendingIssueAttachment> {
   const persisted = await persistIssuePhoto(photo);
+  return insertPendingAttachmentRow(db, issueKey, persisted);
+}
+
+async function insertPendingAttachmentRow(
+  db: TopoDatabase,
+  issueKey: IssueKey,
+  photo: IssuePhotoUpload,
+): Promise<PendingIssueAttachment> {
   const id = createId('issue_attachment');
   const createdAt = nowIso();
   await db.runAsync(
@@ -229,19 +247,19 @@ export async function queuePendingAttachment(
     ) VALUES (?, ?, ?, ?, ?, ?, 0, ?)`,
     id,
     issueKey,
-    persisted.uri,
-    persisted.filename,
-    persisted.mimeType,
-    persisted.fileSize ?? null,
+    photo.uri,
+    photo.filename,
+    photo.mimeType,
+    photo.fileSize ?? null,
     createdAt,
   );
   return {
     id,
     issueKey,
-    localUri: persisted.uri,
-    filename: persisted.filename,
-    mimeType: persisted.mimeType,
-    fileSize: persisted.fileSize,
+    localUri: photo.uri,
+    filename: photo.filename,
+    mimeType: photo.mimeType,
+    fileSize: photo.fileSize,
     uploaded: false,
     createdAt,
   };
@@ -286,9 +304,10 @@ export async function getIssueDetailWithPending(
         : serverIssueKey(Number(issueIdOrKey));
 
   const parsed = parseIssueKey(key);
-  if (parsed.kind === 'local') {
+  if (parsed?.kind === 'local') {
     return getPendingIssueDetail(db, key);
   }
+  if (parsed?.kind !== 'server') return undefined;
 
   const detail = await getIssueDetail(db, parsed.issueId);
   if (!detail) return undefined;
@@ -323,7 +342,7 @@ export async function listUnsyncedIssues(db: TopoDatabase): Promise<UnsyncedIssu
   for (const edit of editRows) serverIssueIds.add(edit.issueId);
   for (const attachment of attachmentRows) {
     const parsed = parseIssueKey(attachment.issueKey);
-    if (parsed.kind === 'server') serverIssueIds.add(parsed.issueId);
+    if (parsed?.kind === 'server') serverIssueIds.add(parsed.issueId);
   }
 
   const serverIssues: UnsyncedIssueListItem[] = [];
@@ -508,7 +527,7 @@ async function updatePendingIssue(
 
 async function getPendingIssueDetail(db: TopoDatabase, key: IssueKey): Promise<IssueDetail | undefined> {
   const parsed = parseIssueKey(key);
-  if (parsed.kind !== 'local') return undefined;
+  if (parsed?.kind !== 'local') return undefined;
   const rows = await listPendingIssueRows(db);
   const row = rows.find((candidate) => candidate.external_id === parsed.externalId);
   if (!row) return undefined;

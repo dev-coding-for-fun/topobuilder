@@ -8,9 +8,20 @@ export function localIssueKey(externalId: string): IssueKey {
   return `local:${externalId}`;
 }
 
-export function parseIssueKey(key: string): { kind: 'server'; issueId: number } | { kind: 'local'; externalId: string } {
+export function parseIssueKey(
+  key: string,
+): { kind: 'server'; issueId: number } | { kind: 'local'; externalId: string } | undefined {
   if (key.startsWith('server:')) {
-    return { kind: 'server', issueId: Number(key.slice('server:'.length)) };
+    const issueIdPart = key.slice('server:'.length);
+    if (!/^\d+$/.test(issueIdPart)) return undefined;
+    const issueId = Number(issueIdPart);
+    if (!Number.isSafeInteger(issueId)) return undefined;
+    return { kind: 'server', issueId };
   }
-  return { kind: 'local', externalId: key.slice('local:'.length) };
+  if (key.startsWith('local:')) {
+    const externalId = key.slice('local:'.length);
+    if (!externalId) return undefined;
+    return { kind: 'local', externalId };
+  }
+  return undefined;
 }

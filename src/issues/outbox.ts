@@ -3,7 +3,6 @@ import {
   pushTabvarIssue,
   uploadTabvarIssueAttachments,
 } from '@/integrations/tabvar/issues';
-import type { TabvarIssue } from '@/integrations/tabvar/types';
 import { localIssueKey, parseIssueKey } from '@/issues/keys';
 import type { TopoDatabase } from '@/storage/database';
 import {
@@ -25,6 +24,9 @@ import {
 } from '@/storage/repos/tabvarIssuesRepo';
 
 export type IssueOutboxTrigger = 'interactive' | 'manual' | 'initial' | 'reconnect' | 'background';
+
+/** TABVAR /api/v1/issues/:id/attachments accepts at most 3 photos per request. */
+const ISSUE_ATTACHMENT_UPLOAD_BATCH_SIZE = 3;
 
 export type IssueOutboxFlushResult = {
   status: IssueSyncLogStatus;
@@ -94,7 +96,7 @@ export async function flushIssueOutbox(
         issueId: edit.issueId,
         op: 'update',
       });
-      await applyPushedIssue(db, updated);
+      await applyTabvarIssue(db, updated);
       baseUpdatedAt = updated.updatedAt;
       await updatePendingIssueEditBase(db, edit.issueId, baseUpdatedAt);
 
@@ -105,7 +107,7 @@ export async function flushIssueOutbox(
           issueId: edit.issueId,
           op: 'status',
         });
-        await applyPushedIssue(db, statusUpdated);
+        await applyTabvarIssue(db, statusUpdated);
       }
 
       await deletePendingIssueEdit(db, edit.issueId);
@@ -142,14 +144,16 @@ export async function flushIssueOutbox(
   const summary = `Uploaded ${successCount} issue change${successCount === 1 ? '' : 's'}${
     errorCount > 0 ? `; ${errorCount} failed` : ''
   }.`;
-  await addIssueSyncLog(db, {
-    details,
-    finishedAt: nowIso(),
-    startedAt,
-    status,
-    summary,
-    triggerKind,
-  });
+  if (successCount > 0 || errorCount > 0) {
+    await addIssueSyncLog(db, {
+      details,
+      finishedAt: nowIso(),
+      startedAt,
+      status,
+      summary,
+      triggerKind,
+    });
+  }
 
   return { createdIssueIds, details, status, summary };
 }
@@ -172,8 +176,8 @@ async function uploadPendingAttachmentBatch(
   issueId: number,
   attachments: PendingIssueAttachment[],
 ) {
-  for (let offset = 0; offset < attachments.length; offset += 3) {
-    const batch = attachments.slice(offset, offset + 3);
+  for (let offset = 0; offset < attachments.length; offset += ISSUE_ATTACHMENT_UPLOAD_BATCH_SIZE) {
+    const batch = attachments.slice(offset, offset + ISSUE_ATTACHMENT_UPLOAD_BATCH_SIZE);
     const uploaded = await uploadTabvarIssueAttachments(
       accessToken,
       issueId,
@@ -194,17 +198,13 @@ function groupServerAttachments(attachments: PendingIssueAttachment[]) {
   const groups = new Map<number, PendingIssueAttachment[]>();
   for (const attachment of attachments) {
     const parsed = parseIssueKey(attachment.issueKey);
-    if (parsed.kind !== 'server') continue;
+    if (parsed?.kind !== 'server') continue;
     const issueId = parsed.issueId;
     const group = groups.get(issueId) ?? [];
     group.push(attachment);
     groups.set(issueId, group);
   }
   return groups;
-}
-
-async function applyPushedIssue(db: TopoDatabase, issue: TabvarIssue) {
-  await applyTabvarIssue(db, issue);
 }
 
 function errorMessage(error: unknown) {

@@ -1,13 +1,33 @@
+jest.mock('@/issues/photoStorage', () => ({
+  deleteIssuePhoto: jest.fn(async () => undefined),
+  persistIssuePhoto: jest.fn(async (photo: { uri: string }) => photo),
+}));
+
+import { deleteIssuePhoto, persistIssuePhoto } from '@/issues/photoStorage';
+
 import type { TopoDatabase } from '../database';
-import { getPendingIssueCount, listIssueSyncLogs } from './issueOutboxRepo';
+import {
+  getPendingIssueCount,
+  listIssueSyncLogs,
+  queuePendingIssueCreate,
+} from './issueOutboxRepo';
 
 class FakeDb {
   getAllResponses: unknown[][] = [];
   getAllCalls: { sql: string; args: unknown[] }[] = [];
+  runCalls: { sql: string; args: unknown[] }[] = [];
 
   async getAllAsync<T>(sql: string, ...args: unknown[]): Promise<T[]> {
     this.getAllCalls.push({ sql, args });
     return (this.getAllResponses.shift() ?? []) as T[];
+  }
+
+  async runAsync(sql: string, ...args: unknown[]): Promise<void> {
+    this.runCalls.push({ sql, args });
+  }
+
+  async withTransactionAsync(callback: () => Promise<void>): Promise<void> {
+    await callback();
   }
 }
 
@@ -81,5 +101,37 @@ describe('listIssueSyncLogs', () => {
       expect.objectContaining({ details: [], id: 'log_2', status: 'ok' }),
     ]);
     expect(db.getAllCalls[0].args).toEqual([10]);
+  });
+});
+
+describe('queuePendingIssueCreate', () => {
+  const fields = {
+    cragId: 7,
+    isFlagged: false,
+    issueType: 'Bolts',
+    routeId: 456,
+    status: 'In Moderation',
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (persistIssuePhoto as jest.Mock).mockImplementation(async (photo: { uri: string }) => photo);
+  });
+
+  it('rolls back persisted photos when a later photo cannot be stored', async () => {
+    const db = new FakeDb();
+    (persistIssuePhoto as jest.Mock)
+      .mockResolvedValueOnce({ filename: 'one.jpg', mimeType: 'image/jpeg', uri: 'file:///one.jpg' })
+      .mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(
+      queuePendingIssueCreate(asDb(db), fields, [
+        { filename: 'one.jpg', mimeType: 'image/jpeg', uri: 'file:///picker-1.jpg' },
+        { filename: 'two.jpg', mimeType: 'image/jpeg', uri: 'file:///picker-2.jpg' },
+      ]),
+    ).rejects.toThrow('disk full');
+
+    expect(db.runCalls.some((call) => call.sql.includes('INSERT INTO pending_issues'))).toBe(false);
+    expect(deleteIssuePhoto).toHaveBeenCalledWith('file:///one.jpg');
   });
 });

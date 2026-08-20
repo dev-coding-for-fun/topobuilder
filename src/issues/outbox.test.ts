@@ -189,4 +189,40 @@ describe('flushIssueOutbox attachment upload', () => {
     expect(deleteUploadedPendingAttachment).toHaveBeenCalledWith(db, 'att-pending');
     expect(deleteUploadedPendingAttachment).not.toHaveBeenCalledWith(db, 'att-uploaded');
   });
+
+  it('does not write a sync log when the outbox is empty', async () => {
+    await expect(flushIssueOutbox(db, 'token', 'initial')).resolves.toEqual({
+      createdIssueIds: {},
+      details: [],
+      status: 'ok',
+      summary: 'Uploaded 0 issue changes.',
+    });
+    expect(addIssueSyncLog).not.toHaveBeenCalled();
+  });
+
+  it('uploads pending photos in batches of 3', async () => {
+    (listPendingAttachments as jest.Mock).mockResolvedValue([
+      pendingAttachment({ id: 'att-1', issueKey: 'server:123' }),
+      pendingAttachment({ id: 'att-2', issueKey: 'server:123' }),
+      pendingAttachment({ id: 'att-3', issueKey: 'server:123' }),
+      pendingAttachment({ id: 'att-4', issueKey: 'server:123' }),
+    ]);
+
+    await flushIssueOutbox(db, 'token', 'manual');
+
+    expect(uploadTabvarIssueAttachments).toHaveBeenCalledTimes(2);
+    expect(uploadTabvarIssueAttachments).toHaveBeenNthCalledWith(
+      1,
+      'token',
+      123,
+      [
+        { filename: 'photo.jpg', mimeType: 'image/jpeg', uri: 'file:///att-1.jpg' },
+        { filename: 'photo.jpg', mimeType: 'image/jpeg', uri: 'file:///att-2.jpg' },
+        { filename: 'photo.jpg', mimeType: 'image/jpeg', uri: 'file:///att-3.jpg' },
+      ],
+    );
+    expect(uploadTabvarIssueAttachments).toHaveBeenNthCalledWith(2, 'token', 123, [
+      { filename: 'photo.jpg', mimeType: 'image/jpeg', uri: 'file:///att-4.jpg' },
+    ]);
+  });
 });
