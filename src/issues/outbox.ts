@@ -14,7 +14,6 @@ import {
   listPendingAttachments,
   listPendingCreates,
   listPendingEdits,
-  markPendingAttachmentUploaded,
   updatePendingIssueEditBase,
   type IssueSyncLogStatus,
   type PendingIssueAttachment,
@@ -181,9 +180,6 @@ async function uploadPendingAttachmentBatch(
         uri: attachment.localUri,
       })),
     );
-    for (const attachment of batch) {
-      await markPendingAttachmentUploaded(db, attachment.id);
-    }
     await insertIssueAttachments(db, issueId, uploaded.attachments);
     for (const attachment of batch) {
       await deleteUploadedPendingAttachment(db, attachment.id);

@@ -403,10 +403,6 @@ export async function listPendingAttachments(
   return rows.map(mapPendingAttachmentRow);
 }
 
-export async function markPendingAttachmentUploaded(db: TopoDatabase, attachmentId: string): Promise<void> {
-  await db.runAsync('UPDATE pending_issue_attachments SET uploaded = 1 WHERE id = ?', attachmentId);
-}
-
 export async function deletePendingIssueCreate(db: TopoDatabase, externalId: string): Promise<void> {
   const attachments = await listPendingAttachments(db, localIssueKey(externalId));
   await db.withTransactionAsync(async () => {
