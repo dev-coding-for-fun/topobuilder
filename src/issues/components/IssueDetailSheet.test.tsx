@@ -88,7 +88,9 @@ describe('IssueDetailSheet', () => {
     renderSheet();
 
     expect(screen.getByTestId('issues:detail:description').props.value).toBe('Spinner on bolt 2');
+    expect(screen.getByTestId('issues:detail:flag').props.value).toBe(true);
     expect(screen.getByTestId('issues:detail:flagged').props.value).toBe('Needs review');
+    expect(screen.getByText('Flag this issue')).toBeTruthy();
     expect(screen.getByTestId('issues:detail:attachment:11')).toBeTruthy();
     expect(screen.getByTestId('issues:detail:attachment:11:image').props.source).toEqual([
       { uri: 'https://example.test/photo.jpg' },
@@ -101,6 +103,21 @@ describe('IssueDetailSheet', () => {
     expect(screen.queryByTestId('issues:detail:resolve')).toBeNull();
     expect(screen.queryByTestId('issues:detail:status')).toBeNull();
     expect(screen.queryByText('Mark resolved')).toBeNull();
+  });
+
+  it('keeps affected and issue-type options in dropdowns', () => {
+    renderSheet();
+
+    expect(screen.queryByTestId('issues:detail:type:Anchor')).toBeNull();
+    expect(screen.queryByTestId('issues:detail:subtype:Loose nut')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('issues:detail:type'));
+    expect(screen.getByTestId('issues:detail:type:Bolts')).toBeTruthy();
+    expect(screen.getByTestId('issues:detail:type:Anchor')).toBeTruthy();
+
+    fireEvent.press(screen.getByTestId('issues:detail:subtype'));
+    expect(screen.getByTestId('issues:detail:subtype:Rusted')).toBeTruthy();
+    expect(screen.getByTestId('issues:detail:subtype:Loose nut')).toBeTruthy();
   });
 
   it('saves description changes and closes', async () => {
@@ -263,6 +280,88 @@ describe('IssueDetailSheet', () => {
     fireEvent.press(screen.getByTestId('issues:detail:save'));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('hides the flag message until the issue is flagged', () => {
+    renderSheet({
+      issue: { ...issue, flaggedMessage: undefined, isFlagged: false },
+    });
+
+    expect(screen.getByTestId('issues:detail:flag').props.value).toBe(false);
+    expect(screen.queryByTestId('issues:detail:flagged')).toBeNull();
+    expect(screen.getByText('Flag this issue')).toBeTruthy();
+  });
+
+  it('reveals a required message field when the flag is turned on', () => {
+    renderSheet({
+      issue: { ...issue, flaggedMessage: undefined, isFlagged: false },
+    });
+
+    fireEvent(screen.getByTestId('issues:detail:flag'), 'valueChange', true);
+
+    expect(screen.getByTestId('issues:detail:flagged').props.placeholder).toBe(
+      'Required - why is this unsafe to climb?',
+    );
+  });
+
+  it('does not save a flag without a message', () => {
+    const onClose = jest.fn();
+    const onSave = jest.fn().mockResolvedValue({});
+    renderSheet({
+      issue: { ...issue, flaggedMessage: undefined, isFlagged: false },
+      onClose,
+      onSave,
+    });
+
+    fireEvent(screen.getByTestId('issues:detail:flag'), 'valueChange', true);
+    fireEvent.press(screen.getByTestId('issues:detail:save'));
+
+    expect(onSave).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByText('A message is required.')).toBeTruthy();
+  });
+
+  it('clears the flag when the switch is turned off', async () => {
+    const onClose = jest.fn();
+    const onSave = jest.fn().mockResolvedValue({});
+    renderSheet({ onClose, onSave });
+
+    fireEvent(screen.getByTestId('issues:detail:flag'), 'valueChange', false);
+    fireEvent.press(screen.getByTestId('issues:detail:save'));
+
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith(issue, {
+        boltsAffected: '2',
+        description: 'Spinner on bolt 2',
+        flaggedMessage: '',
+        issueType: 'Bolts',
+        status: 'Reported',
+        subIssueType: 'Rusted',
+      }),
+    );
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('saves a new flag with its required message', async () => {
+    const onClose = jest.fn();
+    const onSave = jest.fn().mockResolvedValue({});
+    renderSheet({
+      issue: { ...issue, flaggedMessage: undefined, isFlagged: false },
+      onClose,
+      onSave,
+    });
+
+    fireEvent(screen.getByTestId('issues:detail:flag'), 'valueChange', true);
+    fireEvent.changeText(screen.getByTestId('issues:detail:flagged'), 'Loose flake overhead');
+    fireEvent.press(screen.getByTestId('issues:detail:save'));
+
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({ flaggedMessage: undefined, isFlagged: false }),
+        expect.objectContaining({ flaggedMessage: 'Loose flake overhead' }),
+      ),
+    );
+    expect(onClose).toHaveBeenCalled();
   });
 
   it('hides the camera half on web so gallery fills the add tile', () => {

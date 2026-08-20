@@ -1,10 +1,12 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { IssuePhotoUpload } from '@/issues/attachments';
 import { issueColors } from '@/issues/colors';
 import { IssueAttachmentsField } from '@/issues/components/IssueAttachmentsField';
+import { IssueFlagField } from '@/issues/components/IssueFlagField';
+import { IssueSelectField } from '@/issues/components/IssueSelectField';
 import { ISSUE_TYPES, SUB_ISSUES_BY_TYPE } from '@/issues/options';
 import type { IssueEdits, SaveIssueResult } from '@/issues/save';
 import type { IssueAttachment, IssueDetail } from '@/storage/repos/tabvarIssuesRepo';
@@ -38,6 +40,8 @@ export function IssueDetailSheet({
   const [draftDescription, setDraftDescription] = useState('');
   const [draftBoltsAffected, setDraftBoltsAffected] = useState('');
   const [draftFlagged, setDraftFlagged] = useState('');
+  const [flagged, setFlagged] = useState(false);
+  const [flagError, setFlagError] = useState<string>();
 
   useEffect(() => {
     setSaving(false);
@@ -49,20 +53,27 @@ export function IssueDetailSheet({
     setDraftDescription(issue?.description ?? '');
     setDraftBoltsAffected(issue?.boltsAffected ?? '');
     setDraftFlagged(issue?.flaggedMessage ?? '');
+    setFlagged(Boolean(issue?.flaggedMessage));
+    setFlagError(undefined);
   }, [issue?.id]);
 
+  const originalFlaggedMessage = issue?.flaggedMessage ?? '';
+  const originalFlagged = Boolean(originalFlaggedMessage);
+  const nextFlaggedMessage = flagged ? draftFlagged : '';
   const dirty =
     Boolean(issue) &&
     (draftIssueType !== (issue?.issueType ?? '') ||
       draftSubIssueType !== issue?.subIssueType ||
       draftDescription !== (issue?.description ?? '') ||
       draftBoltsAffected !== (issue?.boltsAffected ?? '') ||
-      draftFlagged !== (issue?.flaggedMessage ?? ''));
+      flagged !== originalFlagged ||
+      nextFlaggedMessage !== originalFlaggedMessage);
   const canSave = dirty || attachmentsChanged;
   const resolved = issue?.status === 'Completed';
 
   function handleClose() {
     setError(undefined);
+    setFlagError(undefined);
     onClose();
   }
 
@@ -72,13 +83,18 @@ export function IssueDetailSheet({
       handleClose();
       return;
     }
+    if (flagged && !draftFlagged.trim()) {
+      setFlagError('A message is required.');
+      return;
+    }
     setSaving(true);
     setError(undefined);
+    setFlagError(undefined);
     try {
       const result = await onSave(issue, {
         boltsAffected: draftIssueType === 'Bolts' ? draftBoltsAffected : undefined,
         description: draftDescription,
-        flaggedMessage: draftFlagged,
+        flaggedMessage: nextFlaggedMessage,
         issueType: draftIssueType,
         status,
         subIssueType: draftSubIssueType,
@@ -103,6 +119,8 @@ export function IssueDetailSheet({
     setDraftDescription(next.description ?? '');
     setDraftBoltsAffected(next.boltsAffected ?? '');
     setDraftFlagged(next.flaggedMessage ?? '');
+    setFlagged(Boolean(next.flaggedMessage));
+    setFlagError(undefined);
   }
 
   async function handleAddPhoto(photo: IssuePhotoUpload) {
@@ -144,53 +162,31 @@ export function IssueDetailSheet({
             </Text>
           </View>
 
-          <View style={styles.field}>
-            <Text style={styles.label}>What is affected?</Text>
-            <View style={styles.choices}>
-              {ISSUE_TYPES.map((item) => {
-                const selected = draftIssueType === item.value;
-                return (
-                  <Pressable
-                    accessibilityRole="button"
-                    key={item.value}
-                    onPress={() => {
-                      setDraftIssueType(item.value);
-                      setDraftSubIssueType(undefined);
-                      setError(undefined);
-                    }}
-                    style={[styles.choice, selected && styles.choiceSelected]}
-                    testID={`issues:detail:type:${item.value}`}
-                  >
-                    <Text style={[styles.choiceText, selected && styles.choiceTextSelected]}>
-                      {item.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
+          <IssueSelectField
+            accessibilityLabel="What is affected?"
+            label="What is affected?"
+            onChange={(value) => {
+              setDraftIssueType(value);
+              setDraftSubIssueType(undefined);
+              setError(undefined);
+            }}
+            options={ISSUE_TYPES.map((item) => ({ label: item.label, value: item.value }))}
+            placeholder="Choose what is affected"
+            testID="issues:detail:type"
+            value={draftIssueType}
+          />
 
-          <View style={styles.field}>
-            <Text style={styles.label}>Issue type</Text>
-            <View style={styles.choices}>
-              {subIssues.map((item) => {
-                const selected = draftSubIssueType === item;
-                return (
-                  <Pressable
-                    accessibilityRole="button"
-                    key={item}
-                    onPress={() => setDraftSubIssueType(selected ? undefined : item)}
-                    style={[styles.choice, selected && styles.choiceSelected]}
-                    testID={`issues:detail:subtype:${item}`}
-                  >
-                    <Text style={[styles.choiceText, selected && styles.choiceTextSelected]}>
-                      {item}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
+          <IssueSelectField
+            accessibilityLabel="Issue type"
+            disabled={subIssues.length === 0}
+            disabledMessage="Choose what is affected first."
+            label="Issue type"
+            onChange={setDraftSubIssueType}
+            options={subIssues.map((item) => ({ label: item, value: item }))}
+            placeholder="Choose an issue type"
+            testID="issues:detail:subtype"
+            value={draftSubIssueType}
+          />
 
           {draftIssueType === 'Bolts' ? (
             <View style={styles.field}>
@@ -223,20 +219,20 @@ export function IssueDetailSheet({
             />
           </View>
 
-          <View style={styles.field}>
-            <Text style={styles.label}>Flagged message</Text>
-            <TextInput
-              accessibilityLabel="Flagged message"
-              multiline
-              onChangeText={setDraftFlagged}
-              placeholder="Add flagged message"
-              placeholderTextColor={issueColors.faint}
-              style={[styles.input, styles.multiline]}
-              testID="issues:detail:flagged"
-              textAlignVertical="top"
-              value={draftFlagged}
-            />
-          </View>
+          <IssueFlagField
+            error={flagError}
+            flagged={flagged}
+            message={draftFlagged}
+            onFlaggedChange={(next) => {
+              setFlagged(next);
+              setFlagError(undefined);
+            }}
+            onMessageChange={(next) => {
+              setDraftFlagged(next);
+              setFlagError(undefined);
+            }}
+            testID="issues:detail"
+          />
 
           <IssueAttachmentsField
             busy={saving || adding}
@@ -301,31 +297,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     paddingTop: 4,
-  },
-  choice: {
-    backgroundColor: issueColors.fill,
-    borderColor: issueColors.fillBorder,
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  choiceSelected: {
-    backgroundColor: issueColors.ink,
-    borderColor: issueColors.ink,
-  },
-  choiceText: {
-    color: issueColors.body,
-    fontSize: 13,
-    ...interStyle('700'),
-  },
-  choiceTextSelected: {
-    color: '#FFFFFF',
-  },
-  choices: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
   },
   content: {
     gap: 18,

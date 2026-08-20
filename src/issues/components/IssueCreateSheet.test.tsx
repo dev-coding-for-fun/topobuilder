@@ -180,6 +180,7 @@ describe('IssueCreateSheet attachments', () => {
     fireEvent.press(screen.getByTestId('issues:create-sheet:route-picker:crag:7'));
     fireEvent.press(screen.getByTestId('issues:create-sheet:route-picker:sector:7:Main Wall'));
     fireEvent.press(screen.getByTestId('issues:create-sheet:route-picker:route:456'));
+    fireEvent.press(screen.getByTestId('issues:create-sheet:type'));
     fireEvent.press(screen.getByTestId('issues:create-sheet:type:Bolts'));
     fireEvent.press(screen.getByTestId('issues:create-sheet:add-attachment:gallery'));
 
@@ -207,5 +208,28 @@ describe('IssueCreateSheet attachments', () => {
         subIssueType: undefined,
       }),
     );
+  });
+});
+
+describe('IssueCreateSheet type pickers', () => {
+  it('keeps affected and issue-type options in dropdowns instead of showing pills', () => {
+    render(
+      <IssueCreateSheet onCancel={jest.fn()} onConfirm={jest.fn()} routes={routes} visible />,
+    );
+
+    expect(screen.queryByTestId('issues:create-sheet:type:Bolts')).toBeNull();
+    expect(screen.queryByTestId('issues:create-sheet:subtype')).toBeNull();
+    expect(screen.getByText('Choose what is affected first.')).toBeTruthy();
+
+    fireEvent.press(screen.getByTestId('issues:create-sheet:type'));
+    fireEvent.press(screen.getByTestId('issues:create-sheet:type:Bolts'));
+
+    expect(screen.getByTestId('issues:create-sheet:subtype')).toBeTruthy();
+    expect(screen.queryByTestId('issues:create-sheet:subtype:Rusted')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('issues:create-sheet:subtype'));
+    expect(screen.getByTestId('issues:create-sheet:subtype:Rusted')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('issues:create-sheet:subtype:Rusted'));
+    expect(screen.queryByTestId('issues:create-sheet:subtype:Rusted')).toBeNull();
   });
 });

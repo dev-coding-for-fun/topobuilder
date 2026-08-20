@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { IssuePhotoUpload } from '@/issues/attachments';
 import { issueColors } from '@/issues/colors';
 import { IssueAttachmentsField } from '@/issues/components/IssueAttachmentsField';
+import { IssueSelectField } from '@/issues/components/IssueSelectField';
 import { ISSUE_TYPES, SUB_ISSUES_BY_TYPE } from '@/issues/options';
 import type { CreateIssueInput } from '@/issues/create';
 import type { IssueRouteOption } from '@/storage/repos/tabvarIssuesRepo';
@@ -130,60 +131,32 @@ export function IssueCreateSheet({
             </Pressable>
           </View>
 
-          <View style={styles.field}>
-            <Text style={styles.label}>What is affected?</Text>
-            <Text style={styles.helper}>
-              For multi-pitch routes, detail affected pitch(es) in the notes.
-            </Text>
-            <View style={styles.choices}>
-              {ISSUE_TYPES.map((item) => {
-                const selected = issueType === item.value;
-                return (
-                  <Pressable
-                    accessibilityRole="button"
-                    key={item.value}
-                    onPress={() => {
-                      setIssueType(item.value);
-                      setSubIssueType(undefined);
-                      setError(undefined);
-                    }}
-                    style={[styles.choice, selected && styles.choiceSelected]}
-                    testID={`${testID}:type:${item.value}`}
-                  >
-                    <Text style={[styles.choiceText, selected && styles.choiceTextSelected]}>
-                      {item.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
+          <IssueSelectField
+            accessibilityLabel="What is affected?"
+            helper="For multi-pitch routes, detail affected pitch(es) in the notes."
+            label="What is affected?"
+            onChange={(value) => {
+              setIssueType(value);
+              setSubIssueType(undefined);
+              setError(undefined);
+            }}
+            options={ISSUE_TYPES.map((item) => ({ label: item.label, value: item.value }))}
+            placeholder="Choose what is affected"
+            testID={`${testID}:type`}
+            value={issueType}
+          />
 
-          <View style={styles.field}>
-            <Text style={styles.label}>Issue type</Text>
-            <View style={styles.choices}>
-              {subIssues.length === 0 ? (
-                <Text style={styles.helper}>Choose what is affected first.</Text>
-              ) : (
-                subIssues.map((item) => {
-                  const selected = subIssueType === item;
-                  return (
-                    <Pressable
-                      accessibilityRole="button"
-                      key={item}
-                      onPress={() => setSubIssueType(selected ? undefined : item)}
-                      style={[styles.choice, selected && styles.choiceSelected]}
-                      testID={`${testID}:subtype:${item}`}
-                    >
-                      <Text style={[styles.choiceText, selected && styles.choiceTextSelected]}>
-                        {item}
-                      </Text>
-                    </Pressable>
-                  );
-                })
-              )}
-            </View>
-          </View>
+          <IssueSelectField
+            accessibilityLabel="Issue type"
+            disabled={subIssues.length === 0}
+            disabledMessage="Choose what is affected first."
+            label="Issue type"
+            onChange={setSubIssueType}
+            options={subIssues.map((item) => ({ label: item, value: item }))}
+            placeholder="Choose an issue type"
+            testID={`${testID}:subtype`}
+            value={subIssueType}
+          />
 
           {issueType === 'Bolts' ? (
             <View style={styles.field}>
@@ -635,31 +608,6 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingTop: 2,
   },
-  choice: {
-    backgroundColor: issueColors.fill,
-    borderColor: issueColors.fillBorder,
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  choiceSelected: {
-    backgroundColor: issueColors.ink,
-    borderColor: issueColors.ink,
-  },
-  choiceText: {
-    color: issueColors.body,
-    fontSize: 13,
-    ...interStyle('700'),
-  },
-  choiceTextSelected: {
-    color: '#FFFFFF',
-  },
-  choices: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
   content: {
     gap: 18,
     paddingBottom: 12,
@@ -678,11 +626,6 @@ const styles = StyleSheet.create({
   },
   field: {
     gap: 8,
-  },
-  helper: {
-    color: issueColors.faint,
-    fontSize: 13,
-    lineHeight: 18,
   },
   input: {
     backgroundColor: issueColors.fill,

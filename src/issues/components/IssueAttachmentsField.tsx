@@ -104,7 +104,7 @@ function AttachmentPreviewImage({ photo }: { photo: IssueAttachmentPreview }) {
   if (photo.mimeType && !photo.mimeType.startsWith('image/')) {
     return (
       <View style={styles.attachmentFallback}>
-        <Ionicons color={issueColors.muted} name="document-outline" size={22} />
+          <Ionicons color={issueColors.muted} name="document-outline" size={19} />
       </View>
     );
   }
@@ -146,7 +146,7 @@ function AddAttachmentTile({
           style={({ pressed }) => [styles.addHalf, pressed && styles.attachmentPressed]}
           testID={`${testID}:camera`}
         >
-          <Ionicons color={issueColors.muted} name="camera-outline" size={22} />
+          <Ionicons color={issueColors.muted} name="camera-outline" size={19} />
         </Pressable>
       ) : null}
       <Pressable
@@ -161,7 +161,7 @@ function AddAttachmentTile({
         ]}
         testID={`${testID}:gallery`}
       >
-        <Ionicons color={issueColors.muted} name="images-outline" size={22} />
+        <Ionicons color={issueColors.muted} name="images-outline" size={19} />
       </Pressable>
     </View>
   );
@@ -185,8 +185,8 @@ const styles = StyleSheet.create({
   },
   attachmentCell: {
     aspectRatio: 1,
-    padding: 4,
-    width: '33.333%',
+    padding: 3,
+    width: '29%',
   },
   attachmentFallback: {
     alignItems: 'center',
@@ -196,7 +196,7 @@ const styles = StyleSheet.create({
   attachmentGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginHorizontal: -4,
+    marginHorizontal: -3,
   },
   attachmentImage: {
     height: '100%',

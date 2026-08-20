@@ -29,6 +29,9 @@ export const issueColors = {
   doneBg: '#BBF7D0',
   doneFg: '#14532D',
   flag: '#B45309',
+  flagBg: '#FFFBEB',
+  flagBorder: '#F5C451',
+  flagTrack: '#F59E0B',
 
   danger: '#B91C1C',
   dangerBg: '#FEF2F2',
