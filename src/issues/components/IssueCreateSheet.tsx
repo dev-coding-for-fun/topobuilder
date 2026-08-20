@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { IssuePhotoUpload } from '@/issues/attachments';
 import { issueColors } from '@/issues/colors';
 import { IssueAttachmentsField } from '@/issues/components/IssueAttachmentsField';
+import { IssueFlagField } from '@/issues/components/IssueFlagField';
 import { IssueSelectField } from '@/issues/components/IssueSelectField';
 import { ISSUE_TYPES, SUB_ISSUES_BY_TYPE } from '@/issues/options';
 import type { CreateIssueInput } from '@/issues/create';
@@ -40,10 +41,13 @@ export function IssueCreateSheet({
   const [subIssueType, setSubIssueType] = useState<string>();
   const [description, setDescription] = useState('');
   const [boltsAffected, setBoltsAffected] = useState('');
+  const [flagged, setFlagged] = useState(false);
+  const [flaggedMessage, setFlaggedMessage] = useState('');
   const [photos, setPhotos] = useState<IssuePhotoUpload[]>([]);
   const [routePickerVisible, setRoutePickerVisible] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const [flagError, setFlagError] = useState<string>();
 
   useEffect(() => {
     if (visible) {
@@ -52,10 +56,13 @@ export function IssueCreateSheet({
       setSubIssueType(undefined);
       setDescription('');
       setBoltsAffected('');
+      setFlagged(false);
+      setFlaggedMessage('');
       setPhotos([]);
       setRoutePickerVisible(false);
       setBusy(false);
       setError(undefined);
+      setFlagError(undefined);
     }
   }, [visible]);
 
@@ -71,13 +78,19 @@ export function IssueCreateSheet({
       setError('Choose what is affected by the issue.');
       return;
     }
+    if (flagged && !flaggedMessage.trim()) {
+      setFlagError('A message is required.');
+      return;
+    }
 
     setBusy(true);
     setError(undefined);
+    setFlagError(undefined);
     try {
       await onConfirm({
         boltsAffected: issueType === 'Bolts' ? boltsAffected : undefined,
         description,
+        flaggedMessage: flagged ? flaggedMessage : undefined,
         issueType,
         photos,
         routeId: route.id,
@@ -188,6 +201,21 @@ export function IssueCreateSheet({
               value={description}
             />
           </View>
+
+          <IssueFlagField
+            error={flagError}
+            flagged={flagged}
+            message={flaggedMessage}
+            onFlaggedChange={(next) => {
+              setFlagged(next);
+              setFlagError(undefined);
+            }}
+            onMessageChange={(next) => {
+              setFlaggedMessage(next);
+              setFlagError(undefined);
+            }}
+            testID={testID}
+          />
 
           <IssueAttachmentsField
             busy={busy}

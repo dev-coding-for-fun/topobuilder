@@ -195,6 +195,7 @@ describe('IssueCreateSheet attachments', () => {
       expect(onConfirm).toHaveBeenCalledWith({
         boltsAffected: '',
         description: '',
+        flaggedMessage: undefined,
         issueType: 'Bolts',
         photos: [
           {
@@ -231,5 +232,63 @@ describe('IssueCreateSheet type pickers', () => {
     expect(screen.getByTestId('issues:create-sheet:subtype:Rusted')).toBeTruthy();
     fireEvent.press(screen.getByTestId('issues:create-sheet:subtype:Rusted'));
     expect(screen.queryByTestId('issues:create-sheet:subtype:Rusted')).toBeNull();
+  });
+});
+
+function fillRequiredCreateFields() {
+  fireEvent.press(screen.getByTestId('issues:create-sheet:route'));
+  fireEvent.press(screen.getByTestId('issues:create-sheet:route-picker:crag:7'));
+  fireEvent.press(screen.getByTestId('issues:create-sheet:route-picker:sector:7:Main Wall'));
+  fireEvent.press(screen.getByTestId('issues:create-sheet:route-picker:route:456'));
+  fireEvent.press(screen.getByTestId('issues:create-sheet:type'));
+  fireEvent.press(screen.getByTestId('issues:create-sheet:type:Bolts'));
+}
+
+describe('IssueCreateSheet flag field', () => {
+  it('hides the flag message until the issue is flagged', () => {
+    render(
+      <IssueCreateSheet onCancel={jest.fn()} onConfirm={jest.fn()} routes={routes} visible />,
+    );
+
+    expect(screen.getByTestId('issues:create-sheet:flag').props.value).toBe(false);
+    expect(screen.queryByTestId('issues:create-sheet:flagged')).toBeNull();
+  });
+
+  it('does not submit a flag without a message', () => {
+    const onConfirm = jest.fn();
+    render(
+      <IssueCreateSheet onCancel={jest.fn()} onConfirm={onConfirm} routes={routes} visible />,
+    );
+
+    fillRequiredCreateFields();
+    fireEvent(screen.getByTestId('issues:create-sheet:flag'), 'valueChange', true);
+    fireEvent.press(screen.getByTestId('issues:create-sheet:submit'));
+
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(screen.getByText('A message is required.')).toBeTruthy();
+  });
+
+  it('submits a flag with its required message', async () => {
+    const onConfirm = jest.fn().mockResolvedValue(undefined);
+    render(
+      <IssueCreateSheet onCancel={jest.fn()} onConfirm={onConfirm} routes={routes} visible />,
+    );
+
+    fillRequiredCreateFields();
+    fireEvent(screen.getByTestId('issues:create-sheet:flag'), 'valueChange', true);
+    fireEvent.changeText(
+      screen.getByTestId('issues:create-sheet:flagged'),
+      'Loose flake overhead',
+    );
+    fireEvent.press(screen.getByTestId('issues:create-sheet:submit'));
+
+    await waitFor(() =>
+      expect(onConfirm).toHaveBeenCalledWith(
+        expect.objectContaining({
+          flaggedMessage: 'Loose flake overhead',
+          routeId: 456,
+        }),
+      ),
+    );
   });
 });

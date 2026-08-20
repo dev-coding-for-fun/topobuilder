@@ -14,6 +14,7 @@ export type CreateIssueInput = {
   subIssueType?: string;
   description?: string;
   boltsAffected?: string;
+  flaggedMessage?: string;
   photos?: IssuePhotoUpload[];
 };
 
@@ -27,14 +28,16 @@ export async function createIssue(
     throw new Error('Choose a synced route before creating an offline issue.');
   }
 
+  const flaggedMessage = input.flaggedMessage?.trim() || undefined;
+
   const detail = await queuePendingIssueCreate(
     db,
     {
       boltsAffected: input.boltsAffected?.trim() || undefined,
       cragId: route.cragId,
       description: input.description?.trim() || undefined,
-      flaggedMessage: undefined,
-      isFlagged: false,
+      flaggedMessage,
+      isFlagged: Boolean(flaggedMessage),
       issueType: input.issueType,
       routeId: input.routeId,
       status: 'In Moderation',

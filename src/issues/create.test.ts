@@ -92,6 +92,8 @@ describe('createIssue', () => {
         boltsAffected: '2',
         cragId: 7,
         description: 'Spinner on bolt 2',
+        flaggedMessage: undefined,
+        isFlagged: false,
         issueType: 'Bolts',
         routeId: 456,
         status: 'In Moderation',
@@ -122,6 +124,28 @@ describe('createIssue', () => {
 
     expect(getIssueDetailWithPending).toHaveBeenCalledWith(db, 'local:issue-1');
     expect(getIssueDetailWithPending).toHaveBeenCalledWith(db, 99);
+  });
+
+  it('flags the issue when a flag message is provided', async () => {
+    await createIssue(
+      db,
+      {
+        description: 'Spinner on bolt 2',
+        flaggedMessage: '  Loose flake overhead  ',
+        issueType: 'Bolts',
+        routeId: 456,
+      },
+      'token',
+    );
+
+    expect(queuePendingIssueCreate).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({
+        flaggedMessage: 'Loose flake overhead',
+        isFlagged: true,
+      }),
+      [],
+    );
   });
 
   it('requires the route to be in the local catalog', async () => {
