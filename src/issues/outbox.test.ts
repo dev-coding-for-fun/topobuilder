@@ -175,12 +175,13 @@ describe('flushIssueOutbox attachment upload', () => {
       return Promise.resolve([]);
     });
 
-    await flushIssueOutbox(db, 'token', 'manual');
+    const result = await flushIssueOutbox(db, 'token', 'manual');
 
     expect(pushTabvarIssue).toHaveBeenCalledWith(
       'token',
       expect.objectContaining({ op: 'create', externalId: 'issue-local-1' }),
     );
+    expect(result.createdIssueIds).toEqual({ 'issue-local-1': 99 });
     expect(uploadTabvarIssueAttachments).toHaveBeenCalledTimes(1);
     expect(uploadTabvarIssueAttachments).toHaveBeenCalledWith('token', 99, [
       { filename: 'photo.jpg', mimeType: 'image/jpeg', uri: 'file:///att-pending.jpg' },

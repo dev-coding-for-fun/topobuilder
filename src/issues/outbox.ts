@@ -30,6 +30,7 @@ export type IssueOutboxFlushResult = {
   status: IssueSyncLogStatus;
   summary: string;
   details: unknown[];
+  createdIssueIds: Record<string, number>;
 };
 
 export async function flushIssueOutbox(
@@ -39,6 +40,7 @@ export async function flushIssueOutbox(
 ): Promise<IssueOutboxFlushResult> {
   const startedAt = nowIso();
   const details: unknown[] = [];
+  const createdIssueIds: Record<string, number> = {};
   let successCount = 0;
   let errorCount = 0;
 
@@ -61,6 +63,7 @@ export async function flushIssueOutbox(
       await applyTabvarIssue(db, created);
       await uploadPendingAttachments(db, accessToken, pending.externalId, created.id);
       await deletePendingIssueCreate(db, pending.externalId);
+      createdIssueIds[pending.externalId] = created.id;
       successCount += 1;
       details.push({ externalId: pending.externalId, issueId: created.id, op: 'create', status: 'ok' });
     } catch (error) {
@@ -148,7 +151,7 @@ export async function flushIssueOutbox(
     triggerKind,
   });
 
-  return { details, status, summary };
+  return { createdIssueIds, details, status, summary };
 }
 
 async function uploadPendingAttachments(

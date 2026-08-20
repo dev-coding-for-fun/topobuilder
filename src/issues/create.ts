@@ -1,6 +1,7 @@
 import type { IssuePhotoUpload } from '@/issues/attachments';
 import { flushIssueOutbox } from '@/issues/outbox';
 import {
+  getIssueDetailWithPending,
   getIssueRouteOption,
   queuePendingIssueCreate,
   type IssueDetail,
@@ -42,8 +43,17 @@ export async function createIssue(
     input.photos ?? [],
   );
 
-  await flushIssueOutbox(db, accessToken, 'interactive').catch((error) => {
+  const flush = await flushIssueOutbox(db, accessToken, 'interactive').catch((error) => {
     console.warn('[issues] interactive create flush failed', error);
+    return undefined;
   });
+  const stillQueued = await getIssueDetailWithPending(db, detail.issueKey ?? detail.id);
+  if (stillQueued) return stillQueued;
+
+  const externalId = detail.localExternalId ?? (typeof detail.id === 'string' ? detail.id : undefined);
+  const serverId = externalId ? flush?.createdIssueIds[externalId] : undefined;
+  if (serverId != null) {
+    return (await getIssueDetailWithPending(db, serverId)) ?? detail;
+  }
   return detail;
 }
