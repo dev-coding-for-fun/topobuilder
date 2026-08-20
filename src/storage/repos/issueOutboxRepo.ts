@@ -15,12 +15,12 @@ export type PendingIssueFields = {
   routeId: number;
   cragId: number;
   issueType: string;
-  subIssueType?: string;
+  subIssueType?: string | null;
   status: string;
-  description?: string;
-  boltsAffected?: string;
+  description?: string | null;
+  boltsAffected?: string | null;
   isFlagged: boolean;
-  flaggedMessage?: string;
+  flaggedMessage?: string | null;
 };
 
 export type PendingIssueCreate = PendingIssueFields & {
@@ -48,6 +48,16 @@ export type PendingIssueAttachment = {
 };
 
 export type IssueSyncLogStatus = 'ok' | 'partial' | 'error';
+
+export type IssueSyncLogEntry = {
+  id: string;
+  triggerKind: string;
+  startedAt: string;
+  finishedAt: string;
+  status: IssueSyncLogStatus;
+  summary: string;
+  details: unknown[];
+};
 
 export type UnsyncedIssueListItem = IssueListItem & {
   issueKey: IssueKey;
@@ -103,6 +113,16 @@ type PendingAttachmentRow = {
 
 type CragNameRow = {
   name: string | null;
+};
+
+type IssueSyncLogRow = {
+  id: string;
+  trigger_kind: string;
+  started_at: string;
+  finished_at: string;
+  status: string;
+  summary: string;
+  details_json: string;
 };
 
 export async function queuePendingIssueCreate(
@@ -324,7 +344,26 @@ export async function listUnsyncedIssues(db: TopoDatabase): Promise<UnsyncedIssu
 }
 
 export async function getPendingIssueCount(db: TopoDatabase): Promise<number> {
-  return (await listUnsyncedIssues(db)).length;
+  return (await listUnsyncedIssueKeys(db)).size;
+}
+
+async function listUnsyncedIssueKeys(db: TopoDatabase): Promise<Set<string>> {
+  const keys = new Set<string>();
+
+  const creates = await db.getAllAsync<{ external_id: string }>('SELECT external_id FROM pending_issues');
+  for (const row of creates) keys.add(localIssueKey(row.external_id));
+
+  const edits = await db.getAllAsync<{ issue_id: number }>('SELECT issue_id FROM pending_issue_edits');
+  for (const row of edits) keys.add(serverIssueKey(row.issue_id));
+
+  const attachments = await db.getAllAsync<{ issue_key: string }>(
+    'SELECT DISTINCT issue_key FROM pending_issue_attachments WHERE uploaded = 0',
+  );
+  for (const row of attachments) {
+    if (row.issue_key) keys.add(row.issue_key);
+  }
+
+  return keys;
 }
 
 export async function listPendingCreates(db: TopoDatabase): Promise<PendingIssueCreate[]> {
@@ -427,6 +466,22 @@ export async function addIssueSyncLog(
   );
 }
 
+const DEFAULT_SYNC_LOG_LIMIT = 50;
+
+export async function listIssueSyncLogs(
+  db: TopoDatabase,
+  limit = DEFAULT_SYNC_LOG_LIMIT,
+): Promise<IssueSyncLogEntry[]> {
+  const rows = await db.getAllAsync<IssueSyncLogRow>(
+    `SELECT id, trigger_kind, started_at, finished_at, status, summary, details_json
+     FROM issue_sync_log
+     ORDER BY started_at DESC
+     LIMIT ?`,
+    limit,
+  );
+  return rows.map(mapIssueSyncLogRow);
+}
+
 async function updatePendingIssue(
   db: TopoDatabase,
   externalId: string,
@@ -483,15 +538,17 @@ async function listPendingIssueRows(db: TopoDatabase, cragId?: number): Promise<
       COALESCE(crags.name, routes.crag_name, 'Crag #' || pending.crag_id) AS crag_name,
       COALESCE(sectors.name, routes.sector_name) AS sector_name,
       routes.grade_yds,
-      COUNT(attachments.id) AS attachment_count
+      (
+        SELECT COUNT(*)
+        FROM pending_issue_attachments attachments
+        WHERE attachments.issue_key = 'local:' || pending.external_id
+          AND attachments.uploaded = 0
+      ) AS attachment_count
     FROM pending_issues pending
     LEFT JOIN tabvar_routes routes ON routes.id = pending.route_id
     LEFT JOIN tabvar_crags crags ON crags.id = pending.crag_id
     LEFT JOIN tabvar_sectors sectors ON sectors.id = routes.sector_id
-    LEFT JOIN pending_issue_attachments attachments
-      ON attachments.issue_key = ('local:' || pending.external_id)
     ${cragId === undefined ? '' : 'WHERE pending.crag_id = ?'}
-    GROUP BY pending.external_id
     ORDER BY pending.updated_at DESC
   `;
   return cragId === undefined
@@ -516,14 +573,14 @@ async function applyPendingEdit(
   return {
     ...issue,
     attachmentCount: issue.attachmentCount + pendingAttachments.length,
-    boltsAffected: edit.boltsAffected,
-    description: edit.description,
-    flaggedMessage: edit.flaggedMessage,
+    boltsAffected: edit.boltsAffected ?? undefined,
+    description: edit.description ?? undefined,
+    flaggedMessage: edit.flaggedMessage ?? undefined,
     isFlagged: edit.isFlagged,
     issueType: edit.issueType,
     pendingSync: true,
     status: edit.status,
-    subIssueType: edit.subIssueType,
+    subIssueType: edit.subIssueType ?? undefined,
     updatedAt: edit.updatedAt,
   };
 }
@@ -599,4 +656,30 @@ function mapPendingAttachmentRow(row: PendingAttachmentRow): PendingIssueAttachm
     mimeType: row.mime_type,
     uploaded: row.uploaded !== 0,
   };
+}
+
+function mapIssueSyncLogRow(row: IssueSyncLogRow): IssueSyncLogEntry {
+  return {
+    details: parseSyncLogDetails(row.details_json),
+    finishedAt: row.finished_at,
+    id: row.id,
+    startedAt: row.started_at,
+    status: parseSyncLogStatus(row.status),
+    summary: row.summary,
+    triggerKind: row.trigger_kind,
+  };
+}
+
+function parseSyncLogStatus(value: string): IssueSyncLogStatus {
+  if (value === 'ok' || value === 'partial' || value === 'error') return value;
+  return 'error';
+}
+
+function parseSyncLogDetails(value: string): unknown[] {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }

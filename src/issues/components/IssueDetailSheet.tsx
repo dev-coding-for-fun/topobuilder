@@ -32,6 +32,7 @@ export function IssueDetailSheet({
   const [saving, setSaving] = useState(false);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string>();
+  const [attachmentsChanged, setAttachmentsChanged] = useState(false);
   const [draftIssueType, setDraftIssueType] = useState('');
   const [draftSubIssueType, setDraftSubIssueType] = useState<string | undefined>();
   const [draftDescription, setDraftDescription] = useState('');
@@ -42,12 +43,23 @@ export function IssueDetailSheet({
     setSaving(false);
     setAdding(false);
     setError(undefined);
+    setAttachmentsChanged(false);
     setDraftIssueType(issue?.issueType ?? '');
     setDraftSubIssueType(issue?.subIssueType);
     setDraftDescription(issue?.description ?? '');
     setDraftBoltsAffected(issue?.boltsAffected ?? '');
     setDraftFlagged(issue?.flaggedMessage ?? '');
   }, [issue?.id]);
+
+  const dirty =
+    Boolean(issue) &&
+    (draftIssueType !== (issue?.issueType ?? '') ||
+      draftSubIssueType !== issue?.subIssueType ||
+      draftDescription !== (issue?.description ?? '') ||
+      draftBoltsAffected !== (issue?.boltsAffected ?? '') ||
+      draftFlagged !== (issue?.flaggedMessage ?? ''));
+  const canSave = dirty || attachmentsChanged;
+  const resolved = issue?.status === 'Completed';
 
   function handleClose() {
     setError(undefined);
@@ -56,6 +68,10 @@ export function IssueDetailSheet({
 
   async function submit(status: string) {
     if (!issue || saving || adding) return;
+    if (!dirty) {
+      handleClose();
+      return;
+    }
     setSaving(true);
     setError(undefined);
     try {
@@ -95,19 +111,12 @@ export function IssueDetailSheet({
     setError(undefined);
     try {
       await onAddAttachment(issue, photo);
+      setAttachmentsChanged(true);
     } finally {
       setAdding(false);
     }
   }
 
-  const dirty =
-    Boolean(issue) &&
-    (draftIssueType !== (issue?.issueType ?? '') ||
-      draftSubIssueType !== issue?.subIssueType ||
-      draftDescription !== (issue?.description ?? '') ||
-      draftBoltsAffected !== (issue?.boltsAffected ?? '') ||
-      draftFlagged !== (issue?.flaggedMessage ?? ''));
-  const resolved = issue?.status === 'Completed';
   const subIssues = draftIssueType ? SUB_ISSUES_BY_TYPE[draftIssueType] ?? [] : [];
   const meta = issue
     ? [issue.sectorName, issue.gradeYds].filter(Boolean).join(' · ') || `Route #${issue.routeId}`
@@ -240,6 +249,7 @@ export function IssueDetailSheet({
               onPress: () => onOpenAttachment(attachment),
               onRemove: attachment.pendingSync && onRemovePendingAttachment
                 ? () => {
+                    setAttachmentsChanged(true);
                     void onRemovePendingAttachment(String(attachment.id));
                   }
                 : undefined,
@@ -268,7 +278,7 @@ export function IssueDetailSheet({
             </View>
             <View style={styles.action}>
               <Button
-                disabled={saving || adding || !dirty}
+                disabled={saving || adding || !canSave}
                 label={saving ? 'Saving…' : 'Save'}
                 onPress={() => {
                   void submit(issue.status);

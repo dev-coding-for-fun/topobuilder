@@ -310,6 +310,13 @@ function TabvarSyncPanel() {
             testID="settings:tabvar-connect"
           />
         )}
+        <Button
+          disabled={isBusy}
+          label="View sync log"
+          onPress={() => router.push('/settings/issue-sync-log')}
+          testID="settings:tabvar-sync-log"
+          variant="secondary"
+        />
       </View>
     </View>
   );

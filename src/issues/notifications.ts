@@ -12,7 +12,8 @@ Notifications.setNotificationHandler({
 
 export async function showIssueUploadNotification(count: number): Promise<string | undefined> {
   if (Platform.OS === 'web') return undefined;
-  await ensureNotificationPermission();
+  const current = await Notifications.getPermissionsAsync();
+  if (!current.granted) return undefined;
   return Notifications.scheduleNotificationAsync({
     content: {
       body: `Uploading ${count} issue${count === 1 ? '' : 's'} and any pending photos.`,
@@ -27,8 +28,3 @@ export async function dismissIssueUploadNotification(identifier?: string): Promi
   await Notifications.dismissNotificationAsync(identifier).catch(() => undefined);
 }
 
-async function ensureNotificationPermission() {
-  const current = await Notifications.getPermissionsAsync();
-  if (current.granted) return;
-  await Notifications.requestPermissionsAsync();
-}

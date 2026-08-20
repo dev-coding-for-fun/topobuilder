@@ -71,6 +71,22 @@ jest.mock('@expo-google-fonts/inter', () => ({
   Inter_700Bold: 700,
 }));
 
+jest.mock('expo-file-system', () => ({
+  File: class File extends Blob {
+    exists = true;
+    uri: string;
+
+    constructor(uri: string) {
+      super([new Uint8Array([1, 2, 3])], { type: 'application/octet-stream' });
+      this.uri = uri;
+    }
+
+    bytes() {
+      return Promise.resolve(new Uint8Array([1, 2, 3]));
+    }
+  },
+}));
+
 jest.mock('react-native-keyboard-controller', () => {
   const { ScrollView } = require('react-native');
   return {

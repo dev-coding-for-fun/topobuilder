@@ -108,6 +108,10 @@ describe('IssueDetailSheet', () => {
     const onSave = jest.fn().mockResolvedValue({});
     renderSheet({ onClose, onSave });
 
+    expect(screen.getByTestId('issues:detail:save').props.accessibilityState).toEqual(
+      expect.objectContaining({ disabled: true }),
+    );
+
     fireEvent.changeText(screen.getByTestId('issues:detail:description'), 'Updated spinner');
     fireEvent.press(screen.getByTestId('issues:detail:save'));
 
@@ -179,6 +183,86 @@ describe('IssueDetailSheet', () => {
       }),
     );
     expect(pickIssuePhotoFromLibrary).not.toHaveBeenCalled();
+  });
+
+  it('enables save after adding a photo and closes without a field save', async () => {
+    const onClose = jest.fn();
+    const onSave = jest.fn().mockResolvedValue({});
+    const onAddAttachment = jest.fn().mockResolvedValue(issue);
+    (pickIssuePhotoFromLibrary as jest.Mock).mockResolvedValue(pickerAsset);
+    renderSheet({ onAddAttachment, onClose, onSave });
+
+    expect(screen.getByTestId('issues:detail:save').props.accessibilityState).toEqual(
+      expect.objectContaining({ disabled: true }),
+    );
+
+    fireEvent.press(screen.getByTestId('issues:detail:add-attachment:gallery'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('issues:detail:save').props.accessibilityState).toEqual(
+        expect.objectContaining({ disabled: false }),
+      ),
+    );
+
+    fireEvent.press(screen.getByTestId('issues:detail:save'));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('still saves field edits after a photo was added', async () => {
+    const onClose = jest.fn();
+    const onSave = jest.fn().mockResolvedValue({});
+    const onAddAttachment = jest.fn().mockResolvedValue(issue);
+    (pickIssuePhotoFromLibrary as jest.Mock).mockResolvedValue(pickerAsset);
+    renderSheet({ onAddAttachment, onClose, onSave });
+
+    fireEvent.press(screen.getByTestId('issues:detail:add-attachment:gallery'));
+    await waitFor(() => expect(onAddAttachment).toHaveBeenCalled());
+    fireEvent.changeText(screen.getByTestId('issues:detail:description'), 'Updated spinner');
+    fireEvent.press(screen.getByTestId('issues:detail:save'));
+
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith(issue, {
+        boltsAffected: '2',
+        description: 'Updated spinner',
+        flaggedMessage: 'Needs review',
+        issueType: 'Bolts',
+        status: 'Reported',
+        subIssueType: 'Rusted',
+      }),
+    );
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('enables save after removing a pending photo', async () => {
+    const onClose = jest.fn();
+    const onSave = jest.fn().mockResolvedValue({});
+    const onRemovePendingAttachment = jest.fn().mockResolvedValue(undefined);
+    renderSheet({
+      issue: {
+        ...issue,
+        attachments: [{ ...issue.attachments[0], pendingSync: true }],
+      },
+      onClose,
+      onRemovePendingAttachment,
+      onSave,
+    });
+
+    expect(screen.getByTestId('issues:detail:save').props.accessibilityState).toEqual(
+      expect.objectContaining({ disabled: true }),
+    );
+
+    fireEvent.press(screen.getByTestId('issues:detail:attachment:11:remove'));
+
+    expect(onRemovePendingAttachment).toHaveBeenCalledWith('11');
+    expect(screen.getByTestId('issues:detail:save').props.accessibilityState).toEqual(
+      expect.objectContaining({ disabled: false }),
+    );
+
+    fireEvent.press(screen.getByTestId('issues:detail:save'));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(onSave).not.toHaveBeenCalled();
   });
 
   it('hides the camera half on web so gallery fills the add tile', () => {

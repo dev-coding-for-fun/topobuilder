@@ -33,8 +33,8 @@ export async function saveIssueEdits(
   const flaggedMessage = edits.flaggedMessage.trim();
   const statusChanged = edits.status !== issue.status;
   const issueType = edits.issueType ?? issue.issueType;
-  const subIssueType = edits.subIssueType?.trim() || undefined;
-  const boltsAffected = edits.boltsAffected?.trim() || undefined;
+  const subIssueType = edits.subIssueType?.trim() || null;
+  const boltsAffected = edits.boltsAffected?.trim() || null;
 
   if (statusChanged && !isAllowedIssueStatusTransition(issue.status, edits.status)) {
     throw new Error(`Cannot change status from ${issue.status} to ${edits.status}.`);
@@ -46,8 +46,8 @@ export async function saveIssueEdits(
     {
       boltsAffected,
       cragId: issue.cragId,
-      description: description || undefined,
-      flaggedMessage: flaggedMessage || undefined,
+      description: description || null,
+      flaggedMessage: flaggedMessage || null,
       isFlagged: Boolean(flaggedMessage),
       issueType,
       routeId: issue.routeId,

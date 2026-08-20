@@ -5,21 +5,7 @@ export async function requestPhotoLibraryPermission() {
 }
 
 export async function pickPhotoFromLibrary() {
-  const hasPermission = await requestPhotoLibraryPermission();
-  if (!hasPermission) {
-    return undefined;
-  }
-
-  const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ['images'],
-    quality: 1,
-  });
-
-  if (result.canceled || !result.assets[0]) {
-    return undefined;
-  }
-
-  return result.assets[0];
+  return pickPhotoWithOptions(1);
 }
 
 export async function requestCameraPermission() {
@@ -39,11 +25,6 @@ export async function takeIssuePhotoWithCamera() {
 }
 
 async function pickPhotoWithOptions(quality: number) {
-  const hasPermission = await requestPhotoLibraryPermission();
-  if (!hasPermission) {
-    throw new Error('Photo library permission is required to attach a photo.');
-  }
-
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ['images'],
     quality,

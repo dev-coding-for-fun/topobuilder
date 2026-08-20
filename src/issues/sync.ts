@@ -78,6 +78,7 @@ async function runIssueSync(
   const startedAt = nowIso();
   await startSyncJob(db, kind, startedAt);
 
+  let syncError: string | undefined;
   try {
     const session = await loadTabvarSession();
     if (!session) {
@@ -121,12 +122,12 @@ async function runIssueSync(
       serverTime: routes.serverTime,
     });
     await upsertTabvarIssues(db, issues.issues, issues.serverTime, syncedAt);
-    await finishSyncJob(db, nowIso());
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Route issue sync failed.';
-    await saveIssueSyncError(db, message);
-    await finishSyncJob(db, nowIso(), message);
+    syncError = error instanceof Error ? error.message : 'Route issue sync failed.';
+    await saveIssueSyncError(db, syncError);
     throw error;
+  } finally {
+    await finishSyncJob(db, nowIso(), syncError);
   }
 }
 

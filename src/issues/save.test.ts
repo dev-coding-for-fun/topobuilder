@@ -72,6 +72,29 @@ describe('saveIssueEdits', () => {
     expect(flushIssueOutbox).toHaveBeenCalledWith(db, 'token', 'interactive');
   });
 
+  it('queues a cleared description as null instead of omitting it', async () => {
+    (queuePendingIssueEdit as jest.Mock).mockResolvedValue({ ...issue, description: undefined });
+    (getIssueDetailWithPending as jest.Mock).mockResolvedValue({ ...issue, description: undefined });
+
+    await saveIssueEdits(
+      db,
+      issue,
+      { description: '   ', flaggedMessage: '', status: 'Reported' },
+      'token',
+    );
+
+    expect(queuePendingIssueEdit).toHaveBeenCalledWith(
+      db,
+      issue,
+      expect.objectContaining({
+        description: null,
+        flaggedMessage: null,
+        isFlagged: false,
+      }),
+      '2026-06-09 10:00:00',
+    );
+  });
+
   it('rejects illegal status transitions before queueing', async () => {
     await expect(
       saveIssueEdits(

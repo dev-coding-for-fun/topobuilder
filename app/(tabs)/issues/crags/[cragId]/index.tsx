@@ -37,7 +37,6 @@ export default function CragIssuesScreen() {
     refresh,
     removePendingAttachment,
     saveIssue,
-    syncError,
   } = useIssueStore();
   const numericCragId = Number(cragId);
   const issueCragId = Number.isFinite(numericCragId) ? numericCragId : undefined;
@@ -148,7 +147,6 @@ export default function CragIssuesScreen() {
     <Screen edges={['left', 'right', 'bottom']} style={styles.screen} testID="issues:crag:screen">
       <Stack.Screen options={{ title: 'Crag Issues' }} />
 
-      <IssueErrorBanner message={syncError} />
       <IssueErrorBanner message={actionError} testID="issues:crag:action-error" />
 
       <FlatList

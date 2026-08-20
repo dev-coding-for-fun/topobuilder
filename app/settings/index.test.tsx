@@ -50,6 +50,7 @@ jest.mock('@/settings/exportDisclaimer', () => ({
 
 import { loadTabvarSession } from '@/integrations/tabvar/sessionStore';
 import { resyncTabvarIssues } from '@/issues/sync';
+import { router } from 'expo-router';
 
 import SettingsScreen from './index';
 
@@ -74,5 +75,15 @@ describe('SettingsScreen TABVAR sync', () => {
 
     await waitFor(() => expect(resyncTabvarIssues).toHaveBeenCalledTimes(1));
     expect(await screen.findByText('Route issues resynced from Tabvar.')).toBeTruthy();
+  });
+
+  it('opens the issue sync log from the TABVAR panel', async () => {
+    (loadTabvarSession as jest.Mock).mockResolvedValue(undefined);
+
+    render(<SettingsScreen />);
+
+    fireEvent.press(await screen.findByTestId('settings:tabvar-sync-log'));
+
+    expect(router.push).toHaveBeenCalledWith('/settings/issue-sync-log');
   });
 });

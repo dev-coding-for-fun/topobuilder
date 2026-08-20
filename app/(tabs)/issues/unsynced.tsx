@@ -34,7 +34,6 @@ export default function UnsyncedIssuesScreen() {
     refresh,
     removePendingAttachment,
     saveIssue,
-    syncError,
   } = useIssueStore();
   const [sections, setSections] = useState<UnsyncedSection[]>([]);
   const [selectedIssue, setSelectedIssue] = useState<IssueDetail>();
@@ -111,7 +110,6 @@ export default function UnsyncedIssuesScreen() {
   return (
     <Screen edges={['left', 'right', 'bottom']} style={styles.screen} testID="issues:unsynced:screen">
       <Stack.Screen options={{ title: 'Unsynced Issues' }} />
-      <IssueErrorBanner message={syncError} />
       <IssueErrorBanner message={actionError} testID="issues:unsynced:action-error" />
 
       <SectionList

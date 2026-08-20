@@ -1,3 +1,5 @@
+import { File } from 'expo-file-system';
+
 import type { TabvarUploadImage } from './types';
 
 export async function appendTopoUpload(
@@ -5,12 +7,9 @@ export async function appendTopoUpload(
   fieldName: string,
   image: TabvarUploadImage,
 ): Promise<void> {
-  formData.append(
-    fieldName,
-    {
-      name: image.filename,
-      type: image.mimeType,
-      uri: image.uri,
-    } as unknown as Blob,
-  );
+  const file = new File(image.uri);
+  if (!file.exists) {
+    throw new Error(`Could not read image "${image.filename}" for Tabvar upload.`);
+  }
+  formData.append(fieldName, file, image.filename);
 }

@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Stack, router } from 'expo-router';
-import { useState } from 'react';
+import { Stack, router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text } from 'react-native';
 
 import { issueColors } from '@/issues/colors';
@@ -24,13 +24,20 @@ export default function IssuesCragListScreen() {
     loadIssueRoutes,
     pendingIssueCount,
     refresh,
+    reloadLocal,
     storageError,
-    syncError,
   } = useIssueStore();
   const [showCreateIssue, setShowCreateIssue] = useState(false);
   const [routes, setRoutes] = useState<IssueRouteOption[]>([]);
   const [routesLoading, setRoutesLoading] = useState(false);
   const [routesError, setRoutesError] = useState<string>();
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!isReady) return;
+      void reloadLocal();
+    }, [isReady, reloadLocal]),
+  );
 
   async function handleOpenCreateIssue() {
     setShowCreateIssue(true);
@@ -73,7 +80,6 @@ export default function IssuesCragListScreen() {
       />
 
       <IssueErrorBanner message={storageError} />
-      <IssueErrorBanner message={syncError} />
 
       {pendingIssueCount > 0 ? (
         <Pressable

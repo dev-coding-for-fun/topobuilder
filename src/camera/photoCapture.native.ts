@@ -1,31 +1,24 @@
 import * as ImagePicker from 'expo-image-picker';
 
 export async function requestPhotoLibraryPermission() {
-  const result = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  return result.granted;
+  const result = await ImagePicker.getMediaLibraryPermissionsAsync();
+  if (result.granted) return true;
+  return (await ImagePicker.requestMediaLibraryPermissionsAsync()).granted;
 }
 
 export async function pickPhotoFromLibrary() {
-  const hasPermission = await requestPhotoLibraryPermission();
-  if (!hasPermission) {
-    return undefined;
-  }
-
-  const result = await ImagePicker.launchImageLibraryAsync({
+  const result = await launchLibrary({
     mediaTypes: ['images'],
     quality: 1,
   });
-
-  if (result.canceled || !result.assets[0]) {
-    return undefined;
-  }
-
-  return result.assets[0];
+  if (!result) return undefined;
+  return result;
 }
 
 export async function requestCameraPermission() {
-  const result = await ImagePicker.requestCameraPermissionsAsync();
-  return result.granted;
+  const existing = await ImagePicker.getCameraPermissionsAsync();
+  if (existing.granted) return true;
+  return (await ImagePicker.requestCameraPermissionsAsync()).granted;
 }
 
 export function canCaptureIssuePhotoWithCamera() {
@@ -38,29 +31,38 @@ const ISSUE_PHOTO_OPTIONS: ImagePicker.ImagePickerOptions = {
 };
 
 export async function pickIssuePhotoFromLibrary() {
-  const hasPermission = await requestPhotoLibraryPermission();
-  if (!hasPermission) {
-    throw new Error('Photo library permission is required to attach a photo.');
-  }
-
-  const result = await ImagePicker.launchImageLibraryAsync(ISSUE_PHOTO_OPTIONS);
-  if (result.canceled || !result.assets[0]) {
-    return undefined;
-  }
-
-  return result.assets[0];
+  const result = await launchLibrary(ISSUE_PHOTO_OPTIONS);
+  if (result === undefined) return undefined;
+  return result;
 }
 
 export async function takeIssuePhotoWithCamera() {
-  const permission = await ImagePicker.requestCameraPermissionsAsync();
-  if (!permission.granted) {
-    throw new Error('Camera permission is required to attach a photo.');
+  try {
+    const result = await ImagePicker.launchCameraAsync(ISSUE_PHOTO_OPTIONS);
+    if (result.canceled || !result.assets[0]) {
+      return undefined;
+    }
+    return result.assets[0];
+  } catch (error) {
+    throw permissionError(error, 'Camera permission is required to attach a photo.');
   }
+}
 
-  const result = await ImagePicker.launchCameraAsync(ISSUE_PHOTO_OPTIONS);
-  if (result.canceled || !result.assets[0]) {
-    return undefined;
+async function launchLibrary(options: ImagePicker.ImagePickerOptions) {
+  try {
+    const result = await ImagePicker.launchImageLibraryAsync(options);
+    if (result.canceled || !result.assets[0]) {
+      return undefined;
+    }
+    return result.assets[0];
+  } catch (error) {
+    throw permissionError(error, 'Photo library permission is required to attach a photo.');
   }
+}
 
-  return result.assets[0];
+function permissionError(error: unknown, message: string) {
+  if (error instanceof Error && /permission|denied|rejected/i.test(error.message)) {
+    return new Error(message);
+  }
+  return error;
 }

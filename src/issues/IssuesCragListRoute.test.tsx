@@ -9,6 +9,9 @@ jest.mock('expo-router', () => {
   return {
     Stack,
     router: { push: jest.fn() },
+    useFocusEffect: (effect: () => void | (() => void)) => {
+      effect();
+    },
   };
 });
 
@@ -28,6 +31,7 @@ describe('IssuesCragListScreen', () => {
       isReady: true,
       isSyncing: false,
       refresh: jest.fn(),
+      reloadLocal: jest.fn(),
     });
 
     render(<IssuesCragListScreen />);
@@ -44,6 +48,7 @@ describe('IssuesCragListScreen', () => {
       isReady: true,
       isSyncing: true,
       refresh: jest.fn(),
+      reloadLocal: jest.fn(),
     });
 
     render(<IssuesCragListScreen />);

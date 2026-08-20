@@ -41,12 +41,17 @@ export function registerIssueSyncRuntime(): () => void {
   });
 
   const appStateSubscription = AppState.addEventListener('change', (nextState) => {
-    if (nextState !== 'active') {
+    // `inactive` fires for permission dialogs and system pickers. Syncing then
+    // races expo-image-picker's ActivityResultLauncher on Android.
+    if (nextState === 'background') {
+      void registerBackgroundTask();
       void runQueuedIssueSync('background');
     }
   });
 
-  void registerBackgroundTask();
+  const backgroundTaskTimer = setTimeout(() => {
+    void registerBackgroundTask();
+  }, 0);
 
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     window.addEventListener('online', handleWebOnline);
@@ -55,6 +60,7 @@ export function registerIssueSyncRuntime(): () => void {
 
   return () => {
     triggersRegistered = false;
+    clearTimeout(backgroundTaskTimer);
     unsubscribeNetInfo();
     appStateSubscription.remove();
     if (Platform.OS === 'web' && typeof window !== 'undefined') {

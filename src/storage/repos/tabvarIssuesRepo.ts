@@ -108,6 +108,14 @@ type IssueCragSummaryRow = {
   stats_public_issue_count: number | null;
 };
 
+type PendingCragSummaryRow = {
+  crag_id: number;
+  name: string;
+  issue_count: number;
+  flagged_count: number;
+  newest_updated_at: string | null;
+};
+
 type IssueListRow = {
   id: number;
   crag_id: number;
@@ -165,15 +173,22 @@ const ISSUE_SYNC_RESOURCE: TabvarSyncResource = 'issues';
 const CURRENT_JOB_ID = 'current';
 
 export async function clearTabvarIssueSyncData(db: TopoDatabase): Promise<void> {
-  await db.withTransactionAsync(async () => {
-    await db.runAsync('DELETE FROM tabvar_issue_attachments');
-    await db.runAsync('DELETE FROM tabvar_issues');
-    await db.runAsync('DELETE FROM tabvar_routes');
-    await db.runAsync('DELETE FROM tabvar_sectors');
-    await db.runAsync('DELETE FROM tabvar_crags');
-    await db.runAsync('DELETE FROM tabvar_sync_state');
-    await db.runAsync('DELETE FROM tabvar_sync_jobs');
-  });
+  // pending_issue_edits references tabvar_issues with ON DELETE CASCADE. A catalog
+  // reset must not wipe queued offline edits while foreign keys are enforced.
+  await db.execAsync('PRAGMA foreign_keys = OFF');
+  try {
+    await db.withTransactionAsync(async () => {
+      await db.runAsync('DELETE FROM tabvar_issue_attachments');
+      await db.runAsync('DELETE FROM tabvar_issues');
+      await db.runAsync('DELETE FROM tabvar_routes');
+      await db.runAsync('DELETE FROM tabvar_sectors');
+      await db.runAsync('DELETE FROM tabvar_crags');
+      await db.runAsync('DELETE FROM tabvar_sync_state');
+      await db.runAsync('DELETE FROM tabvar_sync_jobs');
+    });
+  } finally {
+    await db.execAsync('PRAGMA foreign_keys = ON');
+  }
 }
 
 export async function upsertTabvarCrags(
@@ -559,25 +574,72 @@ export async function getCurrentSyncJob(db: TopoDatabase): Promise<TabvarSyncJob
 }
 
 export async function listIssueCragSummaries(db: TopoDatabase): Promise<IssueCragSummary[]> {
-  const rows = await db.getAllAsync<IssueCragSummaryRow>(`
-    SELECT
-      issues.crag_id,
-      COALESCE(crags.name, routes.crag_name, 'Crag #' || issues.crag_id) AS name,
-      COUNT(issues.id) AS issue_count,
-      SUM(CASE WHEN issues.is_flagged != 0 THEN 1 ELSE 0 END) AS flagged_count,
-      MAX(issues.updated_at) AS newest_updated_at,
-      crags.stats_active_issue_count,
-      crags.stats_issue_flagged,
-      crags.stats_public_issue_count
-    FROM tabvar_issues issues
-    LEFT JOIN tabvar_crags crags ON crags.id = issues.crag_id
-    LEFT JOIN tabvar_routes routes ON routes.id = issues.route_id
-    WHERE issues.status != 'Deleted'
-    GROUP BY issues.crag_id
-    ORDER BY newest_updated_at DESC, name ASC
-  `);
+  const [syncedRows, pendingRows] = await Promise.all([
+    db.getAllAsync<IssueCragSummaryRow>(`
+      SELECT
+        issues.crag_id,
+        COALESCE(crags.name, routes.crag_name, 'Crag #' || issues.crag_id) AS name,
+        COUNT(issues.id) AS issue_count,
+        SUM(CASE WHEN issues.is_flagged != 0 THEN 1 ELSE 0 END) AS flagged_count,
+        MAX(issues.updated_at) AS newest_updated_at,
+        crags.stats_active_issue_count,
+        crags.stats_issue_flagged,
+        crags.stats_public_issue_count
+      FROM tabvar_issues issues
+      LEFT JOIN tabvar_crags crags ON crags.id = issues.crag_id
+      LEFT JOIN tabvar_routes routes ON routes.id = issues.route_id
+      WHERE issues.status != 'Deleted'
+      GROUP BY issues.crag_id
+    `),
+    db.getAllAsync<PendingCragSummaryRow>(`
+      SELECT
+        pending.crag_id,
+        COALESCE(crags.name, routes.crag_name, 'Crag #' || pending.crag_id) AS name,
+        COUNT(pending.external_id) AS issue_count,
+        SUM(CASE WHEN pending.is_flagged != 0 THEN 1 ELSE 0 END) AS flagged_count,
+        MAX(pending.updated_at) AS newest_updated_at
+      FROM pending_issues pending
+      LEFT JOIN tabvar_crags crags ON crags.id = pending.crag_id
+      LEFT JOIN tabvar_routes routes ON routes.id = pending.route_id
+      GROUP BY pending.crag_id
+    `),
+  ]);
 
-  return rows.map((row) => ({
+  const byCrag = new Map<number, IssueCragSummary>();
+  for (const row of syncedRows) {
+    byCrag.set(row.crag_id, mapIssueCragSummary(row));
+  }
+  for (const row of pendingRows) {
+    const existing = byCrag.get(row.crag_id);
+    if (!existing) {
+      byCrag.set(row.crag_id, {
+        cragId: row.crag_id,
+        flaggedCount: row.flagged_count,
+        issueCount: row.issue_count,
+        name: row.name,
+        newestUpdatedAt: row.newest_updated_at ?? undefined,
+      });
+      continue;
+    }
+    existing.issueCount += row.issue_count;
+    existing.flaggedCount += row.flagged_count;
+    if (
+      row.newest_updated_at &&
+      (!existing.newestUpdatedAt || row.newest_updated_at > existing.newestUpdatedAt)
+    ) {
+      existing.newestUpdatedAt = row.newest_updated_at;
+    }
+  }
+
+  return [...byCrag.values()].sort((a, b) => {
+    const aUpdated = a.newestUpdatedAt ?? '';
+    const bUpdated = b.newestUpdatedAt ?? '';
+    return bUpdated.localeCompare(aUpdated) || a.name.localeCompare(b.name);
+  });
+}
+
+function mapIssueCragSummary(row: IssueCragSummaryRow): IssueCragSummary {
+  return {
     cragId: row.crag_id,
     flaggedCount: row.flagged_count,
     issueCount: row.issue_count,
@@ -586,7 +648,7 @@ export async function listIssueCragSummaries(db: TopoDatabase): Promise<IssueCra
     statsActiveIssueCount: row.stats_active_issue_count ?? undefined,
     statsIssueFlagged: row.stats_issue_flagged ?? undefined,
     statsPublicIssueCount: row.stats_public_issue_count ?? undefined,
-  }));
+  };
 }
 
 export async function listIssueRoutes(db: TopoDatabase): Promise<IssueRouteOption[]> {

@@ -120,7 +120,7 @@ describe('issue sync', () => {
       'issues-server-time',
       '2026-06-09T11:00:00.000Z',
     );
-    expect(finishSyncJob).toHaveBeenCalledWith({}, '2026-06-09T11:00:00.000Z');
+    expect(finishSyncJob).toHaveBeenCalledWith({}, '2026-06-09T11:00:00.000Z', undefined);
   });
 
   it('clears cached issue data and redownloads without a cursor during resync', async () => {
@@ -158,6 +158,19 @@ describe('issue sync', () => {
     await expect(syncTabvarIssues('initial')).rejects.toThrow('Connect TABVAR');
 
     expect(saveIssueSyncError).toHaveBeenCalledWith({}, 'Connect TABVAR before syncing route issues.');
+    expect(finishSyncJob).toHaveBeenCalledWith(
+      {},
+      '2026-06-09T11:00:00.000Z',
+      'Connect TABVAR before syncing route issues.',
+    );
+  });
+
+  it('still closes the sync job when persisting the error fails', async () => {
+    (loadTabvarSession as jest.Mock).mockResolvedValueOnce(undefined);
+    (saveIssueSyncError as jest.Mock).mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(syncTabvarIssues('initial')).rejects.toThrow('disk full');
+
     expect(finishSyncJob).toHaveBeenCalledWith(
       {},
       '2026-06-09T11:00:00.000Z',

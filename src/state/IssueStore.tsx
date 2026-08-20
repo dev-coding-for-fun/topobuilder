@@ -4,11 +4,11 @@ import { loadTabvarSession, subscribeTabvarSession } from '@/integrations/tabvar
 import { addIssueAttachment as addIssueAttachmentMutation, type IssuePhotoUpload } from '@/issues/attachments';
 import { createIssue as createIssueMutation, type CreateIssueInput } from '@/issues/create';
 import { saveIssueEdits, type IssueEdits, type SaveIssueResult } from '@/issues/save';
-import { isIssueSyncInFlight, syncTabvarIssues } from '@/issues/sync';
+import { syncTabvarIssues } from '@/issues/sync';
+import { issueSyncToastMessage } from '@/issues/syncToast';
 import { getDatabase, runMigrations, type TopoDatabase } from '@/storage/database';
 import {
   getCurrentSyncJob,
-  getSyncError,
   deletePendingAttachment,
   getIssueDetailWithPending,
   getPendingIssueCount,
@@ -23,17 +23,18 @@ import {
   type TabvarSyncJobState,
   type UnsyncedIssueListItem,
 } from '@/storage/repos';
+import { Toast } from '@/ui/Toast';
 
 type IssueStoreValue = {
   isReady: boolean;
   isConnected: boolean;
   isSyncing: boolean;
   storageError?: string;
-  syncError?: string;
   syncJob?: TabvarSyncJobState;
   cragSummaries: IssueCragSummary[];
   pendingIssueCount: number;
   refresh: () => Promise<void>;
+  reloadLocal: () => Promise<void>;
   loadIssuesForCrag: (cragId: number) => Promise<IssueListItem[]>;
   loadIssueRoutes: () => Promise<IssueRouteOption[]>;
   loadIssueDetail: (issueId: number | string) => Promise<IssueDetail | undefined>;
@@ -53,23 +54,24 @@ export function IssueStoreProvider({ children }: { children: React.ReactNode }) 
   const [cragSummaries, setCragSummaries] = useState<IssueCragSummary[]>([]);
   const [pendingIssueCount, setPendingIssueCount] = useState(0);
   const [syncJob, setSyncJob] = useState<TabvarSyncJobState>();
-  const [syncError, setSyncError] = useState<string>();
   const [syncing, setSyncing] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string>();
+
+  const dismissToast = useCallback(() => {
+    setToastMessage(undefined);
+  }, []);
 
   const reload = useCallback(async (dbRef: TopoDatabase) => {
-    const [session, summaries, pendingCount, job, error] = await Promise.all([
+    const [session, summaries, pendingCount, job] = await Promise.all([
       loadTabvarSession(),
       listIssueCragSummaries(dbRef),
       getPendingIssueCount(dbRef),
       getCurrentSyncJob(dbRef),
-      getSyncError(dbRef),
     ]);
     setIsConnected(Boolean(session));
     setCragSummaries(summaries);
     setPendingIssueCount(pendingCount);
     setSyncJob(job);
-    setSyncError(error);
-    setSyncing(isIssueSyncInFlight() || Boolean(job && !job.completedAt));
   }, []);
 
   useEffect(() => {
@@ -110,10 +112,12 @@ export function IssueStoreProvider({ children }: { children: React.ReactNode }) 
       setSyncing(true);
       try {
         await syncTabvarIssues('initial');
-      } catch {
-        // Sync persists the error; reload below exposes it.
+        setToastMessage(undefined);
+      } catch (error) {
+        setToastMessage(issueSyncToastMessage(error));
       } finally {
         if (!cancelled) {
+          setSyncing(false);
           await reload(dbRef);
         }
       }
@@ -136,17 +140,20 @@ export function IssueStoreProvider({ children }: { children: React.ReactNode }) 
 
   const refresh = useCallback(async () => {
     const dbRef = requireDb();
-    if (isIssueSyncInFlight()) {
-      await reload(dbRef);
-      return;
-    }
-
     setSyncing(true);
     try {
       await syncTabvarIssues('manual');
+      setToastMessage(undefined);
+    } catch (error) {
+      setToastMessage(issueSyncToastMessage(error));
     } finally {
+      setSyncing(false);
       await reload(dbRef);
     }
+  }, [db, reload]);
+
+  const reloadLocal = useCallback(async () => {
+    await reload(requireDb());
   }, [db, reload]);
 
   const loadIssuesForCrag = useCallback(
@@ -228,10 +235,10 @@ export function IssueStoreProvider({ children }: { children: React.ReactNode }) 
       loadUnsyncedIssues,
       pendingIssueCount,
       refresh,
+      reloadLocal,
       removePendingAttachment,
       saveIssue,
       storageError,
-      syncError,
       syncJob,
     }),
     [
@@ -246,16 +253,21 @@ export function IssueStoreProvider({ children }: { children: React.ReactNode }) 
       loadUnsyncedIssues,
       pendingIssueCount,
       refresh,
+      reloadLocal,
       removePendingAttachment,
       saveIssue,
       storageError,
-      syncError,
       syncJob,
       syncing,
     ],
   );
 
-  return <IssueStoreContext.Provider value={value}>{children}</IssueStoreContext.Provider>;
+  return (
+    <IssueStoreContext.Provider value={value}>
+      {children}
+      <Toast message={toastMessage} onDismiss={dismissToast} testID="issues:sync-toast" />
+    </IssueStoreContext.Provider>
+  );
 }
 
 export function useIssueStore() {

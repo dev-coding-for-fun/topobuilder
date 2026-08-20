@@ -23,6 +23,7 @@ class FakeDb {
   getAllResponses: unknown[][] = [];
   runCalls: SqlCall[] = [];
   getAllCalls: SqlCall[] = [];
+  execCalls: string[] = [];
 
   async getFirstAsync<T>(): Promise<T | null> {
     return (this.getFirstResponses.shift() ?? null) as T | null;
@@ -31,6 +32,10 @@ class FakeDb {
   async getAllAsync<T>(sql: string, ...args: unknown[]): Promise<T[]> {
     this.getAllCalls.push({ sql, args });
     return (this.getAllResponses.shift() ?? []) as T[];
+  }
+
+  async execAsync(sql: string): Promise<void> {
+    this.execCalls.push(sql);
   }
 
   async runAsync(sql: string, ...args: unknown[]): Promise<void> {
@@ -52,6 +57,7 @@ describe('tabvarIssuesRepo', () => {
 
     await clearTabvarIssueSyncData(asDb(db));
 
+    expect(db.execCalls).toEqual(['PRAGMA foreign_keys = OFF', 'PRAGMA foreign_keys = ON']);
     expect(db.runCalls.map((call) => call.sql)).toEqual([
       'DELETE FROM tabvar_issue_attachments',
       'DELETE FROM tabvar_issues',
@@ -207,6 +213,61 @@ describe('tabvarIssuesRepo', () => {
       },
     ]);
     expect(db.getAllCalls[0].sql).toContain('GROUP BY issues.crag_id');
+    expect(db.getAllCalls[1].sql).toContain('FROM pending_issues pending');
+  });
+
+  it('includes queued local issue creates in crag issue counts', async () => {
+    const db = new FakeDb();
+    db.getAllResponses.push(
+      [
+        {
+          crag_id: 7,
+          flagged_count: 0,
+          issue_count: 1,
+          name: 'Sunny Crag',
+          newest_updated_at: '2026-06-09 10:00:00',
+          stats_active_issue_count: 1,
+          stats_issue_flagged: 0,
+          stats_public_issue_count: 1,
+        },
+      ],
+      [
+        {
+          crag_id: 7,
+          flagged_count: 0,
+          issue_count: 1,
+          name: 'Sunny Crag',
+          newest_updated_at: '2026-06-09 11:00:00',
+        },
+        {
+          crag_id: 9,
+          flagged_count: 0,
+          issue_count: 2,
+          name: 'Shadow Crag',
+          newest_updated_at: '2026-06-09 12:00:00',
+        },
+      ],
+    );
+
+    await expect(listIssueCragSummaries(asDb(db))).resolves.toEqual([
+      {
+        cragId: 9,
+        flaggedCount: 0,
+        issueCount: 2,
+        name: 'Shadow Crag',
+        newestUpdatedAt: '2026-06-09 12:00:00',
+      },
+      {
+        cragId: 7,
+        flaggedCount: 0,
+        issueCount: 2,
+        name: 'Sunny Crag',
+        newestUpdatedAt: '2026-06-09 11:00:00',
+        statsActiveIssueCount: 1,
+        statsIssueFlagged: 0,
+        statsPublicIssueCount: 1,
+      },
+    ]);
   });
 
   it('maps crag-filtered issue rows with attachment counts', async () => {
