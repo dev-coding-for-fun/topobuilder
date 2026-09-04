@@ -210,6 +210,40 @@ describe('IssueCreateSheet attachments', () => {
       }),
     );
   });
+
+  it('hides add-attachment control once 5 photos are attached and restores it when one is removed', async () => {
+    let callCount = 0;
+    (pickIssuePhotoFromLibrary as jest.Mock).mockImplementation(async () => {
+      callCount += 1;
+      return {
+        fileName: `photo-${callCount}.jpg`,
+        fileSize: 2048,
+        height: 800,
+        mimeType: 'image/jpeg',
+        uri: `file:///photo-${callCount}.jpg`,
+      };
+    });
+
+    render(
+      <IssueCreateSheet onCancel={jest.fn()} onConfirm={jest.fn()} routes={routes} visible />,
+    );
+
+    for (let i = 0; i < 5; i++) {
+      expect(screen.getByTestId('issues:create-sheet:add-attachment')).toBeTruthy();
+      fireEvent.press(screen.getByTestId('issues:create-sheet:add-attachment:gallery'));
+      await waitFor(() =>
+        expect(screen.getByTestId(`issues:create-sheet:attachment:${i}`)).toBeTruthy(),
+      );
+    }
+
+    expect(screen.queryByTestId('issues:create-sheet:add-attachment')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('issues:create-sheet:attachment:4:remove'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('issues:create-sheet:add-attachment')).toBeTruthy(),
+    );
+  });
 });
 
 describe('IssueCreateSheet type pickers', () => {

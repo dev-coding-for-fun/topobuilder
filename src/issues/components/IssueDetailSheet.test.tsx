@@ -105,6 +105,23 @@ describe('IssueDetailSheet', () => {
     expect(screen.queryByText('Mark resolved')).toBeNull();
   });
 
+  it('hides the add attachment control when an issue already has 5 attachments', () => {
+    const issueWith5Attachments: IssueDetail = {
+      ...issue,
+      attachmentCount: 5,
+      attachments: Array.from({ length: 5 }, (_, i) => ({
+        id: 100 + i,
+        issueId: 123,
+        mimeType: 'image/jpeg',
+        name: `photo-${i + 1}.jpg`,
+        url: `https://example.test/photo-${i + 1}.jpg`,
+      })),
+    };
+    renderSheet({ issue: issueWith5Attachments });
+
+    expect(screen.queryByTestId('issues:detail:add-attachment')).toBeNull();
+  });
+
   it('keeps affected and issue-type options in dropdowns', () => {
     renderSheet();
 

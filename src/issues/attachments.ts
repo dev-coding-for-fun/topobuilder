@@ -10,6 +10,7 @@ import {
 } from '@/storage/repos';
 import type { TopoDatabase } from '@/storage/database';
 
+export const MAX_ISSUE_ATTACHMENTS = 5;
 export const MAX_ISSUE_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);

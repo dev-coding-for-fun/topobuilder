@@ -8,7 +8,11 @@ import {
   pickIssuePhotoFromLibrary,
   takeIssuePhotoWithCamera,
 } from '@/camera/photoCapture';
-import { issuePhotoFromPickerAsset, type IssuePhotoUpload } from '@/issues/attachments';
+import {
+  MAX_ISSUE_ATTACHMENTS,
+  issuePhotoFromPickerAsset,
+  type IssuePhotoUpload,
+} from '@/issues/attachments';
 import { issueColors } from '@/issues/colors';
 import { interStyle } from '@/ui/fonts';
 
@@ -28,14 +32,23 @@ type Props = {
   testID: string;
   onAddPhoto: (photo: IssuePhotoUpload) => void | Promise<void>;
   onError: (message: string) => void;
+  maxAttachments?: number;
 };
 
-export function IssueAttachmentsField({ busy = false, photos, testID, onAddPhoto, onError }: Props) {
+export function IssueAttachmentsField({
+  busy = false,
+  photos,
+  testID,
+  onAddPhoto,
+  onError,
+  maxAttachments = MAX_ISSUE_ATTACHMENTS,
+}: Props) {
   const [picking, setPicking] = useState(false);
   const disabled = busy || picking;
+  const canAddMore = photos.length < maxAttachments;
 
   async function addPhoto(source: 'camera' | 'gallery') {
-    if (disabled) return;
+    if (disabled || !canAddMore) return;
     setPicking(true);
     try {
       const asset =
@@ -83,18 +96,20 @@ export function IssueAttachmentsField({ busy = false, photos, testID, onAddPhoto
             ) : null}
           </View>
         ))}
-        <View style={styles.attachmentCell}>
-          <AddAttachmentTile
-            busy={disabled}
-            testID={`${testID}:add-attachment`}
-            onCamera={() => {
-              void addPhoto('camera');
-            }}
-            onGallery={() => {
-              void addPhoto('gallery');
-            }}
-          />
-        </View>
+        {canAddMore ? (
+          <View style={styles.attachmentCell}>
+            <AddAttachmentTile
+              busy={disabled}
+              testID={`${testID}:add-attachment`}
+              onCamera={() => {
+                void addPhoto('camera');
+              }}
+              onGallery={() => {
+                void addPhoto('gallery');
+              }}
+            />
+          </View>
+        ) : null}
       </View>
     </View>
   );

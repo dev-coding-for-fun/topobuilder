@@ -11,6 +11,7 @@ import { flushIssueOutbox } from '@/issues/outbox';
 import { getIssueDetailWithPending, queuePendingAttachment, type IssueDetail } from '@/storage/repos';
 
 import {
+  MAX_ISSUE_ATTACHMENTS,
   addIssueAttachment,
   issuePhotoFromPickerAsset,
   MAX_ISSUE_ATTACHMENT_BYTES,
@@ -41,6 +42,9 @@ const issue: IssueDetail = {
 };
 
 describe('issuePhotoFromPickerAsset', () => {
+  it('defines the maximum attachments limit as 5', () => {
+    expect(MAX_ISSUE_ATTACHMENTS).toBe(5);
+  });
   it('maps a jpeg picker asset', () => {
     expect(
       issuePhotoFromPickerAsset({
