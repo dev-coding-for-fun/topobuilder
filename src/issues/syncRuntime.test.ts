@@ -1,6 +1,8 @@
+import type { AppStateStatus } from 'react-native';
+
 const netInfoListeners: Array<(state: { isConnected?: boolean; isInternetReachable?: boolean }) => void> =
   [];
-const appStateListeners: Array<(state: string) => void> = [];
+const appStateListeners: Array<(state: AppStateStatus) => void> = [];
 
 jest.mock('@react-native-community/netinfo', () => ({
   __esModule: true,
