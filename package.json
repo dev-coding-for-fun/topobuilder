@@ -9,8 +9,8 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "build:web": "expo export --platform web",
-    "preview:web": "expo export --platform web && wrangler dev",
-    "deploy:web": "expo export --platform web && wrangler deploy",
+    "preview:web": "expo export --platform web && npx wrangler dev",
+    "deploy:web": "expo export --platform web && npx wrangler deploy",
     "test:web": "node scripts/web-smoke.js",
     "test": "jest",
     "typecheck": "tsc --noEmit",
@@ -66,8 +66,7 @@
     "jest-expo": "~57.0.4",
     "react-test-renderer": "^19.2.3",
     "serve": "^14.2.6",
-    "typescript": "~6.0.3",
-    "wrangler": "^4.86.0"
+    "typescript": "~6.0.3"
   },
   "private": true,
   "jest": {
