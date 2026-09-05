@@ -20,6 +20,7 @@ import {
   upsertTabvarSectors,
   type TabvarSyncJobKind,
 } from '@/storage/repos/tabvarIssuesRepo';
+import { addIssueSyncLog } from '@/storage/repos/issueOutboxRepo';
 
 import { flushIssueOutbox, type IssueOutboxTrigger } from './outbox';
 
@@ -122,9 +123,57 @@ async function runIssueSync(
       serverTime: routes.serverTime,
     });
     await upsertTabvarIssues(db, issues.issues, issues.serverTime, syncedAt);
+
+    const isInitial = kind === 'initial' || options?.flushTrigger === 'initial';
+    const isReset = Boolean(options?.resetFirst);
+    if (isInitial || isReset) {
+      const triggerKind = isInitial ? 'initial' : 'manual';
+      const label = isInitial ? 'Initial sync complete' : 'Full resync complete';
+      const summary = `${label}. Downloaded ${crags.crags.length} crag${
+        crags.crags.length === 1 ? '' : 's'
+      }, ${sectors.sectors.length} sector${sectors.sectors.length === 1 ? '' : 's'}, ${
+        routes.routes.length
+      } route${routes.routes.length === 1 ? '' : 's'}, ${issues.issues.length} issue${
+        issues.issues.length === 1 ? '' : 's'
+      }.`;
+      await addIssueSyncLog(db, {
+        details: [
+          {
+            cragsCount: crags.crags.length,
+            issuesCount: issues.issues.length,
+            routesCount: routes.routes.length,
+            sectorsCount: sectors.sectors.length,
+            serverTime: issues.serverTime || crags.serverTime,
+          },
+        ],
+        finishedAt: nowIso(),
+        startedAt,
+        status: 'ok',
+        summary,
+        triggerKind,
+      });
+    }
   } catch (error) {
     syncError = error instanceof Error ? error.message : 'Route issue sync failed.';
     await saveIssueSyncError(db, syncError);
+    const isInitial = kind === 'initial' || options?.flushTrigger === 'initial';
+    const isReset = Boolean(options?.resetFirst);
+    if (isInitial || isReset) {
+      const triggerKind = isInitial ? 'initial' : 'manual';
+      const label = isInitial ? 'Initial sync' : 'Full resync';
+      try {
+        await addIssueSyncLog(db, {
+          details: [{ error: syncError }],
+          finishedAt: nowIso(),
+          startedAt,
+          status: 'error',
+          summary: `${label} failed: ${syncError}`,
+          triggerKind,
+        });
+      } catch {
+        // Ignore log failure during sync error handling
+      }
+    }
     throw error;
   } finally {
     await finishSyncJob(db, nowIso(), syncError);

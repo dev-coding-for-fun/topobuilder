@@ -22,6 +22,10 @@ jest.mock('@/issues/outbox', () => ({
   flushIssueOutbox: jest.fn(),
 }));
 
+jest.mock('@/storage/repos/issueOutboxRepo', () => ({
+  addIssueSyncLog: jest.fn(),
+}));
+
 jest.mock('@/storage/repos/tabvarIssuesRepo', () => ({
   clearTabvarIssueSyncData: jest.fn(),
   finishSyncJob: jest.fn(),
@@ -43,6 +47,7 @@ import {
 } from '@/integrations/tabvar/issues';
 import { loadTabvarSession } from '@/integrations/tabvar/sessionStore';
 import { getDatabase } from '@/storage/database';
+import { addIssueSyncLog } from '@/storage/repos/issueOutboxRepo';
 import {
   clearTabvarIssueSyncData,
   finishSyncJob,
@@ -177,4 +182,62 @@ describe('issue sync', () => {
       'Connect TABVAR before syncing route issues.',
     );
   });
+
+  it('logs initial sync result to issue sync log on success', async () => {
+    await syncTabvarIssues('initial');
+
+    expect(addIssueSyncLog).toHaveBeenCalledWith({}, {
+      details: [
+        {
+          cragsCount: 1,
+          issuesCount: 1,
+          routesCount: 1,
+          sectorsCount: 1,
+          serverTime: 'issues-server-time',
+        },
+      ],
+      finishedAt: '2026-06-09T11:00:00.000Z',
+      startedAt: '2026-06-09T11:00:00.000Z',
+      status: 'ok',
+      summary: 'Initial sync complete. Downloaded 1 crag, 1 sector, 1 route, 1 issue.',
+      triggerKind: 'initial',
+    });
+  });
+
+  it('logs initial sync error to issue sync log on failure', async () => {
+    (loadTabvarSession as jest.Mock).mockResolvedValueOnce(undefined);
+
+    await expect(syncTabvarIssues('initial')).rejects.toThrow('Connect TABVAR');
+
+    expect(addIssueSyncLog).toHaveBeenCalledWith({}, {
+      details: [{ error: 'Connect TABVAR before syncing route issues.' }],
+      finishedAt: '2026-06-09T11:00:00.000Z',
+      startedAt: '2026-06-09T11:00:00.000Z',
+      status: 'error',
+      summary: 'Initial sync failed: Connect TABVAR before syncing route issues.',
+      triggerKind: 'initial',
+    });
+  });
+
+  it('logs full resync result to issue sync log on success', async () => {
+    await resyncTabvarIssues();
+
+    expect(addIssueSyncLog).toHaveBeenCalledWith({}, {
+      details: [
+        {
+          cragsCount: 1,
+          issuesCount: 1,
+          routesCount: 1,
+          sectorsCount: 1,
+          serverTime: 'issues-server-time',
+        },
+      ],
+      finishedAt: '2026-06-09T11:00:00.000Z',
+      startedAt: '2026-06-09T11:00:00.000Z',
+      status: 'ok',
+      summary: 'Full resync complete. Downloaded 1 crag, 1 sector, 1 route, 1 issue.',
+      triggerKind: 'manual',
+    });
+  });
 });
+
