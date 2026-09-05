@@ -48,8 +48,13 @@ jest.mock('@/settings/exportDisclaimer', () => ({
   saveExportDisclaimerSettings: jest.fn(),
 }));
 
+jest.mock('@/storage/wipeStorage', () => ({
+  wipeLocalStorage: jest.fn(() => Promise.resolve()),
+}));
+
 import { loadTabvarSession } from '@/integrations/tabvar/sessionStore';
 import { resyncTabvarIssues } from '@/issues/sync';
+import { wipeLocalStorage } from '@/storage/wipeStorage';
 import { router } from 'expo-router';
 
 import SettingsScreen from './index';
@@ -87,3 +92,29 @@ describe('SettingsScreen TABVAR sync', () => {
     expect(router.push).toHaveBeenCalledWith('/settings/issue-sync-log');
   });
 });
+
+describe('SettingsScreen Developer storage wipe', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('opens confirmation sheet and invokes wipeLocalStorage on confirm', async () => {
+    (loadTabvarSession as jest.Mock).mockResolvedValue(undefined);
+
+    render(<SettingsScreen />);
+
+    const wipeRow = await screen.findByTestId('settings:wipe-storage');
+    expect(wipeRow).toBeTruthy();
+
+    fireEvent.press(wipeRow);
+
+    const confirmButton = await screen.findByTestId('settings:wipe-storage-confirm:confirm');
+    expect(confirmButton).toBeTruthy();
+
+    fireEvent.press(confirmButton);
+
+    await waitFor(() => expect(wipeLocalStorage).toHaveBeenCalledTimes(1));
+    expect(await screen.findByTestId('settings:wipe-storage-notice')).toBeTruthy();
+  });
+});
+

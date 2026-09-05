@@ -1,5 +1,5 @@
 import { createId, nowIso } from '@/domain/ids';
-import type { Crag, CragSummary, Sector } from '@/domain/types';
+import type { ConnectedCragSummary, Crag, CragSummary, Sector } from '@/domain/types';
 
 import type { TopoDatabase } from '../database';
 import { resolvePhotoUri } from '../assetStorage';
@@ -10,6 +10,7 @@ type CragRow = {
   name: string;
   description: string | null;
   sort_order: number;
+  tabvar_crag_id: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -25,6 +26,7 @@ function mapCrag(row: CragRow): Crag {
     name: row.name,
     description: row.description ?? undefined,
     sortOrder: row.sort_order,
+    tabvarCragId: row.tabvar_crag_id ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -48,6 +50,7 @@ export async function listCragSummaries(db: TopoDatabase): Promise<CragSummary[]
     name: row.name,
     description: row.description ?? undefined,
     sortOrder: row.sort_order,
+    tabvarCragId: row.tabvar_crag_id ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     sectorCount: row.sector_count,
@@ -67,7 +70,7 @@ export async function getCrag(db: TopoDatabase, id: string): Promise<Crag | unde
  */
 export async function createCrag(
   db: TopoDatabase,
-  input: { name: string; description?: string },
+  input: { name: string; description?: string; tabvarCragId?: number },
 ): Promise<{ crag: Crag; defaultSector: Sector }> {
   const now = nowIso();
   const cragId = createId('crag');
@@ -79,6 +82,7 @@ export async function createCrag(
     name: input.name,
     description: input.description,
     sortOrder,
+    tabvarCragId: input.tabvarCragId,
     createdAt: now,
     updatedAt: now,
   };
@@ -94,11 +98,12 @@ export async function createCrag(
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      'INSERT INTO crags (id, name, description, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO crags (id, name, description, sort_order, tabvar_crag_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
       crag.id,
       crag.name,
       crag.description ?? null,
       crag.sortOrder,
+      crag.tabvarCragId ?? null,
       crag.createdAt,
       crag.updatedAt,
     );
@@ -172,6 +177,129 @@ async function nextCragSortOrder(db: TopoDatabase): Promise<number> {
     'SELECT COALESCE(MAX(sort_order) + 1, 0) AS next_sort_order FROM crags',
   );
   return row?.next_sort_order ?? 0;
+}
+
+export async function listConnectedCrags(db: TopoDatabase): Promise<ConnectedCragSummary[]> {
+  const rows = await db.getAllAsync<{
+    tabvar_crag_id: number;
+    name: string;
+    notes: string | null;
+    sector_count: number;
+    route_count: number;
+    workspace_crag_id: string | null;
+    topo_count: number;
+  }>(`
+    SELECT
+      tc.id AS tabvar_crag_id,
+      tc.name,
+      tc.notes,
+      COUNT(DISTINCT ts.id) AS sector_count,
+      COUNT(DISTINCT tr.id) AS route_count,
+      c.id AS workspace_crag_id,
+      COUNT(DISTINCT t.id) AS topo_count
+    FROM tabvar_crags tc
+    LEFT JOIN tabvar_sectors ts ON ts.crag_id = tc.id
+    LEFT JOIN tabvar_routes tr ON tr.crag_id = tc.id AND (tr.status IS NULL OR tr.status != 'Deleted')
+    LEFT JOIN crags c ON c.tabvar_crag_id = tc.id
+    LEFT JOIN sectors s ON s.crag_id = c.id
+    LEFT JOIN topos t ON t.sector_id = s.id
+    GROUP BY tc.id
+    ORDER BY tc.name ASC
+  `);
+
+  return rows.map((r) => ({
+    tabvarCragId: r.tabvar_crag_id,
+    name: r.name,
+    notes: r.notes ?? undefined,
+    sectorCount: r.sector_count,
+    routeCount: r.route_count,
+    workspaceCragId: r.workspace_crag_id ?? undefined,
+    topoCount: r.topo_count,
+  }));
+}
+
+export async function adoptTabvarCrag(
+  db: TopoDatabase,
+  tabvarCragId: number,
+): Promise<Crag> {
+  const existing = await db.getFirstAsync<CragRow>(
+    'SELECT * FROM crags WHERE tabvar_crag_id = ?',
+    tabvarCragId,
+  );
+  if (existing) {
+    return mapCrag(existing);
+  }
+
+  const tabvarCrag = await db.getFirstAsync<{ id: number; name: string; notes: string | null }>(
+    'SELECT id, name, notes FROM tabvar_crags WHERE id = ?',
+    tabvarCragId,
+  );
+  if (!tabvarCrag) {
+    throw new Error(`Connected crag ${tabvarCragId} not found in catalog`);
+  }
+
+  const tabvarSectors = await db.getAllAsync<{ id: number; name: string; sort_order: number | null }>(
+    'SELECT id, name, sort_order FROM tabvar_sectors WHERE crag_id = ? ORDER BY sort_order ASC, name ASC',
+    tabvarCragId,
+  );
+
+  const now = nowIso();
+  const cragId = createId('crag');
+  const sortOrder = await nextCragSortOrder(db);
+
+  const crag: Crag = {
+    id: cragId,
+    name: tabvarCrag.name,
+    description: tabvarCrag.notes ?? undefined,
+    sortOrder,
+    tabvarCragId: tabvarCrag.id,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      'INSERT INTO crags (id, name, description, sort_order, tabvar_crag_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      crag.id,
+      crag.name,
+      crag.description ?? null,
+      crag.sortOrder,
+      crag.tabvarCragId ?? null,
+      crag.createdAt,
+      crag.updatedAt,
+    );
+
+    if (tabvarSectors.length > 0) {
+      for (const s of tabvarSectors) {
+        const sectorId = createId('sector');
+        await db.runAsync(
+          'INSERT INTO sectors (id, crag_id, name, description, sort_order, tabvar_sector_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          sectorId,
+          crag.id,
+          s.name,
+          null,
+          s.sort_order ?? 0,
+          s.id,
+          now,
+          now,
+        );
+      }
+    } else {
+      const sectorId = createId('sector');
+      await db.runAsync(
+        'INSERT INTO sectors (id, crag_id, name, description, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        sectorId,
+        crag.id,
+        crag.name,
+        null,
+        0,
+        now,
+        now,
+      );
+    }
+  });
+
+  return crag;
 }
 
 export const _cragsInternal = { touchCrag };

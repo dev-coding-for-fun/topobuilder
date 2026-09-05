@@ -116,6 +116,10 @@ describe('runMigrations', () => {
           inTransaction: true,
         }),
         expect.objectContaining({
+          sql: expect.stringContaining('CREATE TABLE IF NOT EXISTS topo_tabvar_routes'),
+          inTransaction: true,
+        }),
+        expect.objectContaining({
           sql: `PRAGMA user_version = ${CURRENT_SCHEMA_VERSION};`,
           inTransaction: true,
         }),

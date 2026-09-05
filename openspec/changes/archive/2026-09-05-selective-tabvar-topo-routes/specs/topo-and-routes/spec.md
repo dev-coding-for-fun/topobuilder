@@ -1,18 +1,4 @@
-# topo-and-routes Specification
-
-## Purpose
-Define Topo and Route data, Crag detail presentation, lifecycle behavior, and inline route editing.
-## Requirements
-### Requirement: Topo Entity
-The system SHALL model a leaf entity called a **Topo** that belongs to exactly one Sector and represents a single annotated image. A Topo has an `id`, a `sector_id`, a `name`, an optional `description`, optional photo fields (`photo_uri`, `photo_width`, `photo_height`), and `created_at` / `updated_at` timestamps. The previous standalone "photo" entity is replaced by the Topo entity.
-
-#### Scenario: Every Topo belongs to a Sector
-- **WHEN** a Topo exists
-- **THEN** it has a non-null `sector_id` referencing an existing Sector
-
-#### Scenario: A Topo may exist without a photo
-- **WHEN** a Topo is created without a photo attached
-- **THEN** its photo fields are null and the Topo is still valid
+## MODIFIED Requirements
 
 ### Requirement: Route Entity Re-Parented To Topo
 The system SHALL support two distinct categories of routes: local user-created routes stored in `routes` (owned by a parent Topo), and external connected routes stored in `tabvar_routes` and associated with topos via `topo_tabvar_routes` referencing `app_id`. Local routes have an `id`, `topo_id`, `name`, `color`, and optional attributes (`grade`, `route_type`, `bolt_count`, `length_m`, `fa`, `description`). Connected routes are read-only catalog entities referenced by `app_id`.
@@ -52,7 +38,7 @@ The Crag detail screen SHALL render each Topo as a vertically arranged Topo Card
 The system SHALL allow the user to create, rename, and delete a Topo. Deleting a Topo SHALL cascade-delete its local user-created Routes and Annotations, remove its photo file from storage, and delete associations in `topo_tabvar_routes` while leaving the underlying connected `tabvar_routes` records intact in the sector.
 
 #### Scenario: Adding a Topo to a specific Sector
-- **WHEN** the user taps "Add topo" inside a Sector header on the Crag detail screen
+- **WHEN** the user taps "Add topo" inside a Sector on the Crag detail screen
 - **THEN** the new Topo is created inside that Sector
 
 #### Scenario: Adding a Topo via the screen-level action
@@ -93,49 +79,3 @@ The system SHALL provide a Topo info sheet that displays editable fields for a T
 #### Scenario: Unlinking a connected route
 - **WHEN** the user unlinks a connected route from the Topo info sheet
 - **THEN** the association in `topo_tabvar_routes` is removed and the route returns to the sector's unmapped routes pool
-
-### Requirement: Inline Route Editor
-The Topo info sheet SHALL render the Topo's Routes in an inline editor (Pattern A) where each Route's fields (`name`, `grade`, `route_type`, `bolt_count`, `length_m`, `fa`, `description`) are editable in place, plus an action to add a new Route and an action to delete an existing Route.
-
-#### Scenario: Inline edit of a route field
-- **WHEN** the user changes the grade of a Route in the inline editor
-- **THEN** the new grade is persisted and reflected without leaving the Topo info sheet
-
-#### Scenario: Adding a Route
-- **WHEN** the user taps "Add route" in the Topo info sheet
-- **THEN** a new Route is created on the Topo and immediately rendered as an editable inline row
-
-#### Scenario: Deleting a Route from inline editor
-- **WHEN** the user removes a Route from the Topo info sheet
-- **THEN** the Route and any Annotations referencing it are updated (Annotations have their `route_id` set to null, the Route is deleted)
-
-### Requirement: Topo Sort Order
-The system SHALL store a persistent sort order value for each Topo within its parent Sector and SHALL render Topo lists using that order with stable fallback ordering.
-
-#### Scenario: New Topo receives parent-scoped sort order
-- **WHEN** the user creates a Topo inside a Sector
-- **THEN** the new Topo receives a sort order value suitable for placing it after existing Topos in that Sector
-
-#### Scenario: Crag detail renders Topos by sort order
-- **WHEN** the Crag detail screen renders multiple Topos inside a Sector
-- **THEN** the Topos appear by persisted sort order within the Sector
-
-#### Scenario: Sector and Crag exports use Topo sort order
-- **WHEN** the user exports a Sector or Crag
-- **THEN** each Sector's Topos are listed by persisted sort order
-
-### Requirement: Route Sort Order
-The system SHALL store a persistent sort order value for each Route within its parent Topo and SHALL render route lists using that order with stable fallback ordering.
-
-#### Scenario: New Route receives parent-scoped sort order
-- **WHEN** the user creates a Route inside a Topo
-- **THEN** the new Route receives a sort order value suitable for placing it after existing Routes in that Topo
-
-#### Scenario: Topo info renders Routes by sort order
-- **WHEN** the Topo info sheet renders multiple Routes
-- **THEN** the Routes appear by persisted sort order within the Topo
-
-#### Scenario: Export route numbers follow Route sort order
-- **WHEN** the user exports a Topo, Sector, or Crag
-- **THEN** each Topo's exported route numbers follow persisted Route sort order
-

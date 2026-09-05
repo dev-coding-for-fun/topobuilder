@@ -7,6 +7,7 @@ import type { StampSize } from '@/domain/stampSizes';
 import type {
   Annotation,
   AnnotationKind,
+  ConnectedCragSummary,
   Crag,
   CragDetail,
   CragSummary,
@@ -17,6 +18,7 @@ import type {
   RouteType,
   Sector,
   SectorWithTopos,
+  TabvarRoute,
   Topo,
   TopoEditorBundle,
   TopoWithRoutes,
@@ -28,9 +30,11 @@ import { loadTabvarSession } from '@/integrations/tabvar/sessionStore';
 import type { TabvarSubmissionResponse } from '@/integrations/tabvar/types';
 import { getDatabase, runMigrations, type TopoDatabase } from '@/storage/database';
 import {
+  adoptTabvarCrag as adoptTabvarCragRepo,
   createCrag as createCragRepo,
   deleteCrag as deleteCragRepo,
   getCrag,
+  listConnectedCrags,
   listCragSummaries,
   listPhotoUrisForCrag,
   renameCrag as renameCragRepo,
@@ -53,11 +57,20 @@ import {
   updateTopoDescription as updateTopoDescriptionRepo,
 } from '@/storage/repos/toposRepo';
 import {
+  countRoutesForTopo,
   createRoute as createRouteRepo,
   deleteRoute as deleteRouteRepo,
   listRoutesForTopo,
   updateRoute as updateRouteRepo,
 } from '@/storage/repos/routesRepo';
+import {
+  countTabvarRoutesForTopo as countTabvarRoutesForTopoRepo,
+  countUnmappedTabvarRoutesForSector as countUnmappedTabvarRoutesForSectorRepo,
+  linkTabvarRouteToTopo,
+  listTabvarRoutesForTopo,
+  listUnmappedTabvarRoutesForSector,
+  unlinkTabvarRouteFromTopo,
+} from '@/storage/repos/topoTabvarRoutesRepo';
 import {
   deleteAnnotation as deleteAnnotationRepo,
   upsertAnnotation,
@@ -93,17 +106,19 @@ type TopoStoreValue = {
   isReady: boolean;
   storageError?: string;
   cragSummaries: CragSummary[];
+  connectedCrags: ConnectedCragSummary[];
   refresh: () => Promise<void>;
 
   // Crags
-  createCrag: (name: string) => Promise<{ crag: Crag; defaultSector: Sector }>;
+  createCrag: (name: string, description?: string, tabvarCragId?: number) => Promise<{ crag: Crag; defaultSector: Sector }>;
+  adoptTabvarCrag: (tabvarCragId: number) => Promise<Crag>;
   renameCrag: (id: string, name: string) => Promise<void>;
   deleteCrag: (id: string) => Promise<void>;
   loadCragDetail: (cragId: string) => Promise<CragDetail | undefined>;
   loadGuidebookExport: (request: GuidebookExportRequest) => Promise<GuidebookExportBundle | undefined>;
 
   // Sectors
-  createSector: (cragId: string, name: string) => Promise<Sector>;
+  createSector: (cragId: string, name: string, description?: string, tabvarSectorId?: number) => Promise<Sector>;
   renameSector: (id: string, name: string) => Promise<void>;
   deleteSector: (id: string) => Promise<void>;
 
@@ -122,8 +137,17 @@ type TopoStoreValue = {
   createRoute: (topoId: string, defaults?: RouteFieldUpdate) => Promise<Route>;
   updateRouteField: (route: Route, fields: RouteFieldUpdate) => Promise<Route>;
   deleteRoute: (id: string) => Promise<void>;
+  countLocalRoutesForTopo: (topoId: string) => Promise<number>;
 
-  // Annotations (used by editor)
+  // Connected Routes (TABVAR)
+  linkTabvarRoute: (topoId: string, routeAppId: string) => Promise<void>;
+  unlinkTabvarRoute: (topoId: string, routeAppId: string) => Promise<void>;
+  loadTabvarRoutesForTopo: (topoId: string) => Promise<TabvarRoute[]>;
+  loadUnmappedTabvarRoutes: (sectorId: string) => Promise<TabvarRoute[]>;
+  countTabvarRoutesForTopo: (topoId: string) => Promise<number>;
+  countUnmappedTabvarRoutes: (sectorId: string) => Promise<number>;
+
+  // Annotations (editor)
   addAnnotation: (input: CreateAnnotationInput) => Promise<Annotation>;
   addPathAnnotation: (input: CreatePathAnnotationInput) => Promise<Annotation>;
   updateAnnotation: (annotation: Annotation) => Promise<Annotation>;
@@ -136,10 +160,16 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
   const [db, setDb] = useState<TopoDatabase>();
   const [storageError, setStorageError] = useState<string>();
   const [cragSummaries, setCragSummaries] = useState<CragSummary[]>([]);
+  const [connectedCrags, setConnectedCrags] = useState<ConnectedCragSummary[]>([]);
 
   const refresh = useCallback(async () => {
     if (!db) return;
-    setCragSummaries(await listCragSummaries(db));
+    const [crags, connected] = await Promise.all([
+      listCragSummaries(db),
+      listConnectedCrags(db),
+    ]);
+    setCragSummaries(crags);
+    setConnectedCrags(connected);
   }, [db]);
 
   useEffect(() => {
@@ -152,7 +182,12 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
         if (mounted) {
           setDb(nextDb);
           setStorageError(undefined);
-          setCragSummaries(await listCragSummaries(nextDb));
+          const [crags, connected] = await Promise.all([
+            listCragSummaries(nextDb),
+            listConnectedCrags(nextDb),
+          ]);
+          setCragSummaries(crags);
+          setConnectedCrags(connected);
         }
       } catch (error) {
         if (mounted) {
@@ -177,10 +212,19 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
   // ── Crags ───────────────────────────────────────────────────────────────
 
   const createCrag = useCallback(
-    async (name: string) => {
-      const out = await createCragRepo(requireDb(), { name });
+    async (name: string, description?: string, tabvarCragId?: number) => {
+      const out = await createCragRepo(requireDb(), { name, description, tabvarCragId });
       await refresh();
       return out;
+    },
+    [db, refresh],
+  );
+
+  const adoptTabvarCrag = useCallback(
+    async (tabvarCragId: number) => {
+      const crag = await adoptTabvarCragRepo(requireDb(), tabvarCragId);
+      await refresh();
+      return crag;
     },
     [db, refresh],
   );
@@ -212,13 +256,17 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
       const sectorsWithTopos: SectorWithTopos[] = await Promise.all(
         sectors.map(async (sector) => {
           const topos = await listToposForSector(dbRef, sector.id);
-          const toposWithRoutes: TopoWithRoutes[] = await Promise.all(
-            topos.map(async (topo) => ({
-              ...topo,
-              routes: await listRoutesForTopo(dbRef, topo.id),
-            })),
-          );
-          return { ...sector, topos: toposWithRoutes };
+          const [toposWithRoutes, unmappedRoutes] = await Promise.all([
+            Promise.all(
+              topos.map(async (topo) => ({
+                ...topo,
+                routes: await listRoutesForTopo(dbRef, topo.id),
+                tabvarRoutes: await listTabvarRoutesForTopo(dbRef, topo.id),
+              })),
+            ),
+            listUnmappedTabvarRoutesForSector(dbRef, sector.id),
+          ]);
+          return { ...sector, topos: toposWithRoutes, unmappedRoutes };
         }),
       );
       return { crag, sectors: sectorsWithTopos };
@@ -236,8 +284,8 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
   // ── Sectors ─────────────────────────────────────────────────────────────
 
   const createSector = useCallback(
-    async (cragId: string, name: string) => {
-      const sector = await createSectorRepo(requireDb(), { cragId, name });
+    async (cragId: string, name: string, description?: string, tabvarSectorId?: number) => {
+      const sector = await createSectorRepo(requireDb(), { cragId, name, description, tabvarSectorId });
       await refresh();
       return sector;
     },
@@ -414,6 +462,59 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
     [db],
   );
 
+  const countLocalRoutesForTopo = useCallback(
+    async (topoId: string) => {
+      return countRoutesForTopo(requireDb(), topoId);
+    },
+    [db],
+  );
+
+  // ── Connected Routes (TABVAR) ──────────────────────────────────────────
+
+  const linkTabvarRoute = useCallback(
+    async (topoId: string, routeAppId: string) => {
+      await linkTabvarRouteToTopo(requireDb(), topoId, routeAppId);
+      await refresh();
+    },
+    [db, refresh],
+  );
+
+  const unlinkTabvarRoute = useCallback(
+    async (topoId: string, routeAppId: string) => {
+      await unlinkTabvarRouteFromTopo(requireDb(), topoId, routeAppId);
+      await refresh();
+    },
+    [db, refresh],
+  );
+
+  const loadTabvarRoutesForTopo = useCallback(
+    async (topoId: string) => {
+      return listTabvarRoutesForTopo(requireDb(), topoId);
+    },
+    [db],
+  );
+
+  const loadUnmappedTabvarRoutes = useCallback(
+    async (sectorId: string) => {
+      return listUnmappedTabvarRoutesForSector(requireDb(), sectorId);
+    },
+    [db],
+  );
+
+  const countTabvarRoutesForTopo = useCallback(
+    async (topoId: string) => {
+      return countTabvarRoutesForTopoRepo(requireDb(), topoId);
+    },
+    [db],
+  );
+
+  const countUnmappedTabvarRoutes = useCallback(
+    async (sectorId: string) => {
+      return countUnmappedTabvarRoutesForSectorRepo(requireDb(), sectorId);
+    },
+    [db],
+  );
+
   // ── Annotations (editor) ────────────────────────────────────────────────
 
   const addAnnotation = useCallback(
@@ -473,8 +574,10 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
       isReady: Boolean(db),
       storageError,
       cragSummaries,
+      connectedCrags,
       refresh,
       createCrag,
+      adoptTabvarCrag,
       renameCrag,
       deleteCrag,
       loadCragDetail,
@@ -494,6 +597,13 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
       createRoute,
       updateRouteField,
       deleteRoute,
+      countLocalRoutesForTopo,
+      linkTabvarRoute,
+      unlinkTabvarRoute,
+      loadTabvarRoutesForTopo,
+      loadUnmappedTabvarRoutes,
+      countTabvarRoutesForTopo,
+      countUnmappedTabvarRoutes,
       addAnnotation,
       addPathAnnotation,
       updateAnnotation,
@@ -502,8 +612,13 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
     [
       addAnnotation,
       addPathAnnotation,
+      adoptTabvarCrag,
       attachPhotoFromLibrary,
       attachPhotoFromUri,
+      connectedCrags,
+      countLocalRoutesForTopo,
+      countTabvarRoutesForTopo,
+      countUnmappedTabvarRoutes,
       cragSummaries,
       createCrag,
       createRoute,
@@ -514,10 +629,13 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
       deleteRoute,
       deleteSector,
       deleteTopo,
+      linkTabvarRoute,
       loadCragDetail,
       loadGuidebookExport,
+      loadTabvarRoutesForTopo,
       loadTopoEditor,
       loadTopoInfo,
+      loadUnmappedTabvarRoutes,
       refresh,
       removeAnnotation,
       renameCrag,
@@ -525,6 +643,7 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
       renameTopo,
       storageError,
       submitToTabvar,
+      unlinkTabvarRoute,
       updateAnnotation,
       updateRouteField,
       updateTopoDescription,

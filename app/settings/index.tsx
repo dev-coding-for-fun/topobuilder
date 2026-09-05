@@ -15,7 +15,9 @@ import {
   loadExportDisclaimerSettings,
   saveExportDisclaimerSettings,
 } from '@/settings/exportDisclaimer';
+import { wipeLocalStorage } from '@/storage/wipeStorage';
 import { Button } from '@/ui/Button';
+import { ConfirmSheet } from '@/ui/ConfirmSheet';
 import { Screen } from '@/ui/Screen';
 import { interStyle } from '@/ui/fonts';
 
@@ -73,6 +75,10 @@ export default function SettingsScreen() {
             title="Use metric units"
             value
           />
+        </Section>
+
+        <Section title="Developer">
+          <StorageResetRow />
         </Section>
 
         <Section title="About">
@@ -322,6 +328,67 @@ function TabvarSyncPanel() {
   );
 }
 
+function StorageResetRow() {
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [isWiping, setIsWiping] = useState(false);
+  const [wiped, setWiped] = useState(false);
+  const [error, setError] = useState<string>();
+
+  async function handleWipe() {
+    setIsWiping(true);
+    setError(undefined);
+    try {
+      await wipeLocalStorage();
+      setShowConfirm(false);
+      setWiped(true);
+    } catch (wipeError) {
+      setError(errorMessage(wipeError, 'Failed to wipe storage.'));
+    } finally {
+      setIsWiping(false);
+    }
+  }
+
+  return (
+    <>
+      <Row
+        icon="trash-outline"
+        onPress={() => setShowConfirm(true)}
+        subtitle={
+          wiped
+            ? 'Storage wiped. Please force close & restart the app.'
+            : 'Erase all local photos, database, and settings'
+        }
+        testID="settings:wipe-storage"
+        title="Wipe local storage"
+      />
+      {wiped ? (
+        <View style={styles.wipedBanner} testID="settings:wipe-storage-notice">
+          <Ionicons color="#166534" name="checkmark-circle-outline" size={18} />
+          <Text style={styles.wipedNotice}>
+            Storage has been completely wiped. Please force-close and restart the app to launch with fresh storage.
+          </Text>
+        </View>
+      ) : null}
+      {error ? (
+        <Text style={styles.tabvarError} testID="settings:wipe-storage-error">
+          {error}
+        </Text>
+      ) : null}
+      <ConfirmSheet
+        confirmLabel={isWiping ? 'Wiping…' : 'Wipe all data'}
+        message="This will permanently delete all local photos, topos, cached route issues, and settings on this device. You will need to force-close and restart the app."
+        onCancel={() => {
+          if (!isWiping) setShowConfirm(false);
+        }}
+        onConfirm={handleWipe}
+        testID="settings:wipe-storage-confirm"
+        title="Wipe local storage?"
+        visible={showConfirm}
+      />
+    </>
+  );
+}
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <View style={styles.section}>
@@ -516,5 +583,22 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 14,
     paddingVertical: 14,
+  },
+  wipedBanner: {
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    borderTopColor: '#BBF7D0',
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  wipedNotice: {
+    color: '#166534',
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    ...interStyle('400'),
   },
 });

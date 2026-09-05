@@ -3,7 +3,7 @@ import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router
 import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import type { CragDetail, SectorWithTopos, TopoWithRoutes } from '@/domain/types';
+import type { CragDetail, SectorWithTopos, TabvarRoute, TopoWithRoutes } from '@/domain/types';
 import { useTopoStore } from '@/state/TopoStore';
 import { ActionSheet, type ActionItem } from '@/ui/ActionSheet';
 import { Button } from '@/ui/Button';
@@ -13,8 +13,9 @@ import { NameEntrySheet } from '@/ui/NameEntrySheet';
 import { Screen } from '@/ui/Screen';
 import { SectorHeader } from '@/ui/SectorHeader';
 import { ShareSheet, type ShareScope } from '@/ui/ShareSheet';
+import { TopoCard } from '@/ui/TopoCard';
 import { TopoInfoSheet } from '@/ui/TopoInfoSheet';
-import { TopoRow } from '@/ui/TopoRow';
+import { UnmappedRoutesDrawer } from '@/ui/UnmappedRoutesDrawer';
 
 type Sheet =
   | { kind: 'crag-menu' }
@@ -28,7 +29,9 @@ type Sheet =
   | { kind: 'rename-topo'; topo: TopoWithRoutes }
   | { kind: 'delete-topo'; topo: TopoWithRoutes }
   | { kind: 'pick-sector-for-topo' }
-  | { kind: 'topo-info'; topoId: string };
+  | { kind: 'topo-info'; topoId: string }
+  | { kind: 'link-unmapped-to-topo'; sector: SectorWithTopos; route: TabvarRoute }
+  | { kind: 'link-route-to-topo'; sector: SectorWithTopos; topo: TopoWithRoutes };
 
 export default function CragDetailScreen() {
   const { cragId } = useLocalSearchParams<{ cragId: string }>();
@@ -43,6 +46,7 @@ export default function CragDetailScreen() {
     createTopo,
     renameTopo,
     deleteTopo,
+    linkTabvarRoute,
   } = useTopoStore();
 
   const [detail, setDetail] = useState<CragDetail>();
@@ -76,6 +80,31 @@ export default function CragDetailScreen() {
     const topo = await createTopo(sector.id);
     await refresh();
     router.push(`/crags/${crag.id}/topos/${topo.id}/editor`);
+  }
+
+  async function handleAddTopoForRoute(sector: SectorWithTopos, route: TabvarRoute) {
+    const topo = await createTopo(sector.id, route.name);
+    await linkTabvarRoute(topo.id, route.appId);
+    await refresh();
+    router.push(`/crags/${crag.id}/topos/${topo.id}/editor`);
+  }
+
+  async function handleLinkUnmappedRoute(sector: SectorWithTopos, route: TabvarRoute) {
+    if (sector.topos.length === 1) {
+      await linkTabvarRoute(sector.topos[0].id, route.appId);
+      await refresh();
+    } else {
+      setSheet({ kind: 'link-unmapped-to-topo', sector, route });
+    }
+  }
+
+  function handleOpenLinkRouteForTopo(sector: SectorWithTopos, topo: TopoWithRoutes) {
+    const unmapped = sector.unmappedRoutes ?? [];
+    if (unmapped.length === 0) {
+      router.push(`/crags/${crag.id}/topos/${topo.id}/editor`);
+      return;
+    }
+    setSheet({ kind: 'link-route-to-topo', sector, topo });
   }
 
   return (
@@ -120,6 +149,7 @@ export default function CragDetailScreen() {
           <View
             key={sector.id}
             style={[styles.sectorBlock, index > 0 && styles.sectorBlockSpaced]}
+            testID={`crag-detail:sector-container:${sector.id}`}
           >
             <SectorHeader
               name={sector.name}
@@ -130,8 +160,9 @@ export default function CragDetailScreen() {
             />
             <View style={styles.toposGroup}>
               {sector.topos.map((topo) => (
-                <TopoRow
+                <TopoCard
                   key={topo.id}
+                  onLinkRoute={() => handleOpenLinkRouteForTopo(sector, topo)}
                   onMenu={() => setSheet({ kind: 'topo-menu', sector, topo })}
                   onOpen={() =>
                     router.push(`/crags/${crag.id}/topos/${topo.id}/editor`)
@@ -147,6 +178,17 @@ export default function CragDetailScreen() {
                 }}
                 testID={`crag-detail:sector:${sector.id}:add-topo`}
                 variant="secondary"
+              />
+              <UnmappedRoutesDrawer
+                onAddTopoForRoute={(route) => {
+                  void handleAddTopoForRoute(sector, route);
+                }}
+                onLinkRoute={(route) => {
+                  void handleLinkUnmappedRoute(sector, route);
+                }}
+                routes={sector.unmappedRoutes ?? []}
+                sectorId={sector.id}
+                topos={sector.topos}
               />
             </View>
           </View>
@@ -271,6 +313,50 @@ export default function CragDetailScreen() {
         onClose={() => setSheet(undefined)}
         topoId={sheet?.kind === 'topo-info' ? sheet.topoId : undefined}
       />
+
+      {/* ── Link unmapped route to a topo in the sector ──── */}
+      {sheet?.kind === 'link-unmapped-to-topo' ? (
+        <ActionSheet
+          items={sheet.sector.topos.map<ActionItem>((t) => ({
+            id: t.id,
+            label: t.name,
+            icon: 'image-outline',
+            onPress: async () => {
+              if (sheet.kind === 'link-unmapped-to-topo') {
+                await linkTabvarRoute(t.id, sheet.route.appId);
+                await refresh();
+                setSheet(undefined);
+              }
+            },
+          }))}
+          onClose={() => setSheet(undefined)}
+          testID="crag-detail:link-unmapped-picker"
+          title={`Link “${sheet.route.name}” to which topo?`}
+          visible
+        />
+      ) : null}
+
+      {/* ── Link route to topo from TopoCard ────────────── */}
+      {sheet?.kind === 'link-route-to-topo' ? (
+        <ActionSheet
+          items={(sheet.sector.unmappedRoutes ?? []).map<ActionItem>((r) => ({
+            id: r.appId,
+            label: `${r.name}${r.gradeYds ? ` (${r.gradeYds})` : ''}`,
+            icon: 'trail-sign-outline',
+            onPress: async () => {
+              if (sheet.kind === 'link-route-to-topo') {
+                await linkTabvarRoute(sheet.topo.id, r.appId);
+                await refresh();
+                setSheet(undefined);
+              }
+            },
+          }))}
+          onClose={() => setSheet(undefined)}
+          testID="crag-detail:link-route-picker"
+          title={`Link route to “${sheet.topo.name}”`}
+          visible
+        />
+      ) : null}
 
       <ShareSheet onClose={() => setShareScope(undefined)} scope={shareScope} />
     </Screen>
@@ -437,13 +523,29 @@ function TopoMenuSheets({
 
       <ConfirmSheet
         confirmLabel="Delete topo"
-        message={
-          topo
-            ? `Delete “${topo.name}” and its ${topo.routes.length} ${
-                topo.routes.length === 1 ? 'route' : 'routes'
-              }? This cannot be undone.`
-            : ''
-        }
+        message={(() => {
+          if (!topo) return '';
+          const localCount = topo.routes.length;
+          const tabvarCount = topo.tabvarRoutes?.length ?? 0;
+          if (localCount > 0) {
+            return `Delete “${topo.name}”? This topo has ${localCount} custom ${
+              localCount === 1 ? 'route' : 'routes'
+            } created on it that will be permanently deleted.${
+              tabvarCount > 0
+                ? ` (${tabvarCount} connected TABVAR ${
+                    tabvarCount === 1 ? 'route' : 'routes'
+                  } will remain in this sector as unmapped routes).`
+                : ''
+            }`;
+          }
+          return `Delete “${topo.name}”? ${
+            tabvarCount > 0
+              ? `(${tabvarCount} connected TABVAR ${
+                  tabvarCount === 1 ? 'route' : 'routes'
+                } will remain in this sector as unmapped routes).`
+              : 'This cannot be undone.'
+          }`;
+        })()}
         onCancel={onClose}
         onConfirm={async () => {
           if (!topo) return;

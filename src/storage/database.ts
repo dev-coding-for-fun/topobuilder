@@ -3,9 +3,9 @@ import * as SQLite from 'expo-sqlite';
 
 export type TopoDatabase = SQLite.SQLiteDatabase;
 
-const DATABASE_NAME = 'topobuilder.db';
+export const DATABASE_NAME = 'topobuilder.db';
 
-export const CURRENT_SCHEMA_VERSION = 5;
+export const CURRENT_SCHEMA_VERSION = 6;
 
 type DbGlobal = typeof globalThis & {
   __topoDbPromise?: Promise<TopoDatabase>;
@@ -96,22 +96,24 @@ export async function resetDatabaseConnection(): Promise<void> {
 
 const FRESH_INSTALL_SCHEMA = `
   CREATE TABLE IF NOT EXISTS crags (
-    id          TEXT PRIMARY KEY NOT NULL,
-    name        TEXT NOT NULL,
-    description TEXT,
-    sort_order  INTEGER NOT NULL DEFAULT 0,
-    created_at  TEXT NOT NULL,
-    updated_at  TEXT NOT NULL
+    id             TEXT PRIMARY KEY NOT NULL,
+    name           TEXT NOT NULL,
+    description    TEXT,
+    sort_order     INTEGER NOT NULL DEFAULT 0,
+    tabvar_crag_id INTEGER,
+    created_at     TEXT NOT NULL,
+    updated_at     TEXT NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS sectors (
-    id          TEXT PRIMARY KEY NOT NULL,
-    crag_id     TEXT NOT NULL,
-    name        TEXT NOT NULL,
-    description TEXT,
-    sort_order  INTEGER NOT NULL DEFAULT 0,
-    created_at  TEXT NOT NULL,
-    updated_at  TEXT NOT NULL,
+    id               TEXT PRIMARY KEY NOT NULL,
+    crag_id          TEXT NOT NULL,
+    name             TEXT NOT NULL,
+    description      TEXT,
+    sort_order       INTEGER NOT NULL DEFAULT 0,
+    tabvar_sector_id INTEGER,
+    created_at       TEXT NOT NULL,
+    updated_at       TEXT NOT NULL,
     FOREIGN KEY (crag_id) REFERENCES crags(id) ON DELETE CASCADE
   );
 
@@ -153,6 +155,7 @@ const FRESH_INSTALL_SCHEMA = `
     id            TEXT PRIMARY KEY NOT NULL,
     topo_id       TEXT NOT NULL,
     route_id      TEXT,
+    route_app_id  TEXT,
     kind          TEXT NOT NULL,
     color         TEXT NOT NULL,
     label         TEXT,
@@ -162,7 +165,8 @@ const FRESH_INSTALL_SCHEMA = `
     created_at    TEXT NOT NULL,
     updated_at    TEXT NOT NULL,
     FOREIGN KEY (topo_id) REFERENCES topos(id) ON DELETE CASCADE,
-    FOREIGN KEY (route_id) REFERENCES routes(id) ON DELETE SET NULL
+    FOREIGN KEY (route_id) REFERENCES routes(id) ON DELETE SET NULL,
+    FOREIGN KEY (route_app_id) REFERENCES tabvar_routes(app_id) ON DELETE SET NULL
   );
 
   CREATE TABLE IF NOT EXISTS tabvar_sync_state (
@@ -209,6 +213,7 @@ const FRESH_INSTALL_SCHEMA = `
 
   CREATE TABLE IF NOT EXISTS tabvar_routes (
     id                 INTEGER PRIMARY KEY NOT NULL,
+    app_id             TEXT UNIQUE NOT NULL,
     crag_id            INTEGER NOT NULL,
     sector_id          INTEGER NOT NULL,
     name               TEXT NOT NULL,
@@ -231,6 +236,16 @@ const FRESH_INSTALL_SCHEMA = `
     sector_name        TEXT,
     created_at         TEXT,
     raw_json           TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS topo_tabvar_routes (
+    topo_id        TEXT NOT NULL,
+    route_app_id   TEXT NOT NULL,
+    sort_order     INTEGER NOT NULL DEFAULT 0,
+    created_at     TEXT NOT NULL,
+    PRIMARY KEY (topo_id, route_app_id),
+    FOREIGN KEY (topo_id) REFERENCES topos(id) ON DELETE CASCADE,
+    FOREIGN KEY (route_app_id) REFERENCES tabvar_routes(app_id) ON DELETE CASCADE
   );
 
   CREATE TABLE IF NOT EXISTS tabvar_issues (
@@ -321,6 +336,10 @@ const FRESH_INSTALL_SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_tabvar_issues_route_id ON tabvar_issues(route_id);
   CREATE INDEX IF NOT EXISTS idx_tabvar_routes_crag_id ON tabvar_routes(crag_id);
   CREATE INDEX IF NOT EXISTS idx_tabvar_routes_sector_id ON tabvar_routes(sector_id);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_tabvar_routes_app_id ON tabvar_routes(app_id);
+  CREATE INDEX IF NOT EXISTS idx_crags_tabvar_crag_id ON crags(tabvar_crag_id);
+  CREATE INDEX IF NOT EXISTS idx_sectors_tabvar_sector_id ON sectors(tabvar_sector_id);
+  CREATE INDEX IF NOT EXISTS idx_topo_tabvar_routes_app_id ON topo_tabvar_routes(route_app_id);
   CREATE INDEX IF NOT EXISTS idx_pending_issue_edits_crag_id ON pending_issue_edits(crag_id);
   CREATE INDEX IF NOT EXISTS idx_pending_issue_attachments_issue_key ON pending_issue_attachments(issue_key);
 `;

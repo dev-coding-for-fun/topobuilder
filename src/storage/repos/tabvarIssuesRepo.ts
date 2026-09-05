@@ -62,8 +62,13 @@ export type IssueDetail = IssueListItem & {
   attachments: IssueAttachment[];
 };
 
+export function tabvarRouteAppId(sourceId: number): string {
+  return `tabvar_route_${sourceId}`;
+}
+
 export type IssueRouteOption = {
   id: number;
+  appId?: string;
   cragId: number;
   cragName: string;
   name: string;
@@ -138,6 +143,7 @@ type IssueListRow = {
 
 type IssueRouteRow = {
   id: number;
+  app_id: string | null;
   crag_id: number;
   crag_name: string;
   name: string;
@@ -269,14 +275,16 @@ export async function upsertTabvarRoutes(
 ): Promise<void> {
   await db.withTransactionAsync(async () => {
     for (const route of routes) {
+      const appId = tabvarRouteAppId(route.id);
       await db.runAsync(
         `INSERT INTO tabvar_routes (
-          id, crag_id, sector_id, name, alt_names, grade_yds, status,
+          id, app_id, crag_id, sector_id, name, alt_names, grade_yds, status,
           latitude, longitude, notes, sort_order, bolt_count, pitch_count,
           route_length, climb_style, year, route_built_date, first_ascent_by,
           first_ascent_date, crag_name, sector_name, created_at, raw_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
+          app_id = COALESCE(tabvar_routes.app_id, excluded.app_id),
           crag_id = excluded.crag_id,
           sector_id = excluded.sector_id,
           name = excluded.name,
@@ -300,6 +308,7 @@ export async function upsertTabvarRoutes(
           created_at = excluded.created_at,
           raw_json = excluded.raw_json`,
         route.id,
+        appId,
         route.cragId,
         route.sectorId,
         route.name,
@@ -655,6 +664,7 @@ export async function listIssueRoutes(db: TopoDatabase): Promise<IssueRouteOptio
   const rows = await db.getAllAsync<IssueRouteRow>(`
     SELECT
       routes.id,
+      routes.app_id,
       routes.crag_id,
       COALESCE(routes.crag_name, crags.name, 'Crag #' || routes.crag_id) AS crag_name,
       routes.name,
@@ -670,6 +680,7 @@ export async function listIssueRoutes(db: TopoDatabase): Promise<IssueRouteOptio
   `);
 
   return rows.map((row) => ({
+    appId: row.app_id ?? tabvarRouteAppId(row.id),
     boltCount: row.bolt_count ?? undefined,
     cragId: row.crag_id,
     cragName: row.crag_name,
@@ -689,6 +700,7 @@ export async function getIssueRouteOption(
     `
     SELECT
       id,
+      app_id,
       crag_id,
       COALESCE(crag_name, 'Crag #' || crag_id) AS crag_name,
       name,
@@ -704,6 +716,7 @@ export async function getIssueRouteOption(
   const row = rows[0];
   if (!row) return undefined;
   return {
+    appId: row.app_id ?? tabvarRouteAppId(row.id),
     boltCount: row.bolt_count ?? undefined,
     cragId: row.crag_id,
     cragName: row.crag_name,

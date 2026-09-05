@@ -11,6 +11,7 @@ type SectorRow = {
   name: string;
   description: string | null;
   sort_order: number;
+  tabvar_sector_id: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -22,6 +23,7 @@ function mapSector(row: SectorRow): Sector {
     name: row.name,
     description: row.description ?? undefined,
     sortOrder: row.sort_order,
+    tabvarSectorId: row.tabvar_sector_id ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -42,7 +44,7 @@ export async function getSector(db: TopoDatabase, id: string): Promise<Sector | 
 
 export async function createSector(
   db: TopoDatabase,
-  input: { cragId: string; name: string; description?: string },
+  input: { cragId: string; name: string; description?: string; tabvarSectorId?: number },
 ): Promise<Sector> {
   const now = nowIso();
   const sortOrder = await nextSectorSortOrder(db, input.cragId);
@@ -52,18 +54,20 @@ export async function createSector(
     name: input.name,
     description: input.description,
     sortOrder,
+    tabvarSectorId: input.tabvarSectorId,
     createdAt: now,
     updatedAt: now,
   };
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      'INSERT INTO sectors (id, crag_id, name, description, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO sectors (id, crag_id, name, description, sort_order, tabvar_sector_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       sector.id,
       sector.cragId,
       sector.name,
       sector.description ?? null,
       sector.sortOrder,
+      sector.tabvarSectorId ?? null,
       sector.createdAt,
       sector.updatedAt,
     );

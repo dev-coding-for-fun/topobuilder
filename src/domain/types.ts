@@ -33,6 +33,7 @@ export type Crag = {
   name: string;
   description?: string;
   sortOrder: number;
+  tabvarCragId?: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -44,6 +45,7 @@ export type Sector = {
   name: string;
   description?: string;
   sortOrder: number;
+  tabvarSectorId?: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -83,11 +85,39 @@ export type Route = {
   updatedAt: string;
 };
 
+/** A connected route from the external TABVAR catalog. */
+export type TabvarRoute = {
+  id: number;
+  appId: string;
+  cragId: number;
+  sectorId: number;
+  name: string;
+  altNames?: string;
+  gradeYds?: string;
+  status?: string;
+  boltCount?: number;
+  pitchCount?: number;
+  routeLength?: number;
+  climbStyle?: string;
+  cragName?: string;
+  sectorName?: string;
+  sortOrder?: number;
+};
+
+export type ConnectedTopoRoute = {
+  topoId: ID;
+  routeAppId: string;
+  sortOrder: number;
+  createdAt: string;
+  route: TabvarRoute;
+};
+
 export type BaseAnnotation = {
   id: ID;
   /** A topo's id is also the photo's id; annotations belong to exactly one topo. */
   topoId: ID;
   routeId?: ID;
+  routeAppId?: string;
   kind: AnnotationKind;
   color: string;
   label?: string;
@@ -116,19 +146,33 @@ export type CragSummary = {
   name: string;
   description?: string;
   sortOrder: number;
+  tabvarCragId?: number;
   createdAt: string;
   updatedAt: string;
   sectorCount: number;
   topoCount: number;
 };
 
-/** Topo with its routes pre-loaded; used by the Crag detail rows and Topo info sheet. */
+/** Connected catalog crag from an external source like TABVAR. */
+export type ConnectedCragSummary = {
+  tabvarCragId: number;
+  name: string;
+  notes?: string;
+  sectorCount: number;
+  routeCount: number;
+  workspaceCragId?: string;
+  topoCount: number;
+};
+
+/** Topo with its routes pre-loaded; used by the Crag detail cards and Topo info sheet. */
 export type TopoWithRoutes = Topo & {
   routes: Route[];
+  tabvarRoutes?: TabvarRoute[];
 };
 
 export type SectorWithTopos = Sector & {
   topos: TopoWithRoutes[];
+  unmappedRoutes?: TabvarRoute[];
 };
 
 export type CragDetail = {

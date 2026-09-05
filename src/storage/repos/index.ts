@@ -5,3 +5,4 @@ export * from './routesRepo';
 export * from './annotationsRepo';
 export * from './tabvarIssuesRepo';
 export * from './issueOutboxRepo';
+export * from './topoTabvarRoutesRepo';
