@@ -2,6 +2,7 @@ import { createId, nowIso } from '@/domain/ids';
 import type { Crag, CragSummary, Sector } from '@/domain/types';
 
 import type { TopoDatabase } from '../database';
+import { resolvePhotoUri } from '../assetStorage';
 import { markToposForCragDirty } from './toposRepo';
 
 type CragRow = {
@@ -157,7 +158,9 @@ export async function listPhotoUrisForCrag(db: TopoDatabase, id: string): Promis
   `,
     id,
   );
-  return rows.map((row) => row.photo_uri).filter((uri): uri is string => Boolean(uri));
+  return rows
+    .map((row) => resolvePhotoUri(row.photo_uri ?? undefined))
+    .filter((uri): uri is string => Boolean(uri));
 }
 
 async function touchCrag(db: TopoDatabase, id: string, when: string): Promise<void> {

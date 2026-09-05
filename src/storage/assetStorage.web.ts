@@ -14,6 +14,10 @@ export async function pdfOutputUri(topoId: string) {
   throw new Error(`PDF export is not supported on web for topo ${topoId}`);
 }
 
+export function resolvePhotoUri(storedPath?: string): string | undefined {
+  return storedPath;
+}
+
 async function dataUriFromSource(sourceUri: string) {
   if (sourceUri.startsWith('data:')) {
     return sourceUri;

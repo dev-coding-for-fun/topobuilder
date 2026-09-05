@@ -1,4 +1,4 @@
-import { copyPhotoIntoLibrary, pdfOutputUri } from './assetStorage.web';
+import { copyPhotoIntoLibrary, pdfOutputUri, resolvePhotoUri } from './assetStorage.web';
 
 class MockFileReader {
   result: string | ArrayBuffer | null = null;
@@ -45,5 +45,10 @@ describe('web asset storage', () => {
 
   it('does not support PDF output on web', async () => {
     await expect(pdfOutputUri('topo-1')).rejects.toThrow('PDF export is not supported on web');
+  });
+
+  it('passes through photo URIs on web', () => {
+    expect(resolvePhotoUri('data:image/jpeg;base64,abc')).toBe('data:image/jpeg;base64,abc');
+    expect(resolvePhotoUri(undefined)).toBeUndefined();
   });
 });

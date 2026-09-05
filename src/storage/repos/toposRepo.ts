@@ -2,6 +2,7 @@ import { createId, nowIso } from '@/domain/ids';
 import type { Topo, TopoEditorBundle } from '@/domain/types';
 
 import type { TopoDatabase } from '../database';
+import { resolvePhotoUri } from '../assetStorage';
 import { listAnnotationsForTopo } from './annotationsRepo';
 import { listRoutesForTopo } from './routesRepo';
 
@@ -27,7 +28,7 @@ function mapTopo(row: TopoRow): Topo {
     sectorId: row.sector_id,
     name: row.name,
     description: row.description ?? undefined,
-    photoUri: row.photo_uri ?? undefined,
+    photoUri: resolvePhotoUri(row.photo_uri ?? undefined),
     photoWidth: row.photo_width ?? undefined,
     photoHeight: row.photo_height ?? undefined,
     tabvarDirty: row.tabvar_dirty !== 0,

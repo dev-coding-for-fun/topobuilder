@@ -2,6 +2,7 @@ import { createId, nowIso } from '@/domain/ids';
 import type { Sector } from '@/domain/types';
 
 import type { TopoDatabase } from '../database';
+import { resolvePhotoUri } from '../assetStorage';
 import { markToposForSectorDirty } from './toposRepo';
 
 type SectorRow = {
@@ -122,7 +123,9 @@ export async function listPhotoUrisForSector(db: TopoDatabase, id: string): Prom
     'SELECT photo_uri FROM topos WHERE sector_id = ?',
     id,
   );
-  return rows.map((row) => row.photo_uri).filter((uri): uri is string => Boolean(uri));
+  return rows
+    .map((row) => resolvePhotoUri(row.photo_uri ?? undefined))
+    .filter((uri): uri is string => Boolean(uri));
 }
 
 async function nextSectorSortOrder(db: TopoDatabase, cragId: string): Promise<number> {

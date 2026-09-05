@@ -19,7 +19,7 @@ export default function CameraScreen() {
   const { attachPhotoFromUri } = useTopoStore();
   const camera = useRef<CameraRef>(null);
   const device = useCameraDevice('back');
-  const photoOutput = usePhotoOutput();
+  const photoOutput = usePhotoOutput({ containerFormat: 'jpeg' });
   const [hasPermission, setHasPermission] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
 
