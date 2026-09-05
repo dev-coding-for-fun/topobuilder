@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index",
   "scripts": {
-    "start": "expo start",
+    "start": "expo start --dev-client",
     "android": "expo run:android",
     "android:device": "expo run:android --variant debug --no-bundler",
     "ios": "expo run:ios",
