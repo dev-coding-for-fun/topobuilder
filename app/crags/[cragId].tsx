@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { CragDetail, SectorWithTopos, TabvarRoute, TopoWithRoutes } from '@/domain/types';
@@ -30,7 +30,6 @@ type Sheet =
   | { kind: 'delete-topo'; topo: TopoWithRoutes }
   | { kind: 'pick-sector-for-topo' }
   | { kind: 'topo-info'; topoId: string }
-  | { kind: 'link-unmapped-to-topo'; sector: SectorWithTopos; route: TabvarRoute }
   | { kind: 'link-route-to-topo'; sector: SectorWithTopos; topo: TopoWithRoutes };
 
 export default function CragDetailScreen() {
@@ -64,6 +63,81 @@ export default function CragDetailScreen() {
     }, [refresh]),
   );
 
+  const [draggingRoute, setDraggingRoute] = useState<TabvarRoute | null>(null);
+  const [dragPosition, setDragPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [hoveredTopoId, setHoveredTopoId] = useState<string | null>(null);
+
+  const draggingRouteRef = useRef<TabvarRoute | null>(null);
+  const hoveredTopoIdRef = useRef<string | null>(null);
+  const topoCardRefs = useRef<
+    Map<string, { measureInWindow: (cb: (x: number, y: number, width: number, height: number) => void) => void }>
+  >(new Map());
+  const topoCardLayouts = useRef<
+    Map<string, { x: number; y: number; width: number; height: number }>
+  >(new Map());
+
+  useEffect(() => {
+    draggingRouteRef.current = draggingRoute;
+  }, [draggingRoute]);
+
+  useEffect(() => {
+    hoveredTopoIdRef.current = hoveredTopoId;
+  }, [hoveredTopoId]);
+
+  const handleDragStart = useCallback(
+    (route: TabvarRoute, pageX: number, pageY: number) => {
+      draggingRouteRef.current = route;
+      setDraggingRoute(route);
+      setDragPosition({ x: pageX, y: pageY });
+      hoveredTopoIdRef.current = null;
+      setHoveredTopoId(null);
+
+      topoCardRefs.current.forEach((el, id) => {
+        if (typeof el?.measureInWindow === 'function') {
+          el.measureInWindow((x, y, width, height) => {
+            topoCardLayouts.current.set(id, { x, y, width, height });
+          });
+        }
+      });
+    },
+    [],
+  );
+
+  const handleDragMove = useCallback((pageX: number, pageY: number) => {
+    setDragPosition({ x: pageX, y: pageY });
+    let matchedTopoId: string | null = null;
+    for (const [id, rect] of topoCardLayouts.current.entries()) {
+      if (
+        rect.width > 0 &&
+        rect.height > 0 &&
+        pageX >= rect.x &&
+        pageX <= rect.x + rect.width &&
+        pageY >= rect.y &&
+        pageY <= rect.y + rect.height
+      ) {
+        matchedTopoId = id;
+        break;
+      }
+    }
+    hoveredTopoIdRef.current = matchedTopoId;
+    setHoveredTopoId(matchedTopoId);
+  }, []);
+
+  const handleDragEnd = useCallback(async () => {
+    const route = draggingRouteRef.current;
+    const targetTopoId = hoveredTopoIdRef.current;
+
+    draggingRouteRef.current = null;
+    hoveredTopoIdRef.current = null;
+    setDraggingRoute(null);
+    setHoveredTopoId(null);
+
+    if (targetTopoId && route) {
+      await linkTabvarRoute(targetTopoId, route.appId);
+      await refresh();
+    }
+  }, [linkTabvarRoute, refresh]);
+
   if (!detail) {
     return (
       <Screen style={styles.center} testID="crag-detail:loading">
@@ -87,15 +161,6 @@ export default function CragDetailScreen() {
     await linkTabvarRoute(topo.id, route.appId);
     await refresh();
     router.push(`/crags/${crag.id}/topos/${topo.id}/editor`);
-  }
-
-  async function handleLinkUnmappedRoute(sector: SectorWithTopos, route: TabvarRoute) {
-    if (sector.topos.length === 1) {
-      await linkTabvarRoute(sector.topos[0].id, route.appId);
-      await refresh();
-    } else {
-      setSheet({ kind: 'link-unmapped-to-topo', sector, route });
-    }
   }
 
   function handleOpenLinkRouteForTopo(sector: SectorWithTopos, topo: TopoWithRoutes) {
@@ -162,11 +227,16 @@ export default function CragDetailScreen() {
               {sector.topos.map((topo) => (
                 <TopoCard
                   key={topo.id}
+                  isDropTarget={hoveredTopoId === topo.id}
                   onLinkRoute={() => handleOpenLinkRouteForTopo(sector, topo)}
                   onMenu={() => setSheet({ kind: 'topo-menu', sector, topo })}
                   onOpen={() =>
                     router.push(`/crags/${crag.id}/topos/${topo.id}/editor`)
                   }
+                  onRegisterTarget={(id, target) => {
+                    if (target) topoCardRefs.current.set(id, target);
+                    else topoCardRefs.current.delete(id);
+                  }}
                   onShare={() => setShareScope({ kind: 'topo', name: topo.name, topoId: topo.id })}
                   topo={topo}
                 />
@@ -183,9 +253,9 @@ export default function CragDetailScreen() {
                 onAddTopoForRoute={(route) => {
                   void handleAddTopoForRoute(sector, route);
                 }}
-                onLinkRoute={(route) => {
-                  void handleLinkUnmappedRoute(sector, route);
-                }}
+                onDragEnd={handleDragEnd}
+                onDragMove={handleDragMove}
+                onDragStart={handleDragStart}
                 routes={sector.unmappedRoutes ?? []}
                 sectorId={sector.id}
                 topos={sector.topos}
@@ -314,27 +384,7 @@ export default function CragDetailScreen() {
         topoId={sheet?.kind === 'topo-info' ? sheet.topoId : undefined}
       />
 
-      {/* ── Link unmapped route to a topo in the sector ──── */}
-      {sheet?.kind === 'link-unmapped-to-topo' ? (
-        <ActionSheet
-          items={sheet.sector.topos.map<ActionItem>((t) => ({
-            id: t.id,
-            label: t.name,
-            icon: 'image-outline',
-            onPress: async () => {
-              if (sheet.kind === 'link-unmapped-to-topo') {
-                await linkTabvarRoute(t.id, sheet.route.appId);
-                await refresh();
-                setSheet(undefined);
-              }
-            },
-          }))}
-          onClose={() => setSheet(undefined)}
-          testID="crag-detail:link-unmapped-picker"
-          title={`Link “${sheet.route.name}” to which topo?`}
-          visible
-        />
-      ) : null}
+
 
       {/* ── Link route to topo from TopoCard ────────────── */}
       {sheet?.kind === 'link-route-to-topo' ? (
@@ -359,6 +409,31 @@ export default function CragDetailScreen() {
       ) : null}
 
       <ShareSheet onClose={() => setShareScope(undefined)} scope={shareScope} />
+
+      {/* ── Floating Drag Preview Chip ──── */}
+      {draggingRoute ? (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.dragPreview,
+            {
+              left: dragPosition.x - 70,
+              top: dragPosition.y - 35,
+            },
+          ]}
+          testID="crag-detail:drag-preview"
+        >
+          <Ionicons color="#2563EB" name="trail-sign" size={16} />
+          <Text numberOfLines={1} style={styles.dragPreviewText}>
+            {draggingRoute.name}
+          </Text>
+          {hoveredTopoId ? (
+            <View style={styles.dragPreviewDropBadge}>
+              <Ionicons color="#16A34A" name="checkmark-circle" size={14} />
+            </View>
+          ) : null}
+        </View>
+      ) : null}
     </Screen>
   );
 }
@@ -568,6 +643,33 @@ const styles = StyleSheet.create({
   center: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  dragPreview: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#2563EB',
+    borderRadius: 20,
+    borderWidth: 1.5,
+    elevation: 8,
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    position: 'absolute',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    zIndex: 9999,
+  },
+  dragPreviewDropBadge: {
+    marginLeft: 2,
+  },
+  dragPreviewText: {
+    color: '#0F172A',
+    fontSize: 13,
+    maxWidth: 160,
+    ...interStyle('700'),
   },
   headerActions: {
     flexDirection: 'row',

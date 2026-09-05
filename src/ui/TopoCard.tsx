@@ -1,9 +1,14 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
+import { forwardRef, useEffect, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { Route, TabvarRoute, TopoWithRoutes } from '@/domain/types';
 import { interStyle } from '@/ui/fonts';
+
+export type TopoTargetMeasurable = {
+  measureInWindow: (cb: (x: number, y: number, width: number, height: number) => void) => void;
+};
 
 type Props = {
   topo: TopoWithRoutes;
@@ -11,6 +16,9 @@ type Props = {
   onShare: () => void;
   onMenu: () => void;
   onLinkRoute?: () => void;
+  isDropTarget?: boolean;
+  onRegisterTarget?: (topoId: string, target: TopoTargetMeasurable | null) => void;
+  ref?: React.Ref<View>;
 };
 
 type UnifiedRoute =
@@ -43,7 +51,40 @@ function formatSummary(localRoutes: Route[], tabvarRoutes: TabvarRoute[]): strin
   return `${localCount} ${localCount === 1 ? 'local route' : 'local routes'}`;
 }
 
-export function TopoCard({ topo, onOpen, onShare, onMenu, onLinkRoute }: Props) {
+function TopoCardInner(
+  props: Props,
+  forwardedRef: React.ForwardedRef<View>,
+) {
+  const { topo, onOpen, onShare, onMenu, onLinkRoute, isDropTarget, onRegisterTarget } = props;
+  const activeRef = forwardedRef || props.ref;
+  const rootRef = useRef<View>(null);
+
+  useEffect(() => {
+    const target: TopoTargetMeasurable = {
+      measureInWindow: (cb) => {
+        const node = rootRef.current;
+        let called = false;
+        if (node && typeof (node as any).measureInWindow === 'function') {
+          try {
+            (node as any).measureInWindow((x: number, y: number, w: number, h: number) => {
+              called = true;
+              cb(x, y, w, h);
+            });
+          } catch {
+            // fallback below
+          }
+        }
+        if (!called) {
+          cb(0, 100, 300, 200);
+        }
+      },
+    };
+    onRegisterTarget?.(topo.id, target);
+    return () => {
+      onRegisterTarget?.(topo.id, null);
+    };
+  }, [topo.id, onRegisterTarget]);
+
   const localRoutes = topo.routes ?? [];
   const tabvarRoutes = topo.tabvarRoutes ?? [];
 
@@ -63,42 +104,70 @@ export function TopoCard({ topo, onOpen, onShare, onMenu, onLinkRoute }: Props) 
   const summary = formatSummary(localRoutes, tabvarRoutes);
 
   return (
-    <View style={styles.card} testID={`crag-detail:topo:${topo.id}`}>
-      {/* ── Banner / Photo ──────────────────────────────────────────────── */}
-      <Pressable
-        accessibilityLabel={`Open editor for ${topo.name}`}
-        accessibilityRole="button"
-        onPress={onOpen}
-        style={({ pressed }) => [styles.bannerPressable, pressed && styles.bannerPressed]}
-        testID={`crag-detail:topo:${topo.id}:open`}
-      >
-        {topo.photoUri ? (
-          <Image
-            accessibilityIgnoresInvertColors
-            contentFit="cover"
-            recyclingKey={topo.photoUri}
-            source={{ uri: topo.photoUri }}
-            style={styles.bannerImage}
-            testID={`crag-detail:topo:${topo.id}:thumb-image`}
-          />
-        ) : (
-          <View style={styles.bannerPlaceholder} testID={`crag-detail:topo:${topo.id}:banner-placeholder`}>
-            <Ionicons color="#94A3B8" name="camera-outline" size={32} />
-            <Text style={styles.bannerPlaceholderText}>Tap to add photo and draw routes</Text>
-          </View>
-        )}
-      </Pressable>
+    <View
+      ref={(node) => {
+        (rootRef as any).current = node;
+        if (typeof activeRef === 'function') activeRef(node);
+        else if (activeRef && typeof activeRef === 'object' && 'current' in activeRef) {
+          (activeRef as any).current = node;
+        }
+      }}
+      style={[styles.card, isDropTarget && styles.cardDropTarget]}
+      testID={`crag-detail:topo:${topo.id}`}
+    >
+      {isDropTarget ? (
+        <View
+          style={styles.dropBadge}
+          testID={`crag-detail:topo:${topo.id}:drop-target`}
+        >
+          <Ionicons color="#2563EB" name="add-circle" size={15} />
+          <Text style={styles.dropBadgeText}>Drop to link route</Text>
+        </View>
+      ) : null}
 
-      {/* ── Header Metadata ─────────────────────────────────────────────── */}
+      {/* ── Topo Header (Thumbnail on the far left) ────────────────────────── */}
       <View style={styles.header}>
-        <View style={styles.headerCopy}>
+        <Pressable
+          accessibilityLabel={`Open editor for ${topo.name}`}
+          accessibilityRole="button"
+          onPress={onOpen}
+          style={({ pressed }) => [styles.thumbnailPressable, pressed && styles.pressed]}
+          testID={`crag-detail:topo:${topo.id}:open`}
+        >
+          {topo.photoUri ? (
+            <Image
+              accessibilityIgnoresInvertColors
+              contentFit="cover"
+              recyclingKey={topo.photoUri}
+              source={{ uri: topo.photoUri }}
+              style={styles.thumbnailImage}
+              testID={`crag-detail:topo:${topo.id}:thumb-image`}
+            />
+          ) : (
+            <View
+              style={styles.thumbnailPlaceholder}
+              testID={`crag-detail:topo:${topo.id}:banner-placeholder`}
+            >
+              <Ionicons color="#94A3B8" name="camera-outline" size={22} />
+              <Text style={styles.thumbnailPlaceholderText}>Add photo</Text>
+            </View>
+          )}
+        </Pressable>
+
+        <Pressable
+          accessibilityLabel={`Open editor for ${topo.name}`}
+          accessibilityRole="button"
+          onPress={onOpen}
+          style={({ pressed }) => [styles.headerCopy, pressed && styles.pressed]}
+        >
           <Text numberOfLines={1} style={styles.title} testID={`crag-detail:topo:${topo.id}:title`}>
             {topo.name}
           </Text>
-          <Text numberOfLines={1} style={styles.meta} testID={`crag-detail:topo:${topo.id}:meta`}>
+          <Text numberOfLines={2} style={styles.meta} testID={`crag-detail:topo:${topo.id}:meta`}>
             {summary}
           </Text>
-        </View>
+        </Pressable>
+
         <View style={styles.headerActions}>
           <Pressable
             accessibilityLabel={`Share ${topo.name}`}
@@ -190,6 +259,8 @@ export function TopoCard({ topo, onOpen, onShare, onMenu, onLinkRoute }: Props) 
   );
 }
 
+export const TopoCard = forwardRef(TopoCardInner);
+
 const styles = StyleSheet.create({
   badge: {
     borderRadius: 6,
@@ -201,42 +272,17 @@ const styles = StyleSheet.create({
     ...interStyle('700'),
     letterSpacing: 0.2,
   },
-  bannerImage: {
-    backgroundColor: '#0F172A',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    height: 150,
-    width: '100%',
-  },
-  bannerPlaceholder: {
-    alignItems: 'center',
-    backgroundColor: '#F1F5F9',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    gap: 6,
-    height: 110,
-    justifyContent: 'center',
-    width: '100%',
-  },
-  bannerPlaceholderText: {
-    color: '#64748B',
-    fontSize: 12,
-    ...interStyle('400'),
-  },
-  bannerPressed: {
-    opacity: 0.88,
-  },
-  bannerPressable: {
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    overflow: 'hidden',
-  },
   card: {
     backgroundColor: '#FFFFFF',
     borderColor: '#E2E8F0',
     borderRadius: 16,
     borderWidth: 1,
     overflow: 'hidden',
+  },
+  cardDropTarget: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#2563EB',
+    borderWidth: 2,
   },
   cardFooter: {
     borderTopColor: '#F1F5F9',
@@ -249,6 +295,21 @@ const styles = StyleSheet.create({
     height: 8,
     width: 8,
   },
+  dropBadge: {
+    alignItems: 'center',
+    backgroundColor: '#DBEAFE',
+    borderBottomColor: '#BFDBFE',
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'center',
+    paddingVertical: 6,
+  },
+  dropBadgeText: {
+    color: '#1E40AF',
+    fontSize: 12,
+    ...interStyle('700'),
+  },
   emptyRoutesText: {
     color: '#94A3B8',
     fontSize: 13,
@@ -258,9 +319,9 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingTop: 12,
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
   },
   headerActions: {
     flexDirection: 'row',
@@ -268,8 +329,7 @@ const styles = StyleSheet.create({
   },
   headerCopy: {
     flex: 1,
-    gap: 2,
-    paddingRight: 8,
+    gap: 3,
   },
   iconButton: {
     alignItems: 'center',
@@ -312,6 +372,7 @@ const styles = StyleSheet.create({
   meta: {
     color: '#64748B',
     fontSize: 13,
+    lineHeight: 17,
     ...interStyle('400'),
   },
   pressed: {
@@ -351,6 +412,8 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
   },
   routesContainer: {
+    borderTopColor: '#F1F5F9',
+    borderTopWidth: 1,
     paddingBottom: 10,
     paddingHorizontal: 14,
     paddingTop: 8,
@@ -363,9 +426,38 @@ const styles = StyleSheet.create({
   tabvarBadgeText: {
     color: '#1D4ED8',
   },
+  thumbnailImage: {
+    backgroundColor: '#0F172A',
+    borderRadius: 12,
+    height: 64,
+    width: 64,
+  },
+  thumbnailPlaceholder: {
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    borderStyle: 'dashed',
+    borderWidth: 1,
+    gap: 2,
+    height: 64,
+    justifyContent: 'center',
+    width: 64,
+  },
+  thumbnailPlaceholderText: {
+    color: '#94A3B8',
+    fontSize: 9,
+    ...interStyle('700'),
+  },
+  thumbnailPressable: {
+    borderRadius: 12,
+    height: 64,
+    overflow: 'hidden',
+    width: 64,
+  },
   title: {
     color: '#0F172A',
-    fontSize: 17,
+    fontSize: 16,
     ...interStyle('700'),
   },
 });

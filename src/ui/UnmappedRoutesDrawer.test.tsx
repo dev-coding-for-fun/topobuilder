@@ -44,7 +44,6 @@ describe('UnmappedRoutesDrawer', () => {
     const { toJSON } = render(
       <UnmappedRoutesDrawer
         onAddTopoForRoute={jest.fn()}
-        onLinkRoute={jest.fn()}
         routes={[]}
         sectorId="sector-1"
         topos={[mockTopo]}
@@ -58,7 +57,6 @@ describe('UnmappedRoutesDrawer', () => {
     render(
       <UnmappedRoutesDrawer
         onAddTopoForRoute={jest.fn()}
-        onLinkRoute={jest.fn()}
         routes={mockRoutes}
         sectorId="sector-1"
         topos={[mockTopo]}
@@ -81,7 +79,6 @@ describe('UnmappedRoutesDrawer', () => {
     render(
       <UnmappedRoutesDrawer
         onAddTopoForRoute={onAddTopo}
-        onLinkRoute={jest.fn()}
         routes={mockRoutes}
         sectorId="sector-1"
         topos={[mockTopo]}
@@ -99,12 +96,10 @@ describe('UnmappedRoutesDrawer', () => {
     expect(onAddTopo).toHaveBeenCalledWith(mockRoutes[0]);
   });
 
-  it('invokes onLinkRoute when Link is pressed', () => {
-    const onLink = jest.fn();
+  it('renders drag handles for routes and does not render ambiguous Link buttons', () => {
     render(
       <UnmappedRoutesDrawer
         onAddTopoForRoute={jest.fn()}
-        onLinkRoute={onLink}
         routes={mockRoutes}
         sectorId="sector-1"
         topos={[mockTopo]}
@@ -113,34 +108,18 @@ describe('UnmappedRoutesDrawer', () => {
 
     fireEvent.press(screen.getByTestId('crag-detail:sector:sector-1:unmapped-toggle'));
 
-    const linkBtn = screen.getByTestId(
-      'crag-detail:sector:sector-1:unmapped-route:tabvar_route_201:link',
-    );
-    fireEvent.press(linkBtn);
+    // Verify drag handle is present
+    expect(
+      screen.getByTestId('crag-detail:sector:sector-1:unmapped-route:tabvar_route_201:drag-handle'),
+    ).toBeTruthy();
+    expect(
+      screen.getByTestId('crag-detail:sector:sector-1:unmapped-route:tabvar_route_202:drag-handle'),
+    ).toBeTruthy();
 
-    expect(onLink).toHaveBeenCalledTimes(1);
-    expect(onLink).toHaveBeenCalledWith(mockRoutes[0]);
-  });
-
-  it('hides Link button when topos array is empty', () => {
-    render(
-      <UnmappedRoutesDrawer
-        onAddTopoForRoute={jest.fn()}
-        onLinkRoute={jest.fn()}
-        routes={mockRoutes}
-        sectorId="sector-1"
-        topos={[]}
-      />,
-    );
-
-    fireEvent.press(screen.getByTestId('crag-detail:sector:sector-1:unmapped-toggle'));
-
+    // Verify ambiguous Link button is gone
     expect(
       screen.queryByTestId('crag-detail:sector:sector-1:unmapped-route:tabvar_route_201:link'),
     ).toBeNull();
-    // Add topo button is still present
-    expect(
-      screen.getByTestId('crag-detail:sector:sector-1:unmapped-route:tabvar_route_201:add-topo'),
-    ).toBeTruthy();
   });
 });
+

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 
 import type { CragDetail, TabvarRoute } from '@/domain/types';
@@ -163,4 +163,66 @@ describe('CragDetailScreen with TopoCard and UnmappedRoutesDrawer', () => {
       ).toBeTruthy();
     });
   });
+
+  it('allows linking an unmapped route from the TopoCard + Link Route button', async () => {
+    render(<CragDetailScreen />);
+
+    await screen.findByTestId('crag-detail:sector-container:sector-1');
+
+    // Tap Link Route on TopoCard
+    const linkBtn = screen.getByTestId('crag-detail:topo:topo-1:link-route');
+    fireEvent.press(linkBtn);
+
+    // Link route picker should appear
+    const picker = await screen.findByTestId('crag-detail:link-route-picker');
+    expect(picker).toBeTruthy();
+
+    // Select the unmapped route
+    const routeItem = screen.getByText('Unmapped Classic (5.10a)');
+    fireEvent.press(routeItem);
+
+    await waitFor(() => {
+      expect(mockLinkTabvarRoute).toHaveBeenCalledWith('topo-1', 'tabvar_route_301');
+    });
+  });
+
+  it('supports drag-and-drop linking of an unmapped route onto a topo card', async () => {
+    render(<CragDetailScreen />);
+
+    await screen.findByTestId('crag-detail:sector-container:sector-1');
+
+    // Expand unmapped drawer
+    fireEvent.press(screen.getByTestId('crag-detail:sector:sector-1:unmapped-toggle'));
+
+    const dragHandle = screen.getByTestId(
+      'crag-detail:sector:sector-1:unmapped-route:tabvar_route_301:drag-handle',
+    );
+    expect(dragHandle).toBeTruthy();
+
+    // Start drag
+    act(() => {
+      dragHandle.props._gesture._onStart({ absoluteX: 50, absoluteY: 150 });
+    });
+
+    // Drag preview should be visible
+    const preview = screen.getByTestId('crag-detail:drag-preview');
+    expect(preview).toBeTruthy();
+    expect(screen.getAllByText('Unmapped Classic').length).toBeGreaterThanOrEqual(2);
+
+    // Move drag over topo-1 (measured in jest.setup within x: 0..300, y: 100..300)
+    act(() => {
+      dragHandle.props._gesture._onUpdate({ absoluteX: 100, absoluteY: 150 });
+    });
+
+    // Drop onto topo
+    await act(async () => {
+      dragHandle.props._gesture._onEnd();
+    });
+
+    await waitFor(() => {
+      expect(mockLinkTabvarRoute).toHaveBeenCalledWith('topo-1', 'tabvar_route_301');
+    });
+  });
 });
+
+

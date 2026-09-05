@@ -1,6 +1,8 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { runOnJS } from 'react-native-reanimated';
 
 import type { TabvarRoute, TopoWithRoutes } from '@/domain/types';
 import { interStyle } from '@/ui/fonts';
@@ -10,32 +12,24 @@ type Props = {
   routes: TabvarRoute[];
   topos: TopoWithRoutes[];
   onAddTopoForRoute: (route: TabvarRoute) => void;
-  onLinkRoute: (route: TabvarRoute) => void;
+  onDragStart?: (route: TabvarRoute, pageX: number, pageY: number) => void;
+  onDragMove?: (pageX: number, pageY: number) => void;
+  onDragEnd?: () => void;
 };
 
 export function UnmappedRoutesDrawer({
   sectorId,
   routes,
-  topos,
   onAddTopoForRoute,
-  onLinkRoute,
+  onDragStart,
+  onDragMove,
+  onDragEnd,
 }: Props) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
 
   if (!routes || routes.length === 0) {
     return null;
   }
-
-  const filteredRoutes = routes.filter((r) => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      r.name.toLowerCase().includes(q) ||
-      (r.gradeYds && r.gradeYds.toLowerCase().includes(q)) ||
-      (r.climbStyle && r.climbStyle.toLowerCase().includes(q))
-    );
-  });
 
   return (
     <View style={styles.container} testID={`crag-detail:sector:${sectorId}:unmapped-drawer`}>
@@ -58,98 +52,119 @@ export function UnmappedRoutesDrawer({
           </Text>
         </View>
         <Text style={styles.headerSubtitle}>
-          {isExpanded ? 'Tap to hide' : 'Tap to view & map'}
+          {isExpanded ? 'Tap to hide' : 'Tap to view & drag to map'}
         </Text>
       </Pressable>
 
       {/* ── Expanded Content ──────────────────────────────────────────── */}
       {isExpanded ? (
         <View style={styles.content}>
-          {routes.length > 4 ? (
-            <View style={styles.searchContainer}>
-              <Ionicons color="#94A3B8" name="search-outline" size={16} />
-              <TextInput
-                accessibilityLabel="Filter unmapped routes"
-                clearButtonMode="while-editing"
-                onChangeText={setSearchQuery}
-                placeholder="Search by name or grade…"
-                placeholderTextColor="#94A3B8"
-                style={styles.searchInput}
-                testID={`crag-detail:sector:${sectorId}:unmapped-search`}
-                value={searchQuery}
-              />
-            </View>
-          ) : null}
-
           <View style={styles.routesList}>
-            {filteredRoutes.length > 0 ? (
-              filteredRoutes.map((route, index) => {
-                const metaParts: string[] = [];
-                if (route.gradeYds) metaParts.push(route.gradeYds);
-                if (route.climbStyle) metaParts.push(route.climbStyle);
-                if (route.boltCount) metaParts.push(`${route.boltCount} bolts`);
-                const metaText = metaParts.join(' · ');
+            {routes.map((route, index) => {
+              const metaParts: string[] = [];
+              if (route.gradeYds) metaParts.push(route.gradeYds);
+              if (route.climbStyle) metaParts.push(route.climbStyle);
+              if (route.boltCount) metaParts.push(`${route.boltCount} bolts`);
+              const metaText = metaParts.join(' · ');
 
-                return (
-                  <View
-                    key={route.appId}
-                    style={[styles.routeRow, index > 0 && styles.routeRowBorder]}
-                    testID={`crag-detail:sector:${sectorId}:unmapped-route:${route.appId}`}
-                  >
-                    <View style={styles.routeInfo}>
-                      <Text numberOfLines={1} style={styles.routeName}>
-                        {route.name}
+              return (
+                <View
+                  key={route.appId}
+                  style={[styles.routeRow, index > 0 && styles.routeRowBorder]}
+                  testID={`crag-detail:sector:${sectorId}:unmapped-route:${route.appId}`}
+                >
+                  <DraggableRouteHandle
+                    onDragEnd={onDragEnd}
+                    onDragMove={onDragMove}
+                    onDragStart={onDragStart}
+                    route={route}
+                    sectorId={sectorId}
+                  />
+
+                  <View style={styles.routeInfo}>
+                    <Text numberOfLines={1} style={styles.routeName}>
+                      {route.name}
+                    </Text>
+                    {metaText ? (
+                      <Text numberOfLines={1} style={styles.routeMeta}>
+                        {metaText}
                       </Text>
-                      {metaText ? (
-                        <Text numberOfLines={1} style={styles.routeMeta}>
-                          {metaText}
-                        </Text>
-                      ) : null}
-                    </View>
-
-                    <View style={styles.actions}>
-                      <Pressable
-                        accessibilityLabel={`Add new topo for ${route.name}`}
-                        accessibilityRole="button"
-                        onPress={() => onAddTopoForRoute(route)}
-                        style={({ pressed }) => [
-                          styles.actionButton,
-                          styles.addTopoButton,
-                          pressed && styles.pressed,
-                        ]}
-                        testID={`crag-detail:sector:${sectorId}:unmapped-route:${route.appId}:add-topo`}
-                      >
-                        <Ionicons color="#0369A1" name="camera-outline" size={14} />
-                        <Text style={styles.addTopoButtonText}>+ Add Topo</Text>
-                      </Pressable>
-
-                      {topos.length > 0 ? (
-                        <Pressable
-                          accessibilityLabel={`Link ${route.name} to existing topo`}
-                          accessibilityRole="button"
-                          onPress={() => onLinkRoute(route)}
-                          style={({ pressed }) => [
-                            styles.actionButton,
-                            styles.linkButton,
-                            pressed && styles.pressed,
-                          ]}
-                          testID={`crag-detail:sector:${sectorId}:unmapped-route:${route.appId}:link`}
-                        >
-                          <Ionicons color="#334155" name="link-outline" size={14} />
-                          <Text style={styles.linkButtonText}>Link</Text>
-                        </Pressable>
-                      ) : null}
-                    </View>
+                    ) : null}
                   </View>
-                );
-              })
-            ) : (
-              <Text style={styles.noMatchesText}>No matching routes found.</Text>
-            )}
+
+                  <View style={styles.actions}>
+                    <Pressable
+                      accessibilityLabel={`Add new topo for ${route.name}`}
+                      accessibilityRole="button"
+                      onPress={() => onAddTopoForRoute(route)}
+                      style={({ pressed }) => [
+                        styles.actionButton,
+                        styles.addTopoButton,
+                        pressed && styles.pressed,
+                      ]}
+                      testID={`crag-detail:sector:${sectorId}:unmapped-route:${route.appId}:add-topo`}
+                    >
+                      <Ionicons color="#0369A1" name="camera-outline" size={14} />
+                      <Text style={styles.addTopoButtonText}>+ Add Topo</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              );
+            })}
           </View>
         </View>
       ) : null}
     </View>
+  );
+}
+
+function DraggableRouteHandle({
+  route,
+  sectorId,
+  onDragStart,
+  onDragMove,
+  onDragEnd,
+}: {
+  route: TabvarRoute;
+  sectorId: string;
+  onDragStart?: (route: TabvarRoute, pageX: number, pageY: number) => void;
+  onDragMove?: (pageX: number, pageY: number) => void;
+  onDragEnd?: () => void;
+}) {
+  const panGesture = Gesture.Pan()
+    .minDistance(4)
+    .onStart((e) => {
+      if (onDragStart) {
+        runOnJS(onDragStart)(route, e.absoluteX, e.absoluteY);
+      }
+    })
+    .onUpdate((e) => {
+      if (onDragMove) {
+        runOnJS(onDragMove)(e.absoluteX, e.absoluteY);
+      }
+    })
+    .onEnd(() => {
+      if (onDragEnd) {
+        runOnJS(onDragEnd)();
+      }
+    })
+    .onFinalize(() => {
+      if (onDragEnd) {
+        runOnJS(onDragEnd)();
+      }
+    });
+
+  return (
+    <GestureDetector gesture={panGesture}>
+      <View
+        accessibilityLabel={`Drag ${route.name} onto a topo to link`}
+        accessibilityRole="button"
+        style={styles.dragHandle}
+        testID={`crag-detail:sector:${sectorId}:unmapped-route:${route.appId}:drag-handle`}
+      >
+        <Ionicons color="#94A3B8" name="reorder-two-outline" size={20} />
+      </View>
+    </GestureDetector>
   );
 }
 
@@ -191,6 +206,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
+  dragHandle: {
+    alignItems: 'center',
+    cursor: 'grab',
+    height: 32,
+    justifyContent: 'center',
+    width: 28,
+  } as any,
   header: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -213,30 +235,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     ...interStyle('700'),
   },
-  linkButton: {
-    backgroundColor: '#F1F5F9',
-    borderColor: '#CBD5E1',
-    borderWidth: 1,
-  },
-  linkButtonText: {
-    color: '#334155',
-    fontSize: 12,
-    ...interStyle('700'),
-  },
-  noMatchesText: {
-    color: '#94A3B8',
-    fontSize: 13,
-    paddingVertical: 8,
-    textAlign: 'center',
-    ...interStyle('400'),
-  },
   pressed: {
     opacity: 0.6,
   },
   routeInfo: {
     flex: 1,
     gap: 2,
-    paddingRight: 8,
+    paddingHorizontal: 6,
   },
   routeMeta: {
     color: '#64748B',
@@ -252,32 +257,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 8,
+    paddingVertical: 6,
   },
   routeRowBorder: {
     borderTopColor: '#F8FAFC',
     borderTopWidth: 1,
   },
   routesList: {
-    marginTop: 4,
-  },
-  searchContainer: {
-    alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    borderColor: '#E2E8F0',
-    borderRadius: 8,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  searchInput: {
-    color: '#0F172A',
-    flex: 1,
-    fontSize: 13,
-    padding: 0,
-    ...interStyle('400'),
+    marginTop: 2,
   },
 });

@@ -144,4 +144,20 @@ describe('TopoCard', () => {
     fireEvent.press(linkBtn);
     expect(onLinkRoute).toHaveBeenCalledTimes(1);
   });
+
+  it('renders drop target indicator when isDropTarget is true', () => {
+    render(
+      <TopoCard
+        isDropTarget
+        onMenu={jest.fn()}
+        onOpen={jest.fn()}
+        onShare={jest.fn()}
+        topo={baseTopo}
+      />,
+    );
+
+    expect(screen.getByTestId('crag-detail:topo:topo-1:drop-target')).toBeTruthy();
+    expect(screen.getByText('Drop to link route')).toBeTruthy();
+  });
 });
+
