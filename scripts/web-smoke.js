@@ -91,9 +91,9 @@ async function main() {
   await page.getByLabel('Route name').waitFor({ state: 'visible', timeout: 15_000 });
   const routeNameId = await firstDynamicTestId(page, 'topo-info:route:', ':name');
   const routeGradeId = await firstDynamicTestId(page, 'topo-info:route:', ':grade');
-  await page.getByTestId(routeNameId).fill('Warmup Arete');
+  await replaceTextInputValue(page.getByTestId(routeNameId), 'Warmup Arete');
   await page.getByTestId(routeNameId).blur();
-  await page.getByTestId(routeGradeId).fill('5.8');
+  await replaceTextInputValue(page.getByTestId(routeGradeId), '5.8');
   await page.getByTestId(routeGradeId).blur();
   await page.getByRole('button', { name: 'Close' }).last().click();
   await page.getByText('5.8 · Warmup Arete').waitFor({ state: 'visible', timeout: 15_000 });

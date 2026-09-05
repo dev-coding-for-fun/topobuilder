@@ -166,7 +166,6 @@ export default function CragDetailScreen() {
   function handleOpenLinkRouteForTopo(sector: SectorWithTopos, topo: TopoWithRoutes) {
     const unmapped = sector.unmappedRoutes ?? [];
     if (unmapped.length === 0) {
-      router.push(`/crags/${crag.id}/topos/${topo.id}/editor`);
       return;
     }
     setSheet({ kind: 'link-route-to-topo', sector, topo });
@@ -210,37 +209,44 @@ export default function CragDetailScreen() {
           {topoCount === 1 ? 'topo' : 'topos'}
         </Text>
 
-        {sectors.map((sector, index) => (
-          <View
-            key={sector.id}
-            style={[styles.sectorBlock, index > 0 && styles.sectorBlockSpaced]}
-            testID={`crag-detail:sector-container:${sector.id}`}
-          >
-            <SectorHeader
-              name={sector.name}
-              onMenu={() => setSheet({ kind: 'sector-menu', sector })}
-              onShare={() => setShareScope({ kind: 'sector', name: sector.name, sectorId: sector.id })}
-              sectorId={sector.id}
-              topoCount={sector.topos.length}
-            />
-            <View style={styles.toposGroup}>
-              {sector.topos.map((topo) => (
-                <TopoCard
-                  key={topo.id}
-                  isDropTarget={hoveredTopoId === topo.id}
-                  onLinkRoute={() => handleOpenLinkRouteForTopo(sector, topo)}
-                  onMenu={() => setSheet({ kind: 'topo-menu', sector, topo })}
-                  onOpen={() =>
-                    router.push(`/crags/${crag.id}/topos/${topo.id}/editor`)
-                  }
-                  onRegisterTarget={(id, target) => {
-                    if (target) topoCardRefs.current.set(id, target);
-                    else topoCardRefs.current.delete(id);
-                  }}
-                  onShare={() => setShareScope({ kind: 'topo', name: topo.name, topoId: topo.id })}
-                  topo={topo}
-                />
-              ))}
+        {sectors.map((sector, index) => {
+          const hasEligibleRoutes = (sector.unmappedRoutes?.length ?? 0) > 0;
+          return (
+            <View
+              key={sector.id}
+              style={[styles.sectorBlock, index > 0 && styles.sectorBlockSpaced]}
+              testID={`crag-detail:sector-container:${sector.id}`}
+            >
+              <SectorHeader
+                name={sector.name}
+                onMenu={() => setSheet({ kind: 'sector-menu', sector })}
+                onShare={() => setShareScope({ kind: 'sector', name: sector.name, sectorId: sector.id })}
+                sectorId={sector.id}
+                topoCount={sector.topos.length}
+              />
+              <View style={styles.toposGroup}>
+                {sector.topos.map((topo) => (
+                  <TopoCard
+                    key={topo.id}
+                    canLinkRoute={hasEligibleRoutes}
+                    isDropTarget={hoveredTopoId === topo.id}
+                    onLinkRoute={
+                      hasEligibleRoutes
+                        ? () => handleOpenLinkRouteForTopo(sector, topo)
+                        : undefined
+                    }
+                    onMenu={() => setSheet({ kind: 'topo-menu', sector, topo })}
+                    onOpen={() =>
+                      router.push(`/crags/${crag.id}/topos/${topo.id}/editor`)
+                    }
+                    onRegisterTarget={(id, target) => {
+                      if (target) topoCardRefs.current.set(id, target);
+                      else topoCardRefs.current.delete(id);
+                    }}
+                    onShare={() => setShareScope({ kind: 'topo', name: topo.name, topoId: topo.id })}
+                    topo={topo}
+                  />
+                ))}
               <Button
                 label="+ Add topo"
                 onPress={() => {
@@ -262,7 +268,8 @@ export default function CragDetailScreen() {
               />
             </View>
           </View>
-        ))}
+        );
+      })}
 
         <View style={styles.addSectorWrap}>
           <Button

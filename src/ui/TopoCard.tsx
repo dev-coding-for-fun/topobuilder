@@ -16,6 +16,7 @@ type Props = {
   onShare: () => void;
   onMenu: () => void;
   onLinkRoute?: () => void;
+  canLinkRoute?: boolean;
   isDropTarget?: boolean;
   onRegisterTarget?: (topoId: string, target: TopoTargetMeasurable | null) => void;
   ref?: React.Ref<View>;
@@ -55,7 +56,16 @@ function TopoCardInner(
   props: Props,
   forwardedRef: React.ForwardedRef<View>,
 ) {
-  const { topo, onOpen, onShare, onMenu, onLinkRoute, isDropTarget, onRegisterTarget } = props;
+  const {
+    topo,
+    onOpen,
+    onShare,
+    onMenu,
+    onLinkRoute,
+    canLinkRoute = true,
+    isDropTarget,
+    onRegisterTarget,
+  } = props;
   const activeRef = forwardedRef || props.ref;
   const rootRef = useRef<View>(null);
 
@@ -241,7 +251,7 @@ function TopoCardInner(
       </View>
 
       {/* ── Link Route Action ────────────────────────────────────────────── */}
-      {onLinkRoute ? (
+      {onLinkRoute && canLinkRoute ? (
         <View style={styles.cardFooter}>
           <Pressable
             accessibilityLabel={`Link route to ${topo.name}`}

@@ -186,6 +186,24 @@ describe('CragDetailScreen with TopoCard and UnmappedRoutesDrawer', () => {
     });
   });
 
+  it('hides Link Route button on TopoCard when sector has no unmapped connected routes', async () => {
+    mockLoadCragDetail.mockResolvedValue({
+      ...mockDetail,
+      sectors: [
+        {
+          ...mockDetail.sectors[0],
+          unmappedRoutes: [],
+        },
+      ],
+    });
+
+    render(<CragDetailScreen />);
+
+    await screen.findByTestId('crag-detail:sector-container:sector-1');
+
+    expect(screen.queryByTestId('crag-detail:topo:topo-1:link-route')).toBeNull();
+  });
+
   it('supports drag-and-drop linking of an unmapped route onto a topo card', async () => {
     render(<CragDetailScreen />);
 

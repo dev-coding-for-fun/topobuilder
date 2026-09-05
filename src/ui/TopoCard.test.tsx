@@ -145,6 +145,35 @@ describe('TopoCard', () => {
     expect(onLinkRoute).toHaveBeenCalledTimes(1);
   });
 
+  it('hides onLinkRoute button when canLinkRoute is false even if onLinkRoute is provided', () => {
+    const onLinkRoute = jest.fn();
+    render(
+      <TopoCard
+        canLinkRoute={false}
+        onLinkRoute={onLinkRoute}
+        onMenu={jest.fn()}
+        onOpen={jest.fn()}
+        onShare={jest.fn()}
+        topo={baseTopo}
+      />,
+    );
+
+    expect(screen.queryByTestId('crag-detail:topo:topo-1:link-route')).toBeNull();
+  });
+
+  it('hides onLinkRoute button when onLinkRoute is omitted', () => {
+    render(
+      <TopoCard
+        onMenu={jest.fn()}
+        onOpen={jest.fn()}
+        onShare={jest.fn()}
+        topo={baseTopo}
+      />,
+    );
+
+    expect(screen.queryByTestId('crag-detail:topo:topo-1:link-route')).toBeNull();
+  });
+
   it('renders drop target indicator when isDropTarget is true', () => {
     render(
       <TopoCard
