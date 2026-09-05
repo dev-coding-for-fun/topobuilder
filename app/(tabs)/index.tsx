@@ -4,7 +4,6 @@ import { useMemo, useState } from 'react';
 import { Pressable, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { ConnectedCragSummary, CragSummary } from '@/domain/types';
-import { ConnectedCragCard } from '@/ui/ConnectedCragCard';
 import { CragCard } from '@/ui/CragCard';
 import { FloatingActionButton } from '@/ui/FloatingActionButton';
 import { NameEntrySheet } from '@/ui/NameEntrySheet';
@@ -82,6 +81,7 @@ export default function CragsListScreen() {
         result.push({
           type: 'my_crags',
           title: 'My Crags',
+          badge: 'LOCAL',
           subtitle: 'Locally created crags in your workspace',
           count: filteredMyCrags.length,
           data: filteredMyCrags.map((crag) => ({
@@ -104,6 +104,7 @@ export default function CragsListScreen() {
       result.push({
         type: 'my_crags',
         title: 'My Crags',
+        badge: 'LOCAL',
         subtitle: 'Locally created crags in your workspace',
         count: myCrags.length,
         data,
@@ -257,7 +258,7 @@ export default function CragsListScreen() {
           if (item.type === 'my_crags_empty') {
             return (
               <View style={styles.sectionEmptyCard} testID="crags:my-crags:empty">
-                <Ionicons color="#64748B" name="folder-open-outline" size={24} />
+                <Ionicons color="#16A34A" name="folder-open-outline" size={24} />
                 <View style={styles.sectionEmptyTextWrap}>
                   <Text style={styles.sectionEmptyTitle}>No crags yet</Text>
                   <Text style={styles.sectionEmptyBody}>
@@ -269,9 +270,10 @@ export default function CragsListScreen() {
           }
           if (item.type === 'connected_crag') {
             return (
-              <ConnectedCragCard
-                item={item.data}
-                onPress={() => handleOpenConnectedCrag(item.data)}
+              <CragCard
+                onOpen={() => handleOpenConnectedCrag(item.data)}
+                summary={item.data}
+                variant="connected"
               />
             );
           }
@@ -288,8 +290,20 @@ export default function CragsListScreen() {
             <View style={styles.sectionHeaderTitleRow}>
               <Text style={styles.sectionTitle}>{section.title}</Text>
               {section.badge ? (
-                <View style={styles.sourceBadge}>
-                  <Text style={styles.sourceBadgeText}>{section.badge}</Text>
+                <View
+                  style={[
+                    styles.sourceBadge,
+                    section.type === 'my_crags' && styles.sourceBadgeLocal,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.sourceBadgeText,
+                      section.type === 'my_crags' && styles.sourceBadgeTextLocal,
+                    ]}
+                  >
+                    {section.badge}
+                  </Text>
                 </View>
               ) : null}
               <View style={styles.countPill}>
@@ -410,15 +424,15 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   sectionEmptyBody: {
-    color: '#64748B',
+    color: '#166534',
     fontSize: 12,
     lineHeight: 16,
     ...interStyle('400'),
   },
   sectionEmptyCard: {
     alignItems: 'center',
-    backgroundColor: '#F1F5F9',
-    borderColor: '#E2E8F0',
+    backgroundColor: '#F0FDF4',
+    borderColor: '#BBF7D0',
     borderRadius: 14,
     borderStyle: 'dashed',
     borderWidth: 1,
@@ -431,7 +445,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   sectionEmptyTitle: {
-    color: '#334155',
+    color: '#15803D',
     fontSize: 14,
     ...interStyle('700'),
   },
@@ -469,11 +483,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 1,
   },
+  sourceBadgeLocal: {
+    backgroundColor: '#DCFCE7',
+    borderColor: '#86EFAC',
+  },
   sourceBadgeText: {
     color: '#0369A1',
     fontSize: 10,
     letterSpacing: 0.3,
     ...interStyle('700'),
+  },
+  sourceBadgeTextLocal: {
+    color: '#15803D',
   },
 });
 

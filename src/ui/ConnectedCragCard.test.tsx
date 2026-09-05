@@ -16,14 +16,14 @@ const baseConnectedCrag: ConnectedCragSummary = {
 };
 
 describe('ConnectedCragCard', () => {
-  it('renders un-adopted connected crag with adopt prompt and TABVAR badge', () => {
+  it('renders un-adopted connected crag with 0 topos in workspace and TABVAR badge', () => {
     const onPress = jest.fn();
     render(<ConnectedCragCard item={baseConnectedCrag} onPress={onPress} />);
 
     expect(screen.getByText('Wasootch Slabs')).toBeTruthy();
     expect(screen.getByText('5 sectors · 42 routes')).toBeTruthy();
     expect(screen.getByText('TABVAR')).toBeTruthy();
-    expect(screen.getByText('Tap to add to workspace')).toBeTruthy();
+    expect(screen.getByText('0 topos in workspace')).toBeTruthy();
 
     fireEvent.press(screen.getByTestId('crags:connected-card:50:open'));
     expect(onPress).toHaveBeenCalledTimes(1);

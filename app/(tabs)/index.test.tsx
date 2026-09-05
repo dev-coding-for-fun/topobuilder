@@ -104,11 +104,12 @@ describe('CragsListScreen', () => {
     // Custom crag card rendered
     expect(screen.getByTestId('crags:card:custom-crag-1')).toBeTruthy();
     expect(screen.getByText('Cougar Canyon')).toBeTruthy();
+    expect(screen.getByTestId('crags:card:custom-crag-1:badge')).toBeTruthy();
 
     // Connected crag cards rendered
     expect(screen.getByTestId('crags:connected-card:101')).toBeTruthy();
     expect(screen.getByText('Heart Creek')).toBeTruthy();
-    expect(screen.getByText('Tap to add to workspace')).toBeTruthy();
+    expect(screen.getByText('0 topos in workspace')).toBeTruthy();
 
     expect(screen.getByTestId('crags:connected-card:102')).toBeTruthy();
     expect(screen.getByText('Wasootch Slabs')).toBeTruthy();
