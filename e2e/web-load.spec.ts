@@ -49,15 +49,17 @@ test.describe('mobile web shell', () => {
     await replaceTextInputValue(page.getByTestId('topo-info:name'), 'South Face');
     await page.getByTestId('topo-info:name').blur();
     await page.getByTestId('topo-info:description').fill('Morning shade.');
-    await page.getByRole('button', { name: '+ Add route' }).click();
+    await page.getByRole('button', { name: 'Close' }).last().click();
+
+    const createRouteId = await firstDynamicTestId(page, 'crag-detail:topo:', ':create-route');
+    await page.getByTestId(createRouteId).click();
+    await expect(page.getByTestId('route-edit:sheet')).toBeVisible();
     await expect(page.getByLabel('Route name')).toBeVisible();
 
-    const routeNameId = await firstDynamicTestId(page, 'topo-info:route:', ':name');
-    const routeGradeId = await firstDynamicTestId(page, 'topo-info:route:', ':grade');
-    await page.getByTestId(routeNameId).fill('Warmup Arete');
-    await page.getByTestId(routeNameId).blur();
-    await page.getByTestId(routeGradeId).fill('5.8');
-    await page.getByTestId(routeGradeId).blur();
+    await replaceTextInputValue(page.getByTestId('route-edit:name'), 'Warmup Arete');
+    await page.getByTestId('route-edit:name').blur();
+    await replaceTextInputValue(page.getByTestId('route-edit:grade'), '5.8');
+    await page.getByTestId('route-edit:grade').blur();
 
     await page.getByRole('button', { name: 'Close' }).last().click();
 

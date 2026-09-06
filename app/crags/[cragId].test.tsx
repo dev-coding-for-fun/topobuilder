@@ -82,6 +82,7 @@ const mockDetail: CragDetail = {
 
 describe('CragDetailScreen with TopoCard and UnmappedRoutesDrawer', () => {
   const mockCreateTopo = jest.fn();
+  const mockCreateRoute = jest.fn();
   const mockLinkTabvarRoute = jest.fn();
   const mockDeleteTopo = jest.fn();
   const mockLoadCragDetail = jest.fn();
@@ -91,6 +92,7 @@ describe('CragDetailScreen with TopoCard and UnmappedRoutesDrawer', () => {
     (useLocalSearchParams as jest.Mock).mockReturnValue({ cragId: 'crag-1' });
     mockLoadCragDetail.mockResolvedValue(mockDetail);
     mockCreateTopo.mockResolvedValue({ id: 'topo-new-1', name: 'Unmapped Classic' });
+    mockCreateRoute.mockResolvedValue({ id: 'route-new-1', topoId: 'topo-1', name: '' });
 
     (useTopoStore as unknown as jest.Mock).mockReturnValue({
       isReady: true,
@@ -103,7 +105,15 @@ describe('CragDetailScreen with TopoCard and UnmappedRoutesDrawer', () => {
       createTopo: mockCreateTopo,
       renameTopo: jest.fn(),
       deleteTopo: mockDeleteTopo,
+      createRoute: mockCreateRoute,
       linkTabvarRoute: mockLinkTabvarRoute,
+      loadTopoInfo: jest.fn().mockResolvedValue({
+        topo: mockDetail.sectors[0].topos[0],
+        routes: mockDetail.sectors[0].topos[0].routes,
+      }),
+      updateTopoDescription: jest.fn(),
+      updateRouteField: jest.fn(),
+      deleteRoute: jest.fn(),
     });
   });
 
@@ -186,7 +196,7 @@ describe('CragDetailScreen with TopoCard and UnmappedRoutesDrawer', () => {
     });
   });
 
-  it('hides Link Route button on TopoCard when sector has no unmapped connected routes', async () => {
+  it('hides Link Route button on TopoCard when sector has no unmapped connected routes, but keeps Add Route button', async () => {
     mockLoadCragDetail.mockResolvedValue({
       ...mockDetail,
       sectors: [
@@ -202,6 +212,34 @@ describe('CragDetailScreen with TopoCard and UnmappedRoutesDrawer', () => {
     await screen.findByTestId('crag-detail:sector-container:sector-1');
 
     expect(screen.queryByTestId('crag-detail:topo:topo-1:link-route')).toBeNull();
+    expect(screen.getByTestId('crag-detail:topo:topo-1:create-route')).toBeTruthy();
+  });
+
+  it('creates a new route and opens route edit sheet when tapping Add Route on TopoCard', async () => {
+    render(<CragDetailScreen />);
+
+    await screen.findByTestId('crag-detail:sector-container:sector-1');
+
+    const addRouteBtn = screen.getByTestId('crag-detail:topo:topo-1:create-route');
+    fireEvent.press(addRouteBtn);
+
+    await waitFor(() => {
+      expect(mockCreateRoute).toHaveBeenCalledWith('topo-1', { name: '' });
+      expect(screen.getByTestId('route-edit:sheet')).toBeTruthy();
+    });
+  });
+
+  it('opens route edit sheet when tapping a locally created route row on TopoCard', async () => {
+    render(<CragDetailScreen />);
+
+    await screen.findByTestId('crag-detail:sector-container:sector-1');
+
+    const routeRow = screen.getByTestId('crag-detail:topo:topo-1:route-row:local-route-1');
+    fireEvent.press(routeRow);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('route-edit:sheet')).toBeTruthy();
+    });
   });
 
   it('supports drag-and-drop linking of an unmapped route onto a topo card', async () => {

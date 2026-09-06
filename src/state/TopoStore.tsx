@@ -448,7 +448,12 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
 
   const updateRouteField = useCallback(
     async (route: Route, fields: RouteFieldUpdate) => {
-      const next: Route = { ...route, ...fields, updatedAt: nowIso() };
+      const next: Route = {
+        ...route,
+        ...fields,
+        name: fields.name ?? route.name ?? '',
+        updatedAt: nowIso(),
+      };
       await updateRouteRepo(requireDb(), next);
       return next;
     },

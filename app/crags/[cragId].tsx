@@ -3,7 +3,7 @@ import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import type { CragDetail, SectorWithTopos, TabvarRoute, TopoWithRoutes } from '@/domain/types';
+import type { CragDetail, Route, SectorWithTopos, TabvarRoute, TopoWithRoutes } from '@/domain/types';
 import { useTopoStore } from '@/state/TopoStore';
 import { ActionSheet, type ActionItem } from '@/ui/ActionSheet';
 import { Button } from '@/ui/Button';
@@ -15,6 +15,7 @@ import { SectorHeader } from '@/ui/SectorHeader';
 import { ShareSheet, type ShareScope } from '@/ui/ShareSheet';
 import { TopoCard } from '@/ui/TopoCard';
 import { TopoInfoSheet } from '@/ui/TopoInfoSheet';
+import { RouteEditSheet } from '@/ui/RouteEditSheet';
 import { UnmappedRoutesDrawer } from '@/ui/UnmappedRoutesDrawer';
 
 type Sheet =
@@ -30,6 +31,7 @@ type Sheet =
   | { kind: 'delete-topo'; topo: TopoWithRoutes }
   | { kind: 'pick-sector-for-topo' }
   | { kind: 'topo-info'; topoId: string }
+  | { kind: 'route-edit'; route: Route }
   | { kind: 'link-route-to-topo'; sector: SectorWithTopos; topo: TopoWithRoutes };
 
 export default function CragDetailScreen() {
@@ -45,6 +47,7 @@ export default function CragDetailScreen() {
     createTopo,
     renameTopo,
     deleteTopo,
+    createRoute,
     linkTabvarRoute,
   } = useTopoStore();
 
@@ -66,7 +69,10 @@ export default function CragDetailScreen() {
   const [draggingRoute, setDraggingRoute] = useState<TabvarRoute | null>(null);
   const [dragPosition, setDragPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [hoveredTopoId, setHoveredTopoId] = useState<string | null>(null);
+  const [screenOffset, setScreenOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [chipSize, setChipSize] = useState<{ width: number; height: number }>({ width: 140, height: 36 });
 
+  const screenRef = useRef<View>(null);
   const draggingRouteRef = useRef<TabvarRoute | null>(null);
   const hoveredTopoIdRef = useRef<string | null>(null);
   const topoCardRefs = useRef<
@@ -84,6 +90,14 @@ export default function CragDetailScreen() {
     hoveredTopoIdRef.current = hoveredTopoId;
   }, [hoveredTopoId]);
 
+  const updateScreenOffset = useCallback(() => {
+    screenRef.current?.measureInWindow?.((x, y) => {
+      if (typeof x === 'number' && typeof y === 'number') {
+        setScreenOffset({ x: Math.max(0, x), y: Math.max(0, y) });
+      }
+    });
+  }, []);
+
   const handleDragStart = useCallback(
     (route: TabvarRoute, pageX: number, pageY: number) => {
       draggingRouteRef.current = route;
@@ -91,6 +105,7 @@ export default function CragDetailScreen() {
       setDragPosition({ x: pageX, y: pageY });
       hoveredTopoIdRef.current = null;
       setHoveredTopoId(null);
+      updateScreenOffset();
 
       topoCardRefs.current.forEach((el, id) => {
         if (typeof el?.measureInWindow === 'function') {
@@ -100,21 +115,30 @@ export default function CragDetailScreen() {
         }
       });
     },
-    [],
+    [updateScreenOffset],
   );
 
   const handleDragMove = useCallback((pageX: number, pageY: number) => {
     setDragPosition({ x: pageX, y: pageY });
     let matchedTopoId: string | null = null;
     for (const [id, rect] of topoCardLayouts.current.entries()) {
-      if (
+      const isFingerInside =
         rect.width > 0 &&
         rect.height > 0 &&
         pageX >= rect.x &&
         pageX <= rect.x + rect.width &&
         pageY >= rect.y &&
-        pageY <= rect.y + rect.height
-      ) {
+        pageY <= rect.y + rect.height;
+
+      const isChipInside =
+        rect.width > 0 &&
+        rect.height > 0 &&
+        pageX >= rect.x &&
+        pageX <= rect.x + rect.width &&
+        pageY - 40 >= rect.y &&
+        pageY - 40 <= rect.y + rect.height;
+
+      if (isFingerInside || isChipInside) {
         matchedTopoId = id;
         break;
       }
@@ -171,6 +195,16 @@ export default function CragDetailScreen() {
     setSheet({ kind: 'link-route-to-topo', sector, topo });
   }
 
+  async function handleCreateRouteForTopo(topo: TopoWithRoutes) {
+    const newRoute = await createRoute(topo.id, { name: '' });
+    await refresh();
+    setSheet({ kind: 'route-edit', route: newRoute });
+  }
+
+  function handleEditRouteForTopo(route: Route) {
+    setSheet({ kind: 'route-edit', route });
+  }
+
   return (
     <Screen edges={['left', 'right', 'bottom']} style={styles.screen} testID="crag-detail:screen">
       <Stack.Screen
@@ -203,7 +237,8 @@ export default function CragDetailScreen() {
         }}
       />
 
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <View onLayout={updateScreenOffset} ref={screenRef} style={styles.screenContent}>
+        <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.summary} testID="crag-detail:summary">
           {sectors.length} {sectors.length === 1 ? 'sector' : 'sectors'} · {topoCount}{' '}
           {topoCount === 1 ? 'topo' : 'topos'}
@@ -230,6 +265,8 @@ export default function CragDetailScreen() {
                     key={topo.id}
                     canLinkRoute={hasEligibleRoutes}
                     isDropTarget={hoveredTopoId === topo.id}
+                    onCreateRoute={() => void handleCreateRouteForTopo(topo)}
+                    onEditRoute={(route) => handleEditRouteForTopo(route)}
                     onLinkRoute={
                       hasEligibleRoutes
                         ? () => handleOpenLinkRouteForTopo(sector, topo)
@@ -391,6 +428,14 @@ export default function CragDetailScreen() {
         topoId={sheet?.kind === 'topo-info' ? sheet.topoId : undefined}
       />
 
+      <RouteEditSheet
+        onAfterChange={() => {
+          void refresh();
+        }}
+        onClose={() => setSheet(undefined)}
+        route={sheet?.kind === 'route-edit' ? sheet.route : undefined}
+      />
+
 
 
       {/* ── Link route to topo from TopoCard ────────────── */}
@@ -420,17 +465,28 @@ export default function CragDetailScreen() {
       {/* ── Floating Drag Preview Chip ──── */}
       {draggingRoute ? (
         <View
+          onLayout={(e) => {
+            const { width, height } = e.nativeEvent.layout;
+            if (width > 0 && height > 0) {
+              setChipSize({ width, height });
+            }
+          }}
           pointerEvents="none"
           style={[
             styles.dragPreview,
+            hoveredTopoId ? styles.dragPreviewHovered : null,
             {
-              left: dragPosition.x - 70,
-              top: dragPosition.y - 35,
+              left: Math.max(8, dragPosition.x - screenOffset.x - (chipSize.width > 0 ? chipSize.width : 140) / 2),
+              top: Math.max(8, dragPosition.y - screenOffset.y - (chipSize.height > 0 ? chipSize.height : 36) - 16),
             },
           ]}
           testID="crag-detail:drag-preview"
         >
-          <Ionicons color="#2563EB" name="trail-sign" size={16} />
+          <Ionicons
+            color={hoveredTopoId ? '#16A34A' : '#2563EB'}
+            name="trail-sign"
+            size={16}
+          />
           <Text numberOfLines={1} style={styles.dragPreviewText}>
             {draggingRoute.name}
           </Text>
@@ -441,6 +497,7 @@ export default function CragDetailScreen() {
           ) : null}
         </View>
       ) : null}
+      </View>
     </Screen>
   );
 }
@@ -657,17 +714,23 @@ const styles = StyleSheet.create({
     borderColor: '#2563EB',
     borderRadius: 20,
     borderWidth: 1.5,
-    elevation: 8,
+    elevation: 12,
     flexDirection: 'row',
     gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 8,
     position: 'absolute',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    transform: [{ scale: 1.05 }],
     zIndex: 9999,
+  },
+  dragPreviewHovered: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#16A34A',
+    transform: [{ scale: 1.08 }],
   },
   dragPreviewDropBadge: {
     marginLeft: 2,
@@ -693,6 +756,9 @@ const styles = StyleSheet.create({
   },
   screen: {
     backgroundColor: '#F8FAFC',
+    flex: 1,
+  },
+  screenContent: {
     flex: 1,
   },
   scroll: {

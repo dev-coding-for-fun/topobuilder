@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
-import type { Route, Topo } from '@/domain/types';
+import type { Topo } from '@/domain/types';
 import { BottomSheet } from '@/ui/BottomSheet';
-import { InlineRouteEditor } from '@/ui/InlineRouteEditor';
 import { useTopoStore } from '@/state/TopoStore';
 import { interStyle } from '@/ui/fonts';
 
@@ -18,17 +17,14 @@ type Props = {
  * menu only (the editor never opens this — the editor is for drawing).
  */
 export function TopoInfoSheet({ topoId, onClose, onAfterChange }: Props) {
-  const { loadTopoInfo, renameTopo, updateTopoDescription, createRoute, updateRouteField, deleteRoute } =
-    useTopoStore();
+  const { loadTopoInfo, renameTopo, updateTopoDescription } = useTopoStore();
   const [topo, setTopo] = useState<Topo>();
-  const [routes, setRoutes] = useState<Route[]>([]);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
 
   useEffect(() => {
     if (!topoId) {
       setTopo(undefined);
-      setRoutes([]);
       return;
     }
     let cancelled = false;
@@ -36,7 +32,6 @@ export function TopoInfoSheet({ topoId, onClose, onAfterChange }: Props) {
       const info = await loadTopoInfo(topoId);
       if (cancelled || !info) return;
       setTopo(info.topo);
-      setRoutes(info.routes);
       setName(info.topo.name);
       setDescription(info.topo.description ?? '');
     })();
@@ -63,25 +58,6 @@ export function TopoInfoSheet({ topoId, onClose, onAfterChange }: Props) {
       setTopo({ ...topo, description: next });
       onAfterChange?.();
     }
-  }
-
-  async function handleAddRoute() {
-    if (!topo) return;
-    const r = await createRoute(topo.id, { name: '' });
-    setRoutes((rs) => [...rs, r]);
-    onAfterChange?.();
-  }
-
-  async function handleChangeRouteField(route: Route, fields: Partial<Route>) {
-    const next = await updateRouteField(route, fields);
-    setRoutes((rs) => rs.map((r) => (r.id === route.id ? next : r)));
-    onAfterChange?.();
-  }
-
-  async function handleDeleteRoute(route: Route) {
-    await deleteRoute(route.id);
-    setRoutes((rs) => rs.filter((r) => r.id !== route.id));
-    onAfterChange?.();
   }
 
   return (
@@ -129,22 +105,6 @@ export function TopoInfoSheet({ topoId, onClose, onAfterChange }: Props) {
               value={description}
             />
           </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Routes</Text>
-            <InlineRouteEditor
-              onAddRoute={() => {
-                void handleAddRoute();
-              }}
-              onChangeRouteField={(route, fields) => {
-                void handleChangeRouteField(route, fields);
-              }}
-              onDeleteRoute={(route) => {
-                void handleDeleteRoute(route);
-              }}
-              routes={routes}
-            />
-          </View>
         </View>
       ) : null}
     </BottomSheet>
@@ -179,13 +139,5 @@ const styles = StyleSheet.create({
   multiline: {
     minHeight: 80,
     textAlignVertical: 'top',
-  },
-  section: {
-    gap: 8,
-  },
-  sectionTitle: {
-    color: '#111827',
-    fontSize: 16,
-    ...interStyle('800'),
   },
 });

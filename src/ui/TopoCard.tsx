@@ -17,6 +17,8 @@ type Props = {
   onMenu: () => void;
   onLinkRoute?: () => void;
   canLinkRoute?: boolean;
+  onCreateRoute?: () => void;
+  onEditRoute?: (route: Route) => void;
   isDropTarget?: boolean;
   onRegisterTarget?: (topoId: string, target: TopoTargetMeasurable | null) => void;
   ref?: React.Ref<View>;
@@ -63,6 +65,8 @@ function TopoCardInner(
     onMenu,
     onLinkRoute,
     canLinkRoute = true,
+    onCreateRoute,
+    onEditRoute,
     isDropTarget,
     onRegisterTarget,
   } = props;
@@ -214,11 +218,28 @@ function TopoCardInner(
               ? `crag-detail:topo:${topo.id}:route:${item.route.id}:badge`
               : `crag-detail:topo:${topo.id}:tabvar-route:${item.route.appId}:badge`;
 
+            const isEditableLocal = isLocal && Boolean(onEditRoute);
+            const RowComponent = isEditableLocal ? Pressable : View;
+            const rowProps = isEditableLocal
+              ? {
+                  accessibilityLabel: `Edit route ${name}`,
+                  accessibilityRole: 'button' as const,
+                  onPress: () => onEditRoute?.(item.route),
+                  style: ({ pressed }: { pressed: boolean }) => [
+                    styles.routeRow,
+                    index > 0 && styles.routeRowBorder,
+                    pressed && styles.pressed,
+                  ],
+                }
+              : {
+                  style: [styles.routeRow, index > 0 && styles.routeRowBorder],
+                };
+
             return (
-              <View
+              <RowComponent
                 key={`${item.kind}-${routeId}`}
-                style={[styles.routeRow, index > 0 && styles.routeRowBorder]}
                 testID={`crag-detail:topo:${topo.id}:route-row:${routeId}`}
+                {...rowProps}
               >
                 <View style={styles.routeMarker}>
                   {isLocal && item.route.color ? (
@@ -242,7 +263,11 @@ function TopoCardInner(
                     {isLocal ? 'Local' : 'TABVAR'}
                   </Text>
                 </View>
-              </View>
+
+                {isEditableLocal ? (
+                  <Ionicons color="#94A3B8" name="chevron-forward" size={14} />
+                ) : null}
+              </RowComponent>
             );
           })
         ) : (
@@ -250,19 +275,34 @@ function TopoCardInner(
         )}
       </View>
 
-      {/* ── Link Route Action ────────────────────────────────────────────── */}
-      {onLinkRoute && canLinkRoute ? (
+      {/* ── Route Actions (Create & Link) ────────────────────────────────── */}
+      {onCreateRoute || (onLinkRoute && canLinkRoute) ? (
         <View style={styles.cardFooter}>
-          <Pressable
-            accessibilityLabel={`Link route to ${topo.name}`}
-            accessibilityRole="button"
-            onPress={onLinkRoute}
-            style={({ pressed }) => [styles.linkButton, pressed && styles.linkButtonPressed]}
-            testID={`crag-detail:topo:${topo.id}:link-route`}
-          >
-            <Ionicons color="#2563EB" name="add-circle-outline" size={16} />
-            <Text style={styles.linkButtonText}>Link Route</Text>
-          </Pressable>
+          {onCreateRoute ? (
+            <Pressable
+              accessibilityLabel={`Create route in ${topo.name}`}
+              accessibilityRole="button"
+              onPress={onCreateRoute}
+              style={({ pressed }) => [styles.linkButton, pressed && styles.linkButtonPressed]}
+              testID={`crag-detail:topo:${topo.id}:create-route`}
+            >
+              <Ionicons color="#2563EB" name="add-circle-outline" size={16} />
+              <Text style={styles.linkButtonText}>Add Route</Text>
+            </Pressable>
+          ) : null}
+
+          {onLinkRoute && canLinkRoute ? (
+            <Pressable
+              accessibilityLabel={`Link route to ${topo.name}`}
+              accessibilityRole="button"
+              onPress={onLinkRoute}
+              style={({ pressed }) => [styles.linkButton, pressed && styles.linkButtonPressed]}
+              testID={`crag-detail:topo:${topo.id}:link-route`}
+            >
+              <Ionicons color="#2563EB" name="link-outline" size={16} />
+              <Text style={styles.linkButtonText}>Link Route</Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
     </View>
@@ -297,6 +337,9 @@ const styles = StyleSheet.create({
   cardFooter: {
     borderTopColor: '#F1F5F9',
     borderTopWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },

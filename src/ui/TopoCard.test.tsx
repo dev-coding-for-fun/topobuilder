@@ -174,6 +174,74 @@ describe('TopoCard', () => {
     expect(screen.queryByTestId('crag-detail:topo:topo-1:link-route')).toBeNull();
   });
 
+  it('renders onCreateRoute button and invokes it on press', () => {
+    const onCreateRoute = jest.fn();
+    render(
+      <TopoCard
+        onCreateRoute={onCreateRoute}
+        onMenu={jest.fn()}
+        onOpen={jest.fn()}
+        onShare={jest.fn()}
+        topo={baseTopo}
+      />,
+    );
+
+    const createBtn = screen.getByTestId('crag-detail:topo:topo-1:create-route');
+    expect(createBtn).toBeTruthy();
+    fireEvent.press(createBtn);
+    expect(onCreateRoute).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders both onCreateRoute and onLinkRoute when both are available', () => {
+    render(
+      <TopoCard
+        onCreateRoute={jest.fn()}
+        onLinkRoute={jest.fn()}
+        onMenu={jest.fn()}
+        onOpen={jest.fn()}
+        onShare={jest.fn()}
+        topo={baseTopo}
+      />,
+    );
+
+    expect(screen.getByTestId('crag-detail:topo:topo-1:create-route')).toBeTruthy();
+    expect(screen.getByTestId('crag-detail:topo:topo-1:link-route')).toBeTruthy();
+  });
+
+  it('invokes onEditRoute when a local route row is pressed', () => {
+    const onEditRoute = jest.fn();
+    render(
+      <TopoCard
+        onEditRoute={onEditRoute}
+        onMenu={jest.fn()}
+        onOpen={jest.fn()}
+        onShare={jest.fn()}
+        topo={baseTopo}
+      />,
+    );
+
+    const localRow = screen.getByTestId('crag-detail:topo:topo-1:route-row:route-local-1');
+    fireEvent.press(localRow);
+    expect(onEditRoute).toHaveBeenCalledWith(mockLocalRoute);
+  });
+
+  it('does not invoke onEditRoute when a TABVAR route row is pressed', () => {
+    const onEditRoute = jest.fn();
+    render(
+      <TopoCard
+        onEditRoute={onEditRoute}
+        onMenu={jest.fn()}
+        onOpen={jest.fn()}
+        onShare={jest.fn()}
+        topo={baseTopo}
+      />,
+    );
+
+    const tabvarRow = screen.getByTestId('crag-detail:topo:topo-1:route-row:tabvar_route_101');
+    fireEvent.press(tabvarRow);
+    expect(onEditRoute).not.toHaveBeenCalled();
+  });
+
   it('renders drop target indicator when isDropTarget is true', () => {
     render(
       <TopoCard
