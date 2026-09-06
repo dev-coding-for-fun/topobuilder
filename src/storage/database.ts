@@ -52,8 +52,24 @@ async function openWithRetry(): Promise<TopoDatabase> {
   throw new Error(`Failed to open SQLite database after ${maxAttempts} attempts.${hint} ${baseMessage}`);
 }
 
+let transactionQueue: Promise<unknown> = Promise.resolve();
+
+export function serializeTransactions(db: TopoDatabase): TopoDatabase {
+  const originalWithTransaction = db.withTransactionAsync.bind(db);
+  db.withTransactionAsync = async function (callback: () => Promise<void>): Promise<void> {
+    const runTransaction = async () => {
+      await originalWithTransaction(callback);
+    };
+    const next = transactionQueue.then(runTransaction, runTransaction);
+    transactionQueue = next.catch(() => {});
+    await next;
+  };
+  return db;
+}
+
 async function configureDatabase(db: TopoDatabase): Promise<void> {
   await db.execAsync('PRAGMA journal_mode = WAL;');
+  serializeTransactions(db);
 }
 
 if (Platform.OS === 'web' && typeof window !== 'undefined' && !('__topoDbUnloadBound' in globalRef)) {
@@ -85,6 +101,7 @@ export function getDatabase(): Promise<TopoDatabase> {
 export async function resetDatabaseConnection(): Promise<void> {
   const pending = globalRef.__topoDbPromise;
   globalRef.__topoDbPromise = undefined;
+  transactionQueue = Promise.resolve();
   if (!pending) return;
   try {
     const db = await pending;

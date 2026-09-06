@@ -225,9 +225,21 @@ export default function EditorScreen() {
     setNextRouteMarkerNumberByTopo((numbers) => ({ ...numbers, [photo.id]: nextNumber }));
   }, [photo, savedAnnotations]);
 
+  useEffect(() => {
+    if (!photo || stampSizeByTopoRef.current[photo.id] !== undefined) {
+      return;
+    }
+    const stamps = savedAnnotations.filter(isStampAnnotation);
+    const lastStamp = stamps.at(-1);
+    const size = lastStamp ? stampSizeForAnnotation(lastStamp) : DEFAULT_STAMP_SIZE;
+    stampSizeByTopoRef.current[photo.id] = size;
+    setStampSizeByTopo((sizes) => ({ ...sizes, [photo.id]: size }));
+  }, [photo, savedAnnotations]);
+
   const savedStampSize = useMemo(() => {
-    const stamp = savedAnnotations.find(isStampAnnotation);
-    return stamp ? stampSizeForAnnotation(stamp) : DEFAULT_STAMP_SIZE;
+    const stamps = savedAnnotations.filter(isStampAnnotation);
+    const lastStamp = stamps.at(-1);
+    return lastStamp ? stampSizeForAnnotation(lastStamp) : DEFAULT_STAMP_SIZE;
   }, [savedAnnotations]);
   const currentStampSize = photo ? (stampSizeByTopo[photo.id] ?? savedStampSize) : DEFAULT_STAMP_SIZE;
   const annotations = useMemo(() => {
@@ -770,7 +782,9 @@ export default function EditorScreen() {
         : current,
     );
 
-    await Promise.all(updatedStamps.map((annotation) => updateAnnotation(annotation)));
+    for (const annotation of updatedStamps) {
+      await updateAnnotation(annotation);
+    }
     await refresh();
   }
 
@@ -865,6 +879,13 @@ export default function EditorScreen() {
     if (!previous || !photo) return;
     clearSelectionState();
     clearDraftState();
+    const previousStamps = previous.filter(isStampAnnotation);
+    const lastPreviousStamp = previousStamps.at(-1);
+    if (lastPreviousStamp) {
+      const size = stampSizeForAnnotation(lastPreviousStamp);
+      stampSizeByTopoRef.current[photo.id] = size;
+      setStampSizeByTopo((sizes) => ({ ...sizes, [photo.id]: size }));
+    }
     await replaceAnnotations(photo.id, previous);
     await refresh();
   }
@@ -874,6 +895,13 @@ export default function EditorScreen() {
     if (!next || !photo) return;
     clearSelectionState();
     clearDraftState();
+    const nextStamps = next.filter(isStampAnnotation);
+    const lastNextStamp = nextStamps.at(-1);
+    if (lastNextStamp) {
+      const size = stampSizeForAnnotation(lastNextStamp);
+      stampSizeByTopoRef.current[photo.id] = size;
+      setStampSizeByTopo((sizes) => ({ ...sizes, [photo.id]: size }));
+    }
     await replaceAnnotations(photo.id, next);
     await refresh();
   }

@@ -9,6 +9,7 @@ import {
   getDatabase,
   resetDatabaseConnection,
   runMigrations,
+  serializeTransactions,
   type TopoDatabase,
 } from './database';
 
@@ -167,5 +168,44 @@ describe('runMigrations', () => {
     expect(db.userVersion).toBe(CURRENT_SCHEMA_VERSION);
     expect(db.transactionCount).toBe(1);
     expect(db.execs.filter((record) => record.sql.includes('CREATE TABLE'))).toHaveLength(1);
+  });
+});
+
+describe('serializeTransactions', () => {
+  it('serializes concurrent withTransactionAsync invocations', async () => {
+    let activeTransactions = 0;
+    let maxConcurrentTransactions = 0;
+    const order: number[] = [];
+
+    const rawDb = {
+      withTransactionAsync: jest.fn(async (cb: () => Promise<void>) => {
+        activeTransactions += 1;
+        maxConcurrentTransactions = Math.max(maxConcurrentTransactions, activeTransactions);
+        try {
+          await cb();
+        } finally {
+          activeTransactions -= 1;
+        }
+      }),
+    } as unknown as TopoDatabase;
+
+    const db = serializeTransactions(rawDb);
+
+    const task1 = db.withTransactionAsync(async () => {
+      order.push(1);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      order.push(2);
+    });
+
+    const task2 = db.withTransactionAsync(async () => {
+      order.push(3);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      order.push(4);
+    });
+
+    await Promise.all([task1, task2]);
+
+    expect(maxConcurrentTransactions).toBe(1);
+    expect(order).toEqual([1, 2, 3, 4]);
   });
 });
