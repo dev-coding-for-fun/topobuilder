@@ -58,25 +58,82 @@ async function markTopoDirty(db: TopoDatabase, topoId: string, when: string): Pr
 }
 
 async function nextSortOrder(db: TopoDatabase, topoId: string): Promise<number> {
-  const row = await db.getFirstAsync<{ next_sort: number | null }>(
-    'SELECT COALESCE(MAX(sort_order) + 1, 0) AS next_sort FROM topo_tabvar_routes WHERE topo_id = ?',
+  const row = await db.getFirstAsync<{ next_sort_order: number | null }>(
+    `SELECT COALESCE(MAX(sort_order) + 1, 0) AS next_sort_order
+     FROM (
+       SELECT sort_order FROM routes WHERE topo_id = ?
+       UNION ALL
+       SELECT sort_order FROM topo_tabvar_routes WHERE topo_id = ?
+     )`,
+    topoId,
     topoId,
   );
-  return row?.next_sort ?? 0;
+  return row?.next_sort_order ?? 0;
+}
+
+export type TopoRouteIdentifier =
+  | { kind: 'local'; id: string }
+  | { kind: 'tabvar'; appId: string };
+
+export async function reorderTopoRoutes(
+  db: TopoDatabase,
+  topoId: string,
+  orderedRoutes: TopoRouteIdentifier[],
+): Promise<void> {
+  const now = nowIso();
+  await db.withTransactionAsync(async () => {
+    for (let index = 0; index < orderedRoutes.length; index++) {
+      const item = orderedRoutes[index];
+      if (item.kind === 'local') {
+        await db.runAsync(
+          'UPDATE routes SET sort_order = ?, updated_at = ? WHERE id = ? AND topo_id = ?',
+          index,
+          now,
+          item.id,
+          topoId,
+        );
+      } else {
+        await db.runAsync(
+          'UPDATE topo_tabvar_routes SET sort_order = ? WHERE topo_id = ? AND route_app_id = ?',
+          index,
+          topoId,
+          item.appId,
+        );
+      }
+    }
+    await markTopoDirty(db, topoId, now);
+  });
 }
 
 export async function linkTabvarRouteToTopo(
   db: TopoDatabase,
   topoId: string,
   routeAppId: string,
+  targetSortOrder?: number,
 ): Promise<void> {
   const now = nowIso();
-  const sortOrder = await nextSortOrder(db, topoId);
   await db.withTransactionAsync(async () => {
+    let sortOrder: number;
+    if (targetSortOrder !== undefined) {
+      sortOrder = Math.max(0, targetSortOrder);
+      await db.runAsync(
+        'UPDATE routes SET sort_order = sort_order + 1 WHERE topo_id = ? AND sort_order >= ?',
+        topoId,
+        sortOrder,
+      );
+      await db.runAsync(
+        'UPDATE topo_tabvar_routes SET sort_order = sort_order + 1 WHERE topo_id = ? AND sort_order >= ?',
+        topoId,
+        sortOrder,
+      );
+    } else {
+      sortOrder = await nextSortOrder(db, topoId);
+    }
+
     await db.runAsync(
       `INSERT INTO topo_tabvar_routes (topo_id, route_app_id, sort_order, created_at)
        VALUES (?, ?, ?, ?)
-       ON CONFLICT(topo_id, route_app_id) DO NOTHING`,
+       ON CONFLICT(topo_id, route_app_id) DO UPDATE SET sort_order = excluded.sort_order`,
       topoId,
       routeAppId,
       sortOrder,
@@ -106,15 +163,18 @@ export async function listTabvarRoutesForTopo(
   db: TopoDatabase,
   topoId: string,
 ): Promise<TabvarRoute[]> {
-  const rows = await db.getAllAsync<TabvarRouteRow>(
-    `SELECT routes.*
+  const rows = await db.getAllAsync<TabvarRouteRow & { topo_sort_order: number | null }>(
+    `SELECT routes.*, ttr.sort_order AS topo_sort_order
      FROM tabvar_routes routes
      JOIN topo_tabvar_routes ttr ON ttr.route_app_id = routes.app_id
      WHERE ttr.topo_id = ?
      ORDER BY ttr.sort_order ASC, routes.name ASC`,
     topoId,
   );
-  return rows.map(mapTabvarRoute);
+  return rows.map((row) => ({
+    ...mapTabvarRoute(row),
+    sortOrder: row.topo_sort_order ?? row.sort_order ?? undefined,
+  }));
 }
 
 export async function countTabvarRoutesForTopo(

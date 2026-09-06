@@ -1,14 +1,30 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
-import { forwardRef, useEffect, useRef } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { forwardRef, useEffect, useMemo, useRef } from 'react';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  Easing,
+  type SharedValue,
+  useAnimatedReaction,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 
 import type { Route, TabvarRoute, TopoWithRoutes } from '@/domain/types';
 import { interStyle } from '@/ui/fonts';
 
+export const ROUTE_ROW_HEIGHT = 44;
+
 export type TopoTargetMeasurable = {
   measureInWindow: (cb: (x: number, y: number, width: number, height: number) => void) => void;
+  getSlotIndex: (pageY: number, isReorder: boolean) => number;
 };
+
+export type UnifiedRoute =
+  | { kind: 'local'; route: Route; sortOrder: number }
+  | { kind: 'tabvar'; route: TabvarRoute; sortOrder: number };
 
 type Props = {
   topo: TopoWithRoutes;
@@ -21,13 +37,145 @@ type Props = {
   onEditRoute?: (route: Route) => void;
   onUnlinkRoute?: (route: TabvarRoute) => void;
   isDropTarget?: boolean;
+  hoverSlotIndex?: number;
+  dragItem?:
+    | { kind: 'unmapped'; name: string; grade?: string }
+    | {
+        kind: 'topo-route';
+        topoId: string;
+        index: number;
+        name: string;
+        grade?: string;
+        routeKind?: 'local' | 'tabvar';
+      }
+    | null;
+  onRouteDragStart?: (
+    topoId: string,
+    item: UnifiedRoute,
+    index: number,
+    pageX: number,
+    pageY: number,
+  ) => void;
+  onDragMove?: (pageX: number, pageY: number) => void;
+  onDragEnd?: () => void;
   onRegisterTarget?: (topoId: string, target: TopoTargetMeasurable | null) => void;
   ref?: React.Ref<View>;
 };
 
-type UnifiedRoute =
-  | { kind: 'local'; route: Route; sortOrder: number }
-  | { kind: 'tabvar'; route: TabvarRoute; sortOrder: number };
+function measureNode(
+  node: any,
+  cb: (x: number, y: number, width: number, height: number) => void,
+) {
+  if (!node) {
+    cb(0, 0, 0, 0);
+    return;
+  }
+  if (typeof node.getBoundingClientRect === 'function') {
+    const rect = node.getBoundingClientRect();
+    cb(rect.left, rect.top, rect.width, rect.height);
+    return;
+  }
+  if (typeof node.measureInWindow === 'function') {
+    node.measureInWindow((x: number, y: number, w: number, h: number) => {
+      cb(x, y, w, h);
+    });
+    return;
+  }
+  cb(0, 0, 0, 0);
+}
+
+function AnimatedRouteRow({
+  children,
+  index,
+  activeDragSourceIndex,
+  activeHoverSlotIndex,
+  isIncomingDrag,
+  dragTranslationY,
+}: {
+  children: React.ReactNode;
+  index: number;
+  activeDragSourceIndex: SharedValue<number>;
+  activeHoverSlotIndex: SharedValue<number>;
+  isIncomingDrag: SharedValue<boolean>;
+  dragTranslationY: SharedValue<number>;
+}) {
+  const translateY = useSharedValue(0);
+
+  useEffect(() => {
+    translateY.value = 0;
+  }, [index, translateY]);
+
+  useAnimatedReaction(
+    () => {
+      const source = activeDragSourceIndex.value;
+      const hover = activeHoverSlotIndex.value;
+      const incoming = isIncomingDrag.value;
+
+      if (incoming) {
+        if (hover >= 0 && index >= hover) {
+          return ROUTE_ROW_HEIGHT;
+        }
+        return 0;
+      }
+
+      if (source >= 0 && hover >= 0 && source !== hover) {
+        if (index === source) return 0;
+
+        if (hover > source) {
+          if (index > source && index <= hover) {
+            return -ROUTE_ROW_HEIGHT;
+          }
+        } else {
+          if (index >= hover && index < source) {
+            return ROUTE_ROW_HEIGHT;
+          }
+        }
+      }
+      return 0;
+    },
+    (targetOffset, prevOffset) => {
+      if (targetOffset !== prevOffset) {
+        translateY.value = withTiming(targetOffset, {
+          duration: 180,
+          easing: Easing.out(Easing.cubic),
+        });
+      }
+    },
+    [index],
+  );
+
+  const animatedStyle = useAnimatedStyle(() => {
+    const isDragging = activeDragSourceIndex.value === index;
+    if (isDragging) {
+      return {
+        transform: [
+          { translateY: dragTranslationY.value },
+          { scale: 1.025 },
+        ],
+        zIndex: 100,
+        elevation: 6,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 8,
+      };
+    }
+    return {
+      transform: [
+        { translateY: translateY.value },
+        { scale: 1 },
+      ],
+      zIndex: 0,
+      elevation: 0,
+      shadowOpacity: 0,
+      backgroundColor: 'transparent',
+    };
+  });
+
+  return <Animated.View style={animatedStyle}>{children}</Animated.View>;
+}
 
 function formatSummary(localRoutes: Route[], tabvarRoutes: TabvarRoute[]): string {
   const localCount = localRoutes.length;
@@ -55,6 +203,59 @@ function formatSummary(localRoutes: Route[], tabvarRoutes: TabvarRoute[]): strin
   return `${localCount} ${localCount === 1 ? 'local route' : 'local routes'}`;
 }
 
+function RouteRowDragHandle({
+  testID,
+  accessibilityLabel,
+  onDragStart,
+  onDragMove,
+  onDragEnd,
+}: {
+  testID: string;
+  accessibilityLabel: string;
+  onDragStart?: (pageX: number, pageY: number) => void;
+  onDragMove?: (pageX: number, pageY: number) => void;
+  onDragEnd?: () => void;
+}) {
+  const onDragStartRef = useRef(onDragStart);
+  onDragStartRef.current = onDragStart;
+  const onDragMoveRef = useRef(onDragMove);
+  onDragMoveRef.current = onDragMove;
+  const onDragEndRef = useRef(onDragEnd);
+  onDragEndRef.current = onDragEnd;
+
+  const panGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .runOnJS(true)
+        .minDistance(4)
+        .onStart((e) => {
+          onDragStartRef.current?.(e.absoluteX, e.absoluteY);
+        })
+        .onUpdate((e) => {
+          onDragMoveRef.current?.(e.absoluteX, e.absoluteY);
+        })
+        .onFinalize(() => {
+          onDragEndRef.current?.();
+        }),
+    [],
+  );
+
+  return (
+    <GestureDetector gesture={panGesture}>
+      <View
+        accessibilityLabel={accessibilityLabel}
+        accessibilityRole="button"
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        style={styles.dragHandle}
+        testID={testID}
+      >
+        <Ionicons color="#94A3B8" name="reorder-two-outline" size={20} />
+      </View>
+    </GestureDetector>
+  );
+}
+
+
 function TopoCardInner(
   props: Props,
   forwardedRef: React.ForwardedRef<View>,
@@ -70,36 +271,27 @@ function TopoCardInner(
     onEditRoute,
     onUnlinkRoute,
     isDropTarget,
+    hoverSlotIndex,
+    dragItem,
+    onRouteDragStart,
+    onDragMove,
+    onDragEnd,
     onRegisterTarget,
   } = props;
   const activeRef = forwardedRef || props.ref;
   const rootRef = useRef<View>(null);
-
-  useEffect(() => {
-    const target: TopoTargetMeasurable = {
-      measureInWindow: (cb) => {
-        const node = rootRef.current;
-        let called = false;
-        if (node && typeof (node as any).measureInWindow === 'function') {
-          try {
-            (node as any).measureInWindow((x: number, y: number, w: number, h: number) => {
-              called = true;
-              cb(x, y, w, h);
-            });
-          } catch {
-            // fallback below
-          }
-        }
-        if (!called) {
-          cb(0, 100, 300, 200);
-        }
-      },
-    };
-    onRegisterTarget?.(topo.id, target);
-    return () => {
-      onRegisterTarget?.(topo.id, null);
-    };
-  }, [topo.id, onRegisterTarget]);
+  const routesContainerRef = useRef<View>(null);
+  const cardWindowYRef = useRef<number>(100);
+  const routesContainerWindowYRef = useRef<number | undefined>(undefined);
+  const routesContainerLayoutRef = useRef<{ y: number; height: number }>({ y: 80, height: 0 });
+  const rowLayoutsRef = useRef<{ y: number; height: number }[]>([]);
+  const stableRowLayoutsRef = useRef<{ y: number; height: number }[]>([]);
+  const dragStartYRef = useRef<number>(0);
+  const dragSourceIndexRef = useRef<number>(-1);
+  const dragTranslationY = useSharedValue(0);
+  const activeDragSourceIndex = useSharedValue<number>(-1);
+  const activeHoverSlotIndex = useSharedValue<number>(-1);
+  const isIncomingDrag = useSharedValue<boolean>(false);
 
   const localRoutes = topo.routes ?? [];
   const tabvarRoutes = topo.tabvarRoutes ?? [];
@@ -113,9 +305,94 @@ function TopoCardInner(
     ...tabvarRoutes.map((r, i) => ({
       kind: 'tabvar' as const,
       route: r,
-      sortOrder: r.sortOrder ?? i + 100,
+      sortOrder: r.sortOrder ?? i,
     })),
   ].sort((a, b) => a.sortOrder - b.sortOrder);
+
+  const combinedRoutesRef = useRef(combinedRoutes);
+  combinedRoutesRef.current = combinedRoutes;
+
+  const snapshotRowLayouts = () => {
+    stableRowLayoutsRef.current = rowLayoutsRef.current.slice();
+  };
+
+  const getSlotIndex = (pageY: number, isReorder: boolean): number => {
+    const routes = combinedRoutesRef.current;
+    const count = routes.length;
+    if (count === 0) return 0;
+
+    const containerY =
+      routesContainerWindowYRef.current !== undefined
+        ? routesContainerWindowYRef.current
+        : cardWindowYRef.current + routesContainerLayoutRef.current.y;
+    const relY = pageY - containerY;
+
+    if (isReorder) {
+      const sourceIndex =
+        dragSourceIndexRef.current >= 0 && dragSourceIndexRef.current < count
+          ? dragSourceIndexRef.current
+          : 0;
+      const initialTop = sourceIndex * ROUTE_ROW_HEIGHT;
+      // Following Varun Kukade's Reanimated midpoint formula:
+      const dragTranslationY =
+        dragStartYRef.current > 0 ? pageY - dragStartYRef.current : relY - initialTop;
+      const currentTop = initialTop + dragTranslationY;
+      const rawSlot = Math.floor((currentTop + ROUTE_ROW_HEIGHT / 2) / ROUTE_ROW_HEIGHT);
+      return Math.max(0, Math.min(count - 1, rawSlot));
+    } else {
+      // Incoming unmapped route:
+      const rawSlot = Math.floor((relY + ROUTE_ROW_HEIGHT / 2) / ROUTE_ROW_HEIGHT);
+      return Math.max(0, Math.min(count, rawSlot));
+    }
+  };
+
+  useEffect(() => {
+    const target: TopoTargetMeasurable = {
+      measureInWindow: (cb) => {
+        snapshotRowLayouts();
+        const node = rootRef.current;
+        let called = false;
+        measureNode(node, (x, y, w, h) => {
+          if (w > 0 || h > 0) {
+            called = true;
+            cardWindowYRef.current = y;
+            cb(x, y, w, h);
+          }
+        });
+        const containerNode = routesContainerRef.current;
+        measureNode(containerNode, (_x, y, _w, h) => {
+          if (h > 0) {
+            routesContainerWindowYRef.current = y;
+          }
+        });
+        if (!called) {
+          cardWindowYRef.current = 100;
+          cb(0, 100, 300, 200);
+        }
+      },
+      getSlotIndex,
+    };
+    onRegisterTarget?.(topo.id, target);
+    return () => {
+      onRegisterTarget?.(topo.id, null);
+    };
+  }, [topo.id, onRegisterTarget]);
+
+  const isIncomingOnThisTopo =
+    Boolean(isDropTarget) &&
+    dragItem?.kind === 'unmapped' &&
+    combinedRoutes.length > 0;
+
+  useEffect(() => {
+    if (isIncomingOnThisTopo) {
+      isIncomingDrag.value = true;
+      activeHoverSlotIndex.value = typeof hoverSlotIndex === 'number' ? hoverSlotIndex : -1;
+    } else if (!isDropTarget && isIncomingDrag.value) {
+      isIncomingDrag.value = false;
+      activeHoverSlotIndex.value = -1;
+    }
+  }, [isIncomingOnThisTopo, isDropTarget, hoverSlotIndex, isIncomingDrag, activeHoverSlotIndex]);
+
 
   const summary = formatSummary(localRoutes, tabvarRoutes);
 
@@ -128,18 +405,9 @@ function TopoCardInner(
           (activeRef as any).current = node;
         }
       }}
-      style={[styles.card, isDropTarget && styles.cardDropTarget]}
+      style={styles.card}
       testID={`crag-detail:topo:${topo.id}`}
     >
-      {isDropTarget ? (
-        <View
-          style={styles.dropBadge}
-          testID={`crag-detail:topo:${topo.id}:drop-target`}
-        >
-          <Ionicons color="#2563EB" name="add-circle" size={15} />
-          <Text style={styles.dropBadgeText}>Drop to link route</Text>
-        </View>
-      ) : null}
 
       {/* ── Topo Header (Thumbnail on the far left) ────────────────────────── */}
       <View style={styles.header}>
@@ -156,7 +424,7 @@ function TopoCardInner(
               contentFit="cover"
               recyclingKey={topo.photoUri}
               source={{ uri: topo.photoUri }}
-              style={styles.thumbnailImage}
+              style={styles.thumbnailImage as any}
               testID={`crag-detail:topo:${topo.id}:thumb-image`}
             />
           ) : (
@@ -209,82 +477,152 @@ function TopoCardInner(
       </View>
 
       {/* ── Nested Route List ───────────────────────────────────────────── */}
-      <View style={styles.routesContainer} testID={`crag-detail:topo:${topo.id}:routes-list`}>
+      <View
+        ref={routesContainerRef}
+        onLayout={(e) => {
+          routesContainerLayoutRef.current = e.nativeEvent.layout;
+        }}
+        style={[
+          styles.routesContainer,
+          isDropTarget && styles.routesContainerDropTarget,
+          isIncomingOnThisTopo && { paddingBottom: 10 + ROUTE_ROW_HEIGHT },
+        ]}
+        testID={
+          isDropTarget
+            ? `crag-detail:topo:${topo.id}:drop-target`
+            : `crag-detail:topo:${topo.id}:routes-list`
+        }
+      >
         {combinedRoutes.length > 0 ? (
-          combinedRoutes.map((item, index) => {
-            const isLocal = item.kind === 'local';
-            const name = isLocal ? item.route.name || `Route ${index + 1}` : item.route.name;
-            const grade = isLocal ? item.route.grade : item.route.gradeYds;
-            const routeId = isLocal ? item.route.id : item.route.appId;
-            const badgeTestId = isLocal
-              ? `crag-detail:topo:${topo.id}:route:${item.route.id}:badge`
-              : `crag-detail:topo:${topo.id}:tabvar-route:${item.route.appId}:badge`;
+          <>
+            {combinedRoutes.map((item, index) => {
+              const isLocal = item.kind === 'local';
+              const name = isLocal ? item.route.name || `Route ${index + 1}` : item.route.name;
+              const grade = isLocal ? item.route.grade : item.route.gradeYds;
+              const routeId = isLocal ? item.route.id : item.route.appId;
 
-            const isEditableLocal = isLocal && Boolean(onEditRoute);
-            const RowComponent = isEditableLocal ? Pressable : View;
-            const rowProps = isEditableLocal
-              ? {
-                  accessibilityLabel: `Edit route ${name}`,
-                  accessibilityRole: 'button' as const,
-                  onPress: () => onEditRoute?.(item.route),
-                  style: ({ pressed }: { pressed: boolean }) => [
-                    styles.routeRow,
-                    index > 0 && styles.routeRowBorder,
-                    pressed && styles.pressed,
-                  ],
-                }
-              : {
-                  style: [styles.routeRow, index > 0 && styles.routeRowBorder],
-                };
+              let displayMarker = index + 1;
+              if (typeof hoverSlotIndex === 'number' && isIncomingOnThisTopo) {
+                if (index >= hoverSlotIndex) displayMarker = index + 2;
+              }
 
-            return (
-              <RowComponent
-                key={`${item.kind}-${routeId}`}
-                testID={`crag-detail:topo:${topo.id}:route-row:${routeId}`}
-                {...rowProps}
-              >
-                <View style={styles.routeMarker}>
-                  {isLocal && item.route.color ? (
-                    <View style={[styles.colorDot, { backgroundColor: item.route.color }]} />
-                  ) : null}
-                  <Text style={styles.markerIndex}>{index + 1}</Text>
-                </View>
+              const isEditableLocal = isLocal && Boolean(onEditRoute);
 
-                <View style={styles.routeNameContainer}>
-                  <Text numberOfLines={1} style={styles.routeName}>
-                    {name}
-                  </Text>
-                  {grade ? <Text style={styles.routeGrade}>{grade}</Text> : null}
-                </View>
-
-                <View
-                  style={[styles.badge, isLocal ? styles.localBadge : styles.tabvarBadge]}
-                  testID={badgeTestId}
+              return (
+                <AnimatedRouteRow
+                  activeDragSourceIndex={activeDragSourceIndex}
+                  activeHoverSlotIndex={activeHoverSlotIndex}
+                  dragTranslationY={dragTranslationY}
+                  index={index}
+                  isIncomingDrag={isIncomingDrag}
+                  key={`${item.kind}-${routeId}`}
                 >
-                  <Text style={[styles.badgeText, isLocal ? styles.localBadgeText : styles.tabvarBadgeText]}>
-                    {isLocal ? 'Local' : 'TABVAR'}
-                  </Text>
-                </View>
-
-                {!isLocal && onUnlinkRoute ? (
-                  <Pressable
-                    accessibilityLabel={`Unlink ${name} from ${topo.name}`}
-                    accessibilityRole="button"
-                    hitSlop={8}
-                    onPress={() => onUnlinkRoute(item.route)}
-                    style={({ pressed }) => [styles.unlinkButton, pressed && styles.pressed]}
-                    testID={`crag-detail:topo:${topo.id}:tabvar-route:${item.route.appId}:unlink`}
+                  <View
+                    onLayout={(e) => {
+                      rowLayoutsRef.current[index] = e.nativeEvent.layout;
+                    }}
+                    style={[
+                      styles.routeRow,
+                      index > 0 && styles.routeRowBorder,
+                    ]}
                   >
-                    <Ionicons color="#64748B" name="unlink-outline" size={16} />
-                  </Pressable>
-                ) : null}
+                    {onRouteDragStart ? (
+                      <RouteRowDragHandle
+                        accessibilityLabel={`Drag to reorder ${name}`}
+                        onDragEnd={() => {
+                          dragTranslationY.value = 0;
+                          dragSourceIndexRef.current = -1;
+                          activeDragSourceIndex.value = -1;
+                          activeHoverSlotIndex.value = -1;
+                          isIncomingDrag.value = false;
+                          onDragEnd?.();
+                        }}
+                        onDragMove={(pageX, pageY) => {
+                          dragTranslationY.value = pageY - dragStartYRef.current;
+                          const slot = getSlotIndex(pageY, true);
+                          if (slot !== activeHoverSlotIndex.value) {
+                            activeHoverSlotIndex.value = slot;
+                          }
+                          onDragMove?.(pageX, pageY);
+                        }}
+                        onDragStart={(pageX, pageY) => {
+                          dragStartYRef.current = pageY;
+                          dragSourceIndexRef.current = index;
+                          activeDragSourceIndex.value = index;
+                          activeHoverSlotIndex.value = index;
+                          isIncomingDrag.value = false;
+                          dragTranslationY.value = 0;
+                          snapshotRowLayouts();
+                          onRouteDragStart(topo.id, item, index, pageX, pageY);
+                        }}
+                        testID={
+                          isLocal
+                            ? `crag-detail:topo:${topo.id}:route:${item.route.id}:drag-handle`
+                            : `crag-detail:topo:${topo.id}:tabvar-route:${item.route.appId}:drag-handle`
+                        }
+                      />
+                    ) : null}
 
-                {isEditableLocal ? (
-                  <Ionicons color="#94A3B8" name="chevron-forward" size={14} />
-                ) : null}
-              </RowComponent>
-            );
-          })
+                    <Pressable
+                      accessibilityLabel={isEditableLocal ? `Edit route ${name}` : undefined}
+                      accessibilityRole={isEditableLocal ? 'button' : undefined}
+                      disabled={!isEditableLocal}
+                      onPress={isEditableLocal ? () => onEditRoute?.(item.route) : undefined}
+                      style={({ pressed }) => [
+                        styles.routeMainContent,
+                        isEditableLocal && pressed && styles.pressed,
+                      ]}
+                      testID={`crag-detail:topo:${topo.id}:route-row:${routeId}`}
+                    >
+                      <View style={styles.routeMarker}>
+                        {isLocal && item.route.color ? (
+                          <View style={[styles.colorDot, { backgroundColor: item.route.color }]} />
+                        ) : null}
+                        <Text style={styles.markerIndex}>{displayMarker}</Text>
+                      </View>
+
+                      <View style={styles.routeNameContainer}>
+                        <Text numberOfLines={1} style={styles.routeName}>
+                          {name}
+                        </Text>
+                        {grade ? <Text style={styles.routeGrade}>{grade}</Text> : null}
+                      </View>
+
+                      <View
+                        style={[styles.badge, isLocal ? styles.localBadge : styles.tabvarBadge]}
+                        testID={
+                          isLocal
+                            ? `crag-detail:topo:${topo.id}:route:${item.route.id}:badge`
+                            : `crag-detail:topo:${topo.id}:tabvar-route:${item.route.appId}:badge`
+                        }
+                      >
+                        <Text style={[styles.badgeText, isLocal ? styles.localBadgeText : styles.tabvarBadgeText]}>
+                          {isLocal ? 'Local' : 'TABVAR'}
+                        </Text>
+                      </View>
+
+                      {isEditableLocal ? (
+                        <Ionicons color="#94A3B8" name="chevron-forward" size={14} />
+                      ) : null}
+                    </Pressable>
+
+                    {!isLocal && onUnlinkRoute ? (
+                      <Pressable
+                        accessibilityLabel={`Unlink ${name} from ${topo.name}`}
+                        accessibilityRole="button"
+                        hitSlop={8}
+                        onPress={() => onUnlinkRoute(item.route)}
+                        style={({ pressed }) => [styles.unlinkButton, pressed && styles.pressed]}
+                        testID={`crag-detail:topo:${topo.id}:tabvar-route:${item.route.appId}:unlink`}
+                      >
+                        <Ionicons color="#64748B" name="unlink-outline" size={16} />
+                      </Pressable>
+                    ) : null}
+                  </View>
+                </AnimatedRouteRow>
+              );
+            })}
+          </>
         ) : (
           <Text style={styles.emptyRoutesText}>No routes mapped on this topo yet.</Text>
         )}
@@ -344,14 +682,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: 'hidden',
   },
-  cardDropTarget: {
-    backgroundColor: '#EFF6FF',
-    borderColor: '#2563EB',
-    borderWidth: 2,
-  },
   cardFooter: {
     borderTopColor: '#F1F5F9',
-    borderTopWidth: 1,
+    borderTopWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
@@ -363,20 +696,12 @@ const styles = StyleSheet.create({
     height: 8,
     width: 8,
   },
-  dropBadge: {
+  dragHandle: {
     alignItems: 'center',
-    backgroundColor: '#DBEAFE',
-    borderBottomColor: '#BFDBFE',
-    borderBottomWidth: 1,
-    flexDirection: 'row',
-    gap: 6,
     justifyContent: 'center',
-    paddingVertical: 6,
-  },
-  dropBadgeText: {
-    color: '#1E40AF',
-    fontSize: 12,
-    ...interStyle('700'),
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+    ...(Platform.OS === 'web' ? ({ cursor: 'grab', userSelect: 'none' } as any) : null),
   },
   emptyRoutesText: {
     color: '#94A3B8',
@@ -446,6 +771,12 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.6,
   },
+  routeMainContent: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: 10,
+  },
   routeName: {
     color: '#0F172A',
     fontSize: 14,
@@ -480,11 +811,15 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
   },
   routesContainer: {
-    borderTopColor: '#F1F5F9',
-    borderTopWidth: 1,
+    borderColor: '#F1F5F9',
+    borderWidth: 1,
     paddingBottom: 10,
-    paddingHorizontal: 14,
+    paddingHorizontal: 13,
     paddingTop: 8,
+  },
+  routesContainerDropTarget: {
+    borderColor: '#2563EB',
+    backgroundColor: '#F8FAFC',
   },
   tabvarBadge: {
     backgroundColor: '#EFF6FF',

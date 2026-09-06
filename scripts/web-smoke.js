@@ -104,6 +104,122 @@ async function main() {
   await page.getByText('South Face').waitFor({ state: 'visible', timeout: 15_000 });
   await page.getByText('5.8 · Warmup Arete').waitFor({ state: 'visible', timeout: 15_000 });
 
+  // Create a second route to test route reordering by dragging
+  await page.getByTestId(createRouteId).click();
+  await page.getByTestId('route-edit:sheet').waitFor({ state: 'visible', timeout: 15_000 });
+  await page.getByLabel('Route name').waitFor({ state: 'visible', timeout: 15_000 });
+  await replaceTextInputValue(page.getByTestId('route-edit:name'), 'Crux Pitch');
+  await page.getByTestId('route-edit:name').blur();
+  await replaceTextInputValue(page.getByTestId('route-edit:grade'), '5.11a');
+  await page.getByTestId('route-edit:grade').blur();
+  await page.getByTestId('route-edit:sheet').getByRole('button', { name: 'Close' }).click();
+  await page.getByText('Crux Pitch').waitFor({ state: 'visible', timeout: 15_000 });
+  await page.getByText('5.11a').waitFor({ state: 'visible', timeout: 15_000 });
+
+  // Locate the drag handles for both routes
+  const dragHandles = page.locator('[data-testid$=":drag-handle"]');
+  await dragHandles.nth(1).waitFor({ state: 'visible', timeout: 15_000 });
+
+  const firstBox = await dragHandles.nth(0).boundingBox();
+  const secondBox = await dragHandles.nth(1).boundingBox();
+  if (!firstBox || !secondBox) {
+    throw new Error('Could not find drag handles for reorder test');
+  }
+
+  // Drag the second route (Crux Pitch) upwards past the first route (Warmup Arete)
+  await page.mouse.move(secondBox.x + secondBox.width / 2, secondBox.y + secondBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(firstBox.x + firstBox.width / 2, firstBox.y - 20, { steps: 10 });
+  await new Promise((r) => setTimeout(r, 100));
+
+  // Release mouse to drop at slot 0
+  await page.mouse.up();
+
+  // Wait for reordered list: Crux Pitch should now appear first, Warmup Arete second
+  await page.waitForFunction(() => {
+    const rows = Array.from(document.querySelectorAll('[data-testid*=":route-row:"]'));
+    return (
+      rows.length >= 2 &&
+      rows[0]?.textContent?.includes('Crux Pitch') &&
+      rows[1]?.textContent?.includes('Warmup Arete')
+    );
+  }, { timeout: 10_000 });
+
+  // Reload page to confirm order persistence in SQLite
+  await new Promise((r) => setTimeout(r, 600));
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => {
+    const rows = Array.from(document.querySelectorAll('[data-testid*=":route-row:"]'));
+    return (
+      rows.length >= 2 &&
+      rows[0]?.textContent?.includes('Crux Pitch') &&
+      rows[1]?.textContent?.includes('Warmup Arete')
+    );
+  }, { timeout: 10_000 });
+
+  // Create a third route to test dropping between 2 others
+  await page.getByTestId(createRouteId).click();
+  await page.getByTestId('route-edit:sheet').waitFor({ state: 'visible', timeout: 15_000 });
+  await page.getByLabel('Route name').waitFor({ state: 'visible', timeout: 15_000 });
+  await replaceTextInputValue(page.getByTestId('route-edit:name'), 'Directissima');
+  await page.getByTestId('route-edit:name').blur();
+  await replaceTextInputValue(page.getByTestId('route-edit:grade'), '5.12a');
+  await page.getByTestId('route-edit:grade').blur();
+  await page.getByTestId('route-edit:sheet').getByRole('button', { name: 'Close' }).click();
+  await page.getByText('Directissima').waitFor({ state: 'visible', timeout: 15_000 });
+
+  // There are now 3 routes:
+  // 0: Crux Pitch
+  // 1: Warmup Arete
+  // 2: Directissima
+  // Drag Directissima (row 2) UP to drop it BETWEEN Crux Pitch (row 0) and Warmup Arete (row 1)
+  const threeDragHandles = page.locator('[data-testid$=":drag-handle"]');
+  await threeDragHandles.nth(2).waitFor({ state: 'visible', timeout: 15_000 });
+
+  const box0 = await threeDragHandles.nth(0).boundingBox();
+  const box1 = await threeDragHandles.nth(1).boundingBox();
+  const box2 = await threeDragHandles.nth(2).boundingBox();
+  if (!box0 || !box1 || !box2) {
+    throw new Error('Could not find all 3 drag handles for drop-between test');
+  }
+
+  // Target the slot between box0 (Crux Pitch) and box1 (Warmup Arete)
+  const targetBetweenY = (box0.y + box0.height + box1.y) / 2;
+  await page.mouse.move(box2.x + box2.width / 2, box2.y + box2.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box0.x + box0.width / 2, targetBetweenY, { steps: 10 });
+  await new Promise((r) => setTimeout(r, 100));
+
+  // Release mouse to drop at slot 1 (between Crux Pitch and Warmup Arete)
+  await page.mouse.up();
+
+  // Wait for new reordered list:
+  // 0: Crux Pitch
+  // 1: Directissima
+  // 2: Warmup Arete
+  await page.waitForFunction(() => {
+    const rows = Array.from(document.querySelectorAll('[data-testid*=":route-row:"]'));
+    return (
+      rows.length >= 3 &&
+      rows[0]?.textContent?.includes('Crux Pitch') &&
+      rows[1]?.textContent?.includes('Directissima') &&
+      rows[2]?.textContent?.includes('Warmup Arete')
+    );
+  }, { timeout: 10_000 });
+
+  // Reload page to confirm drop-between order persistence in SQLite
+  await new Promise((r) => setTimeout(r, 600));
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => {
+    const rows = Array.from(document.querySelectorAll('[data-testid*=":route-row:"]'));
+    return (
+      rows.length >= 3 &&
+      rows[0]?.textContent?.includes('Crux Pitch') &&
+      rows[1]?.textContent?.includes('Directissima') &&
+      rows[2]?.textContent?.includes('Warmup Arete')
+    );
+  }, { timeout: 10_000 });
+
   if (pageErrors.length > 0) {
     throw new Error(`Browser page errors: ${pageErrors.join('\n')}`);
   }

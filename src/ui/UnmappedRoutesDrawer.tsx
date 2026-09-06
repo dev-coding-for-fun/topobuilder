@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useRef, useState } from 'react';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 
@@ -131,28 +131,29 @@ function DraggableRouteHandle({
   onDragMove?: (pageX: number, pageY: number) => void;
   onDragEnd?: () => void;
 }) {
-  const panGesture = Gesture.Pan()
-    .minDistance(4)
-    .onStart((e) => {
-      if (onDragStart) {
-        runOnJS(onDragStart)(route, e.absoluteX, e.absoluteY);
-      }
-    })
-    .onUpdate((e) => {
-      if (onDragMove) {
-        runOnJS(onDragMove)(e.absoluteX, e.absoluteY);
-      }
-    })
-    .onEnd(() => {
-      if (onDragEnd) {
-        runOnJS(onDragEnd)();
-      }
-    })
-    .onFinalize(() => {
-      if (onDragEnd) {
-        runOnJS(onDragEnd)();
-      }
-    });
+  const onDragStartRef = useRef(onDragStart);
+  onDragStartRef.current = onDragStart;
+  const onDragMoveRef = useRef(onDragMove);
+  onDragMoveRef.current = onDragMove;
+  const onDragEndRef = useRef(onDragEnd);
+  onDragEndRef.current = onDragEnd;
+
+  const panGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .runOnJS(true)
+        .minDistance(4)
+        .onStart((e) => {
+          onDragStartRef.current?.(route, e.absoluteX, e.absoluteY);
+        })
+        .onUpdate((e) => {
+          onDragMoveRef.current?.(e.absoluteX, e.absoluteY);
+        })
+        .onFinalize(() => {
+          onDragEndRef.current?.();
+        }),
+    [route],
+  );
 
   return (
     <GestureDetector gesture={panGesture}>

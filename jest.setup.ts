@@ -103,6 +103,7 @@ jest.mock('react-native-reanimated', () => {
       View,
       createAnimatedComponent: (component: unknown) => component,
     },
+    View,
     createAnimatedComponent: (component: unknown) => component,
     getUseOfValueInStyleWarning: () => undefined,
     runOnJS: (callback: (...args: unknown[]) => unknown) => callback,
@@ -110,6 +111,37 @@ jest.mock('react-native-reanimated', () => {
     useSharedValue: (value: unknown) => {
       const React = require('react');
       return React.useRef({ value }).current;
+    },
+    useAnimatedStyle: (updater: () => unknown) => updater(),
+    useAnimatedReaction: (
+      prepare: () => unknown,
+      react: (res: unknown, prev: unknown) => void,
+      _deps?: unknown[],
+    ) => {
+      const React = require('react');
+      const prevRef = React.useRef(undefined);
+      const val = prepare();
+      React.useEffect(() => {
+        if (val !== prevRef.current) {
+          react(val, prevRef.current);
+          prevRef.current = val;
+        }
+      });
+    },
+    withSpring: (toValue: unknown) => toValue,
+    withTiming: (toValue: unknown) => toValue,
+    withDelay: (_delay: number, anim: unknown) => anim,
+    interpolate: (value: number, _input: number[], output: number[]) => output[0] ?? value,
+    interpolateColor: (_value: number, _input: number[], output: string[]) => output[0] ?? '#000000',
+    Easing: {
+      out: (e: unknown) => e,
+      cubic: (t: unknown) => t,
+      linear: (t: unknown) => t,
+      ease: (t: unknown) => t,
+      quad: (t: unknown) => t,
+      bezier: () => () => 0,
+      in: (e: unknown) => e,
+      inOut: (e: unknown) => e,
     },
   };
 });
@@ -119,6 +151,7 @@ jest.mock('react-native-gesture-handler', () => {
   const { View } = require('react-native');
   const mockChain = () => {
     const chain: Record<string, any> = {};
+    chain.runOnJS = jest.fn(() => chain);
     chain.minDistance = jest.fn(() => chain);
     chain.onStart = jest.fn((cb: any) => {
       chain._onStart = cb;
@@ -134,6 +167,9 @@ jest.mock('react-native-gesture-handler', () => {
     });
     chain.onFinalize = jest.fn((cb: any) => {
       chain._onFinalize = cb;
+      if (!chain._onEnd) {
+        chain._onEnd = cb;
+      }
       return chain;
     });
     chain.activateAfterLongPress = jest.fn(() => chain);

@@ -142,7 +142,13 @@ export async function deleteRoute(db: TopoDatabase, id: string): Promise<void> {
 
 async function nextRouteSortOrder(db: TopoDatabase, topoId: string): Promise<number> {
   const row = await db.getFirstAsync<{ next_sort_order: number | null }>(
-    'SELECT COALESCE(MAX(sort_order) + 1, 0) AS next_sort_order FROM routes WHERE topo_id = ?',
+    `SELECT COALESCE(MAX(sort_order) + 1, 0) AS next_sort_order
+     FROM (
+       SELECT sort_order FROM routes WHERE topo_id = ?
+       UNION ALL
+       SELECT sort_order FROM topo_tabvar_routes WHERE topo_id = ?
+     )`,
+    topoId,
     topoId,
   );
   return row?.next_sort_order ?? 0;

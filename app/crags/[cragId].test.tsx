@@ -85,6 +85,7 @@ describe('CragDetailScreen with TopoCard and UnmappedRoutesDrawer', () => {
   const mockCreateRoute = jest.fn();
   const mockLinkTabvarRoute = jest.fn();
   const mockUnlinkTabvarRoute = jest.fn();
+  const mockReorderTopoRoutes = jest.fn();
   const mockDeleteTopo = jest.fn();
   const mockLoadCragDetail = jest.fn();
 
@@ -109,6 +110,7 @@ describe('CragDetailScreen with TopoCard and UnmappedRoutesDrawer', () => {
       createRoute: mockCreateRoute,
       linkTabvarRoute: mockLinkTabvarRoute,
       unlinkTabvarRoute: mockUnlinkTabvarRoute,
+      reorderTopoRoutes: mockReorderTopoRoutes,
       loadTopoInfo: jest.fn().mockResolvedValue({
         topo: mockDetail.sectors[0].topos[0],
         routes: mockDetail.sectors[0].topos[0].routes,
@@ -278,7 +280,7 @@ describe('CragDetailScreen with TopoCard and UnmappedRoutesDrawer', () => {
     });
 
     await waitFor(() => {
-      expect(mockLinkTabvarRoute).toHaveBeenCalledWith('topo-1', 'tabvar_route_301');
+      expect(mockLinkTabvarRoute).toHaveBeenCalledWith('topo-1', 'tabvar_route_301', 0);
     });
   });
 
@@ -310,6 +312,124 @@ describe('CragDetailScreen with TopoCard and UnmappedRoutesDrawer', () => {
     await waitFor(() => {
       expect(mockUnlinkTabvarRoute).toHaveBeenCalledWith('topo-1', 'tabvar_route_301');
     });
+  });
+
+  it('supports reordering routes within a topo by dragging', async () => {
+    const detailWithTwoRoutes: CragDetail = {
+      ...mockDetail,
+      sectors: [
+        {
+          ...mockDetail.sectors[0],
+          topos: [
+            {
+              ...mockDetail.sectors[0].topos[0],
+              routes: [
+                {
+                  id: 'local-route-1',
+                  topoId: 'topo-1',
+                  name: 'First Line',
+                  color: '#3B82F6',
+                  sortOrder: 0,
+                  createdAt: '2026-06-01T00:00:00.000Z',
+                  updatedAt: '2026-06-01T00:00:00.000Z',
+                },
+                {
+                  id: 'local-route-2',
+                  topoId: 'topo-1',
+                  name: 'Second Line',
+                  color: '#EF4444',
+                  sortOrder: 1,
+                  createdAt: '2026-06-01T00:00:00.000Z',
+                  updatedAt: '2026-06-01T00:00:00.000Z',
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    mockLoadCragDetail.mockResolvedValue(detailWithTwoRoutes);
+
+    render(<CragDetailScreen />);
+
+    const handle = await screen.findByTestId(
+      'crag-detail:topo:topo-1:route:local-route-2:drag-handle',
+    );
+    expect(handle).toBeTruthy();
+    const gesture = handle.props._gesture;
+
+    // Start drag on local-route-2
+    act(() => {
+      gesture._onStart({ absoluteX: 50, absoluteY: 180 });
+    });
+
+    // Move to slot 0 within topo-1 bounds
+    act(() => {
+      gesture._onUpdate({ absoluteX: 100, absoluteY: 110 });
+    });
+
+    // Drop
+    await act(async () => {
+      gesture._onEnd();
+    });
+
+    await waitFor(() => {
+      expect(mockReorderTopoRoutes).toHaveBeenCalledWith('topo-1', [
+        { kind: 'local', id: 'local-route-2' },
+        { kind: 'local', id: 'local-route-1' },
+      ]);
+    });
+  });
+
+  it('does nothing when dragging an existing topo route onto another topo or off-target', async () => {
+    const detailWithTwoTopos: CragDetail = {
+      ...mockDetail,
+      sectors: [
+        {
+          ...mockDetail.sectors[0],
+          topos: [
+            mockDetail.sectors[0].topos[0],
+            {
+              id: 'topo-2',
+              sectorId: 'sector-1',
+              name: 'Second Topo',
+              tabvarDirty: false,
+              sortOrder: 1,
+              createdAt: '2026-06-01T00:00:00.000Z',
+              updatedAt: '2026-06-01T00:00:00.000Z',
+              routes: [],
+              tabvarRoutes: [],
+            },
+          ],
+        },
+      ],
+    };
+    mockLoadCragDetail.mockResolvedValue(detailWithTwoTopos);
+
+    render(<CragDetailScreen />);
+
+    const handle = await screen.findByTestId(
+      'crag-detail:topo:topo-1:route:local-route-1:drag-handle',
+    );
+    const gesture = handle.props._gesture;
+
+    // Start drag on topo-1's route
+    act(() => {
+      gesture._onStart({ absoluteX: 50, absoluteY: 120 });
+    });
+
+    // Move outside any topo bounds (e.g. far below)
+    act(() => {
+      gesture._onUpdate({ absoluteX: 100, absoluteY: 999 });
+    });
+
+    // Drop outside
+    await act(async () => {
+      gesture._onEnd();
+    });
+
+    expect(mockReorderTopoRoutes).not.toHaveBeenCalled();
+    expect(mockLinkTabvarRoute).not.toHaveBeenCalled();
   });
 });
 

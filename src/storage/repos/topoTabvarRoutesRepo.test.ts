@@ -5,6 +5,7 @@ import {
   linkTabvarRouteToTopo,
   listTabvarRoutesForTopo,
   listUnmappedTabvarRoutesForSector,
+  reorderTopoRoutes,
   unlinkTabvarRouteFromTopo,
 } from './topoTabvarRoutesRepo';
 
@@ -20,12 +21,12 @@ class FakeDb {
   getAllCalls: SqlCall[] = [];
 
   async getFirstAsync<T>(): Promise<T | null> {
-    return (this.getFirstResponses.shift() ?? null) as T | null;
+    return (this.getFirstResponses.shift() as T) ?? null;
   }
 
   async getAllAsync<T>(sql: string, ...args: unknown[]): Promise<T[]> {
     this.getAllCalls.push({ sql, args });
-    return (this.getAllResponses.shift() ?? []) as T[];
+    return (this.getAllResponses.shift() as T[]) ?? [];
   }
 
   async runAsync(sql: string, ...args: unknown[]): Promise<void> {
@@ -42,9 +43,9 @@ function asDb(db: FakeDb): TopoDatabase {
 }
 
 describe('topoTabvarRoutesRepo', () => {
-  it('links a tabvar route to a topo and marks topo dirty', async () => {
+  it('links a tabvar route to a topo at next sort order and marks topo dirty', async () => {
     const db = new FakeDb();
-    db.getFirstResponses.push({ next_sort: 3 });
+    db.getFirstResponses.push({ next_sort_order: 3 });
 
     await linkTabvarRouteToTopo(asDb(db), 'topo-1', 'tabvar_route_456');
 
@@ -54,6 +55,48 @@ describe('topoTabvarRoutesRepo', () => {
     expect(db.runCalls[0].args).toContain('tabvar_route_456');
     expect(db.runCalls[0].args).toContain(3);
     expect(db.runCalls[1].sql).toContain('UPDATE topos SET updated_at = ?, tabvar_dirty = 1');
+  });
+
+  it('links a tabvar route at a specific target sort order, shifting existing routes', async () => {
+    const db = new FakeDb();
+
+    await linkTabvarRouteToTopo(asDb(db), 'topo-1', 'tabvar_route_456', 1);
+
+    expect(db.runCalls).toHaveLength(4);
+    // Shift local routes
+    expect(db.runCalls[0].sql).toContain('UPDATE routes SET sort_order = sort_order + 1 WHERE topo_id = ? AND sort_order >= ?');
+    expect(db.runCalls[0].args).toEqual(['topo-1', 1]);
+    // Shift tabvar routes
+    expect(db.runCalls[1].sql).toContain('UPDATE topo_tabvar_routes SET sort_order = sort_order + 1 WHERE topo_id = ? AND sort_order >= ?');
+    expect(db.runCalls[1].args).toEqual(['topo-1', 1]);
+    // Insert at slot
+    expect(db.runCalls[2].sql).toContain('INSERT INTO topo_tabvar_routes');
+    expect(db.runCalls[2].args).toContain(1);
+    // Mark dirty
+    expect(db.runCalls[3].sql).toContain('UPDATE topos SET updated_at = ?, tabvar_dirty = 1');
+  });
+
+  it('reorders routes on a topo and marks topo dirty', async () => {
+    const db = new FakeDb();
+
+    await reorderTopoRoutes(asDb(db), 'topo-1', [
+      { kind: 'tabvar', appId: 'tabvar_route_456' },
+      { kind: 'local', id: 'route-local-1' },
+      { kind: 'tabvar', appId: 'tabvar_route_789' },
+    ]);
+
+    expect(db.runCalls).toHaveLength(4);
+    expect(db.runCalls[0].sql).toContain('UPDATE topo_tabvar_routes SET sort_order = ? WHERE topo_id = ? AND route_app_id = ?');
+    expect(db.runCalls[0].args).toEqual([0, 'topo-1', 'tabvar_route_456']);
+
+    expect(db.runCalls[1].sql).toContain('UPDATE routes SET sort_order = ?, updated_at = ? WHERE id = ? AND topo_id = ?');
+    expect(db.runCalls[1].args[0]).toBe(1);
+    expect(db.runCalls[1].args[2]).toBe('route-local-1');
+
+    expect(db.runCalls[2].sql).toContain('UPDATE topo_tabvar_routes SET sort_order = ? WHERE topo_id = ? AND route_app_id = ?');
+    expect(db.runCalls[2].args).toEqual([2, 'topo-1', 'tabvar_route_789']);
+
+    expect(db.runCalls[3].sql).toContain('UPDATE topos SET updated_at = ?, tabvar_dirty = 1');
   });
 
   it('unlinks a tabvar route from a topo and marks topo dirty', async () => {

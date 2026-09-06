@@ -2,6 +2,13 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, {
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 
 import type { CragDetail, Route, SectorWithTopos, TabvarRoute, TopoWithRoutes } from '@/domain/types';
 import { useTopoStore } from '@/state/TopoStore';
@@ -13,10 +20,14 @@ import { NameEntrySheet } from '@/ui/NameEntrySheet';
 import { Screen } from '@/ui/Screen';
 import { SectorHeader } from '@/ui/SectorHeader';
 import { ShareSheet, type ShareScope } from '@/ui/ShareSheet';
-import { TopoCard } from '@/ui/TopoCard';
+import { TopoCard, type TopoTargetMeasurable, type UnifiedRoute } from '@/ui/TopoCard';
 import { TopoInfoSheet } from '@/ui/TopoInfoSheet';
 import { RouteEditSheet } from '@/ui/RouteEditSheet';
 import { UnmappedRoutesDrawer } from '@/ui/UnmappedRoutesDrawer';
+
+type ActiveDrag =
+  | { kind: 'unmapped'; route: TabvarRoute; name: string }
+  | { kind: 'topo-route'; topoId: string; item: UnifiedRoute; index: number; name: string };
 
 type Sheet =
   | { kind: 'crag-menu' }
@@ -50,6 +61,7 @@ export default function CragDetailScreen() {
     createRoute,
     linkTabvarRoute,
     unlinkTabvarRoute,
+    reorderTopoRoutes,
   } = useTopoStore();
 
   const [detail, setDetail] = useState<CragDetail>();
@@ -67,45 +79,85 @@ export default function CragDetailScreen() {
     }, [refresh]),
   );
 
-  const [draggingRoute, setDraggingRoute] = useState<TabvarRoute | null>(null);
-  const [dragPosition, setDragPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [activeDrag, setActiveDrag] = useState<ActiveDrag | null>(null);
   const [hoveredTopoId, setHoveredTopoId] = useState<string | null>(null);
-  const [screenOffset, setScreenOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [chipSize, setChipSize] = useState<{ width: number; height: number }>({ width: 140, height: 36 });
+  const [hoverSlotIndex, setHoverSlotIndex] = useState<number | undefined>(undefined);
+
+  const dragTranslateX = useSharedValue(0);
+  const dragTranslateY = useSharedValue(0);
+  const isDraggingSV = useSharedValue(0);
+  const screenOffsetX = useSharedValue(0);
+  const screenOffsetY = useSharedValue(0);
+  const chipWidth = useSharedValue(140);
+  const chipHeight = useSharedValue(36);
+
+  const animatedChipStyle = useAnimatedStyle(() => {
+    'worklet';
+    const left = dragTranslateX.value - screenOffsetX.value - chipWidth.value / 2;
+    const top = dragTranslateY.value - screenOffsetY.value - chipHeight.value - 16;
+    return {
+      transform: [
+        { translateX: Math.max(8, left) },
+        { translateY: Math.max(8, top) },
+        { scale: interpolate(isDraggingSV.value, [0, 1], [0.95, 1.05]) },
+      ],
+      opacity: isDraggingSV.value,
+    };
+  });
 
   const screenRef = useRef<View>(null);
-  const draggingRouteRef = useRef<TabvarRoute | null>(null);
+  const activeDragRef = useRef<ActiveDrag | null>(null);
   const hoveredTopoIdRef = useRef<string | null>(null);
-  const topoCardRefs = useRef<
-    Map<string, { measureInWindow: (cb: (x: number, y: number, width: number, height: number) => void) => void }>
-  >(new Map());
+  const hoverSlotIndexRef = useRef<number | undefined>(undefined);
+  const topoCardRefs = useRef<Map<string, TopoTargetMeasurable>>(new Map());
   const topoCardLayouts = useRef<
     Map<string, { x: number; y: number; width: number; height: number }>
   >(new Map());
+  const detailRef = useRef<CragDetail | undefined>(detail);
 
   useEffect(() => {
-    draggingRouteRef.current = draggingRoute;
-  }, [draggingRoute]);
+    detailRef.current = detail;
+  }, [detail]);
+
+  useEffect(() => {
+    activeDragRef.current = activeDrag;
+  }, [activeDrag]);
 
   useEffect(() => {
     hoveredTopoIdRef.current = hoveredTopoId;
   }, [hoveredTopoId]);
 
+  useEffect(() => {
+    hoverSlotIndexRef.current = hoverSlotIndex;
+  }, [hoverSlotIndex]);
+
   const updateScreenOffset = useCallback(() => {
     screenRef.current?.measureInWindow?.((x, y) => {
       if (typeof x === 'number' && typeof y === 'number') {
-        setScreenOffset({ x: Math.max(0, x), y: Math.max(0, y) });
+        screenOffsetX.value = Math.max(0, x);
+        screenOffsetY.value = Math.max(0, y);
       }
     });
-  }, []);
+  }, [screenOffsetX, screenOffsetY]);
 
-  const handleDragStart = useCallback(
+  const handleUnmappedDragStart = useCallback(
     (route: TabvarRoute, pageX: number, pageY: number) => {
-      draggingRouteRef.current = route;
-      setDraggingRoute(route);
-      setDragPosition({ x: pageX, y: pageY });
+      const drag: ActiveDrag = {
+        kind: 'unmapped',
+        route,
+        name: route.name,
+      };
+      activeDragRef.current = drag;
+      setActiveDrag(drag);
+
+      dragTranslateX.value = pageX;
+      dragTranslateY.value = pageY;
+      isDraggingSV.value = withSpring(1);
+
       hoveredTopoIdRef.current = null;
       setHoveredTopoId(null);
+      hoverSlotIndexRef.current = undefined;
+      setHoverSlotIndex(undefined);
       updateScreenOffset();
 
       topoCardRefs.current.forEach((el, id) => {
@@ -116,52 +168,262 @@ export default function CragDetailScreen() {
         }
       });
     },
-    [updateScreenOffset],
+    [updateScreenOffset, dragTranslateX, dragTranslateY, isDraggingSV],
+  );
+
+  const handleTopoRouteDragStart = useCallback(
+    (topoId: string, item: UnifiedRoute, index: number, pageX: number, pageY: number) => {
+      const isLocal = item.kind === 'local';
+      const name = isLocal ? item.route.name || `Route ${index + 1}` : item.route.name;
+      const drag: ActiveDrag = {
+        kind: 'topo-route',
+        topoId,
+        item,
+        index,
+        name,
+      };
+      activeDragRef.current = drag;
+      setActiveDrag(drag);
+
+      dragTranslateX.value = pageX;
+      dragTranslateY.value = pageY;
+      isDraggingSV.value = withSpring(1);
+
+      hoveredTopoIdRef.current = topoId;
+      setHoveredTopoId(topoId);
+      hoverSlotIndexRef.current = index;
+      setHoverSlotIndex(index);
+      updateScreenOffset();
+
+      topoCardRefs.current.forEach((el, id) => {
+        if (typeof el?.measureInWindow === 'function') {
+          el.measureInWindow((x, y, width, height) => {
+            topoCardLayouts.current.set(id, { x, y, width, height });
+          });
+        }
+      });
+    },
+    [updateScreenOffset, dragTranslateX, dragTranslateY, isDraggingSV],
   );
 
   const handleDragMove = useCallback((pageX: number, pageY: number) => {
-    setDragPosition({ x: pageX, y: pageY });
+    dragTranslateX.value = pageX;
+    dragTranslateY.value = pageY;
+
+    const drag = activeDragRef.current;
+    if (!drag) return;
+
     let matchedTopoId: string | null = null;
-    for (const [id, rect] of topoCardLayouts.current.entries()) {
-      const isFingerInside =
+    let slotIndex: number | undefined = undefined;
+
+    if (drag.kind === 'topo-route') {
+      const rect = topoCardLayouts.current.get(drag.topoId);
+      const marginX = 80;
+      const marginY = 60;
+      const isInside =
+        rect &&
         rect.width > 0 &&
         rect.height > 0 &&
-        pageX >= rect.x &&
-        pageX <= rect.x + rect.width &&
-        pageY >= rect.y &&
-        pageY <= rect.y + rect.height;
+        pageX >= rect.x - marginX &&
+        pageX <= rect.x + rect.width + marginX &&
+        pageY >= rect.y - marginY &&
+        pageY <= rect.y + rect.height + marginY;
 
-      const isChipInside =
-        rect.width > 0 &&
-        rect.height > 0 &&
-        pageX >= rect.x &&
-        pageX <= rect.x + rect.width &&
-        pageY - 40 >= rect.y &&
-        pageY - 40 <= rect.y + rect.height;
+      if (isInside || !rect) {
+        matchedTopoId = drag.topoId;
+        const target = topoCardRefs.current.get(drag.topoId);
+        if (target && typeof target.getSlotIndex === 'function') {
+          slotIndex = target.getSlotIndex(pageY, true);
+        }
+      }
+    } else {
+      for (const [id, rect] of topoCardLayouts.current.entries()) {
+        const isFingerInside =
+          rect.width > 0 &&
+          rect.height > 0 &&
+          pageX >= rect.x - 10 &&
+          pageX <= rect.x + rect.width + 10 &&
+          pageY >= rect.y &&
+          pageY <= rect.y + rect.height;
 
-      if (isFingerInside || isChipInside) {
-        matchedTopoId = id;
-        break;
+        const isChipInside =
+          rect.width > 0 &&
+          rect.height > 0 &&
+          pageX >= rect.x - 10 &&
+          pageX <= rect.x + rect.width + 10 &&
+          pageY - 40 >= rect.y &&
+          pageY - 40 <= rect.y + rect.height;
+
+        if (isFingerInside || isChipInside) {
+          matchedTopoId = id;
+          const target = topoCardRefs.current.get(id);
+          if (target && typeof target.getSlotIndex === 'function') {
+            slotIndex = target.getSlotIndex(pageY, false);
+          }
+          break;
+        }
       }
     }
-    hoveredTopoIdRef.current = matchedTopoId;
-    setHoveredTopoId(matchedTopoId);
-  }, []);
+
+    const isSameTopoReorder =
+      drag.kind === 'topo-route' && matchedTopoId === drag.topoId;
+
+    if (
+      matchedTopoId !== hoveredTopoIdRef.current ||
+      slotIndex !== hoverSlotIndexRef.current
+    ) {
+      hoveredTopoIdRef.current = matchedTopoId;
+      hoverSlotIndexRef.current = slotIndex;
+
+      // TopoCard manages in-card displacement entirely on the UI thread via
+      // Reanimated SharedValues. Avoid full-screen React re-renders while dragging inside the card.
+      if (!isSameTopoReorder) {
+        setHoveredTopoId(matchedTopoId);
+        setHoverSlotIndex(slotIndex);
+      }
+    }
+  }, [dragTranslateX, dragTranslateY]);
 
   const handleDragEnd = useCallback(async () => {
-    const route = draggingRouteRef.current;
+    isDraggingSV.value = withTiming(0, { duration: 150 });
+    const drag = activeDragRef.current;
     const targetTopoId = hoveredTopoIdRef.current;
+    const targetSlotIndex = hoverSlotIndexRef.current;
 
-    draggingRouteRef.current = null;
+    activeDragRef.current = null;
     hoveredTopoIdRef.current = null;
-    setDraggingRoute(null);
-    setHoveredTopoId(null);
+    hoverSlotIndexRef.current = undefined;
 
-    if (targetTopoId && route) {
-      await linkTabvarRoute(targetTopoId, route.appId);
+    if (!drag || !targetTopoId) {
+      setActiveDrag(null);
+      setHoveredTopoId(null);
+      setHoverSlotIndex(undefined);
+      return;
+    }
+
+    if (drag.kind === 'topo-route' && targetTopoId === drag.topoId) {
+      const currentDetail = detailRef.current;
+      let sourceTopo: TopoWithRoutes | undefined;
+      for (const s of currentDetail?.sectors ?? []) {
+        const found = s.topos.find((t) => t.id === targetTopoId);
+        if (found) {
+          sourceTopo = found;
+          break;
+        }
+      }
+      if (!sourceTopo) {
+        setActiveDrag(null);
+        setHoveredTopoId(null);
+        setHoverSlotIndex(undefined);
+        return;
+      }
+
+      const local = sourceTopo.routes ?? [];
+      const tabvar = sourceTopo.tabvarRoutes ?? [];
+      const combined: UnifiedRoute[] = [
+        ...local.map((r, i) => ({ kind: 'local' as const, route: r, sortOrder: r.sortOrder ?? i })),
+        ...tabvar.map((r, i) => ({ kind: 'tabvar' as const, route: r, sortOrder: r.sortOrder ?? i })),
+      ].sort((a, b) => a.sortOrder - b.sortOrder);
+
+      const fromIndex = drag.index;
+      const toIndex = typeof targetSlotIndex === 'number' ? targetSlotIndex : fromIndex;
+
+      if (fromIndex !== toIndex && fromIndex >= 0 && fromIndex < combined.length) {
+        const reordered = [...combined];
+        const [moved] = reordered.splice(fromIndex, 1);
+        if (moved) {
+          reordered.splice(toIndex, 0, moved);
+
+          // Optimistically update React state immediately on the drop frame
+          if (currentDetail) {
+            const updatedSectors = currentDetail.sectors.map((s) => ({
+              ...s,
+              topos: s.topos.map((t) => {
+                if (t.id !== targetTopoId) return t;
+                const newLocal: Route[] = [];
+                const newTabvar: TabvarRoute[] = [];
+                reordered.forEach((item, i) => {
+                  if (item.kind === 'local') {
+                    newLocal.push({ ...item.route, sortOrder: i });
+                  } else {
+                    newTabvar.push({ ...item.route, sortOrder: i });
+                  }
+                });
+                return {
+                  ...t,
+                  routes: newLocal,
+                  tabvarRoutes: newTabvar,
+                };
+              }),
+            }));
+            setDetail({ ...currentDetail, sectors: updatedSectors });
+          }
+
+          setActiveDrag(null);
+          setHoveredTopoId(null);
+          setHoverSlotIndex(undefined);
+
+          const orderedRoutes = reordered.map((r) =>
+            r.kind === 'local'
+              ? { kind: 'local' as const, id: r.route.id }
+              : { kind: 'tabvar' as const, appId: r.route.appId },
+          );
+          await reorderTopoRoutes(targetTopoId, orderedRoutes);
+          await refresh();
+          return;
+        }
+      }
+      setActiveDrag(null);
+      setHoveredTopoId(null);
+      setHoverSlotIndex(undefined);
+    } else if (drag.kind === 'unmapped') {
+      const currentDetail = detailRef.current;
+      if (currentDetail) {
+        const updatedSectors = currentDetail.sectors.map((s) => ({
+          ...s,
+          topos: s.topos.map((t) => {
+            if (t.id !== targetTopoId) return t;
+            const existingLocal = t.routes ?? [];
+            const existingTabvar = t.tabvarRoutes ?? [];
+            const combined: UnifiedRoute[] = [
+              ...existingLocal.map((r, i) => ({ kind: 'local' as const, route: r, sortOrder: r.sortOrder ?? i })),
+              ...existingTabvar.map((r, i) => ({ kind: 'tabvar' as const, route: r, sortOrder: r.sortOrder ?? i })),
+            ].sort((a, b) => a.sortOrder - b.sortOrder);
+
+            const insertIndex = typeof targetSlotIndex === 'number' ? targetSlotIndex : combined.length;
+            combined.splice(insertIndex, 0, {
+              kind: 'tabvar',
+              route: { ...drag.route, sortOrder: insertIndex },
+              sortOrder: insertIndex,
+            });
+
+            const newLocal: Route[] = [];
+            const newTabvar: TabvarRoute[] = [];
+            combined.forEach((item, i) => {
+              if (item.kind === 'local') {
+                newLocal.push({ ...item.route, sortOrder: i });
+              } else {
+                newTabvar.push({ ...item.route, sortOrder: i });
+              }
+            });
+            return {
+              ...t,
+              routes: newLocal,
+              tabvarRoutes: newTabvar,
+            };
+          }),
+        }));
+        setDetail({ ...currentDetail, sectors: updatedSectors });
+      }
+
+      setActiveDrag(null);
+      setHoveredTopoId(null);
+      setHoverSlotIndex(undefined);
+
+      await linkTabvarRoute(targetTopoId, drag.route.appId, targetSlotIndex);
       await refresh();
     }
-  }, [linkTabvarRoute, refresh]);
+  }, [linkTabvarRoute, reorderTopoRoutes, refresh]);
 
   if (!detail) {
     return (
@@ -244,7 +506,7 @@ export default function CragDetailScreen() {
       />
 
       <View onLayout={updateScreenOffset} ref={screenRef} style={styles.screenContent}>
-        <ScrollView contentContainerStyle={styles.scroll}>
+        <ScrollView contentContainerStyle={styles.scroll} scrollEnabled={!activeDrag}>
         <Text style={styles.summary} testID="crag-detail:summary">
           {sectors.length} {sectors.length === 1 ? 'sector' : 'sectors'} · {topoCount}{' '}
           {topoCount === 1 ? 'topo' : 'topos'}
@@ -270,8 +532,12 @@ export default function CragDetailScreen() {
                   <TopoCard
                     key={topo.id}
                     canLinkRoute={hasEligibleRoutes}
+                    dragItem={activeDrag}
+                    hoverSlotIndex={hoveredTopoId === topo.id ? hoverSlotIndex : undefined}
                     isDropTarget={hoveredTopoId === topo.id}
                     onCreateRoute={() => void handleCreateRouteForTopo(topo)}
+                    onDragEnd={handleDragEnd}
+                    onDragMove={handleDragMove}
                     onEditRoute={(route) => handleEditRouteForTopo(route)}
                     onLinkRoute={
                       hasEligibleRoutes
@@ -286,6 +552,7 @@ export default function CragDetailScreen() {
                       if (target) topoCardRefs.current.set(id, target);
                       else topoCardRefs.current.delete(id);
                     }}
+                    onRouteDragStart={handleTopoRouteDragStart}
                     onShare={() => setShareScope({ kind: 'topo', name: topo.name, topoId: topo.id })}
                     onUnlinkRoute={(route) => void handleUnlinkRouteFromTopo(topo, route)}
                     topo={topo}
@@ -305,7 +572,7 @@ export default function CragDetailScreen() {
                 }}
                 onDragEnd={handleDragEnd}
                 onDragMove={handleDragMove}
-                onDragStart={handleDragStart}
+                onDragStart={handleUnmappedDragStart}
                 routes={sector.unmappedRoutes ?? []}
                 sectorId={sector.id}
                 topos={sector.topos}
@@ -470,22 +737,20 @@ export default function CragDetailScreen() {
       <ShareSheet onClose={() => setShareScope(undefined)} scope={shareScope} />
 
       {/* ── Floating Drag Preview Chip ──── */}
-      {draggingRoute ? (
-        <View
+      {activeDrag && activeDrag.kind === 'unmapped' ? (
+        <Animated.View
           onLayout={(e) => {
             const { width, height } = e.nativeEvent.layout;
             if (width > 0 && height > 0) {
-              setChipSize({ width, height });
+              chipWidth.value = width;
+              chipHeight.value = height;
             }
           }}
           pointerEvents="none"
           style={[
             styles.dragPreview,
             hoveredTopoId ? styles.dragPreviewHovered : null,
-            {
-              left: Math.max(8, dragPosition.x - screenOffset.x - (chipSize.width > 0 ? chipSize.width : 140) / 2),
-              top: Math.max(8, dragPosition.y - screenOffset.y - (chipSize.height > 0 ? chipSize.height : 36) - 16),
-            },
+            animatedChipStyle,
           ]}
           testID="crag-detail:drag-preview"
         >
@@ -495,14 +760,14 @@ export default function CragDetailScreen() {
             size={16}
           />
           <Text numberOfLines={1} style={styles.dragPreviewText}>
-            {draggingRoute.name}
+            {activeDrag.name}
           </Text>
           {hoveredTopoId ? (
             <View style={styles.dragPreviewDropBadge}>
               <Ionicons color="#16A34A" name="checkmark-circle" size={14} />
             </View>
           ) : null}
-        </View>
+        </Animated.View>
       ) : null}
       </View>
     </Screen>
@@ -724,20 +989,21 @@ const styles = StyleSheet.create({
     elevation: 12,
     flexDirection: 'row',
     gap: 6,
+    left: 0,
     paddingHorizontal: 12,
     paddingVertical: 8,
+    pointerEvents: 'none',
     position: 'absolute',
     shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.2,
     shadowRadius: 10,
-    transform: [{ scale: 1.05 }],
+    top: 0,
     zIndex: 9999,
   },
   dragPreviewHovered: {
     backgroundColor: '#F0FDF4',
     borderColor: '#16A34A',
-    transform: [{ scale: 1.08 }],
   },
   dragPreviewDropBadge: {
     marginLeft: 2,

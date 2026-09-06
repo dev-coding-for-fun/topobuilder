@@ -69,6 +69,8 @@ import {
   linkTabvarRouteToTopo,
   listTabvarRoutesForTopo,
   listUnmappedTabvarRoutesForSector,
+  reorderTopoRoutes as reorderTopoRoutesRepo,
+  type TopoRouteIdentifier,
   unlinkTabvarRouteFromTopo,
 } from '@/storage/repos/topoTabvarRoutesRepo';
 import {
@@ -139,9 +141,10 @@ type TopoStoreValue = {
   deleteRoute: (id: string) => Promise<void>;
   countLocalRoutesForTopo: (topoId: string) => Promise<number>;
 
-  // Connected Routes (TABVAR)
-  linkTabvarRoute: (topoId: string, routeAppId: string) => Promise<void>;
+  // Connected Routes (TABVAR) & Reordering
+  linkTabvarRoute: (topoId: string, routeAppId: string, targetSortOrder?: number) => Promise<void>;
   unlinkTabvarRoute: (topoId: string, routeAppId: string) => Promise<void>;
+  reorderTopoRoutes: (topoId: string, orderedRoutes: TopoRouteIdentifier[]) => Promise<void>;
   loadTabvarRoutesForTopo: (topoId: string) => Promise<TabvarRoute[]>;
   loadUnmappedTabvarRoutes: (sectorId: string) => Promise<TabvarRoute[]>;
   countTabvarRoutesForTopo: (topoId: string) => Promise<number>;
@@ -474,11 +477,11 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
     [db],
   );
 
-  // ── Connected Routes (TABVAR) ──────────────────────────────────────────
+  // ── Connected Routes (TABVAR) & Reordering ────────────────────────────
 
   const linkTabvarRoute = useCallback(
-    async (topoId: string, routeAppId: string) => {
-      await linkTabvarRouteToTopo(requireDb(), topoId, routeAppId);
+    async (topoId: string, routeAppId: string, targetSortOrder?: number) => {
+      await linkTabvarRouteToTopo(requireDb(), topoId, routeAppId, targetSortOrder);
       await refresh();
     },
     [db, refresh],
@@ -487,6 +490,14 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
   const unlinkTabvarRoute = useCallback(
     async (topoId: string, routeAppId: string) => {
       await unlinkTabvarRouteFromTopo(requireDb(), topoId, routeAppId);
+      await refresh();
+    },
+    [db, refresh],
+  );
+
+  const reorderTopoRoutes = useCallback(
+    async (topoId: string, orderedRoutes: TopoRouteIdentifier[]) => {
+      await reorderTopoRoutesRepo(requireDb(), topoId, orderedRoutes);
       await refresh();
     },
     [db, refresh],
@@ -605,6 +616,7 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
       countLocalRoutesForTopo,
       linkTabvarRoute,
       unlinkTabvarRoute,
+      reorderTopoRoutes,
       loadTabvarRoutesForTopo,
       loadUnmappedTabvarRoutes,
       countTabvarRoutesForTopo,
@@ -646,6 +658,7 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
       renameCrag,
       renameSector,
       renameTopo,
+      reorderTopoRoutes,
       storageError,
       submitToTabvar,
       unlinkTabvarRoute,
@@ -691,3 +704,5 @@ async function tryRemovePhotoFiles(uris: string[]): Promise<void> {
     }
   }
 }
+
+export { type TopoRouteIdentifier } from '@/storage/repos/topoTabvarRoutesRepo';
