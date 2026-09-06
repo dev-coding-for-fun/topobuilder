@@ -242,6 +242,42 @@ describe('TopoCard', () => {
     expect(onEditRoute).not.toHaveBeenCalled();
   });
 
+  it('invokes onUnlinkRoute when unlink button for a TABVAR route is pressed', () => {
+    const onUnlinkRoute = jest.fn();
+    render(
+      <TopoCard
+        onMenu={jest.fn()}
+        onOpen={jest.fn()}
+        onShare={jest.fn()}
+        onUnlinkRoute={onUnlinkRoute}
+        topo={baseTopo}
+      />,
+    );
+
+    const unlinkBtn = screen.getByTestId(
+      'crag-detail:topo:topo-1:tabvar-route:tabvar_route_101:unlink',
+    );
+    expect(unlinkBtn).toBeTruthy();
+    fireEvent.press(unlinkBtn);
+    expect(onUnlinkRoute).toHaveBeenCalledWith(mockTabvarRoute);
+  });
+
+  it('does not render unlink button for local routes', () => {
+    render(
+      <TopoCard
+        onMenu={jest.fn()}
+        onOpen={jest.fn()}
+        onShare={jest.fn()}
+        onUnlinkRoute={jest.fn()}
+        topo={baseTopo}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId('crag-detail:topo:topo-1:route:route-local-1:unlink'),
+    ).toBeNull();
+  });
+
   it('renders drop target indicator when isDropTarget is true', () => {
     render(
       <TopoCard

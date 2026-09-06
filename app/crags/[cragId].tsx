@@ -49,6 +49,7 @@ export default function CragDetailScreen() {
     deleteTopo,
     createRoute,
     linkTabvarRoute,
+    unlinkTabvarRoute,
   } = useTopoStore();
 
   const [detail, setDetail] = useState<CragDetail>();
@@ -201,6 +202,11 @@ export default function CragDetailScreen() {
     setSheet({ kind: 'route-edit', route: newRoute });
   }
 
+  async function handleUnlinkRouteFromTopo(topo: TopoWithRoutes, route: TabvarRoute) {
+    await unlinkTabvarRoute(topo.id, route.appId);
+    await refresh();
+  }
+
   function handleEditRouteForTopo(route: Route) {
     setSheet({ kind: 'route-edit', route });
   }
@@ -281,6 +287,7 @@ export default function CragDetailScreen() {
                       else topoCardRefs.current.delete(id);
                     }}
                     onShare={() => setShareScope({ kind: 'topo', name: topo.name, topoId: topo.id })}
+                    onUnlinkRoute={(route) => void handleUnlinkRouteFromTopo(topo, route)}
                     topo={topo}
                   />
                 ))}

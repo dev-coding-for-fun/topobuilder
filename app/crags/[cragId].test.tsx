@@ -84,6 +84,7 @@ describe('CragDetailScreen with TopoCard and UnmappedRoutesDrawer', () => {
   const mockCreateTopo = jest.fn();
   const mockCreateRoute = jest.fn();
   const mockLinkTabvarRoute = jest.fn();
+  const mockUnlinkTabvarRoute = jest.fn();
   const mockDeleteTopo = jest.fn();
   const mockLoadCragDetail = jest.fn();
 
@@ -107,6 +108,7 @@ describe('CragDetailScreen with TopoCard and UnmappedRoutesDrawer', () => {
       deleteTopo: mockDeleteTopo,
       createRoute: mockCreateRoute,
       linkTabvarRoute: mockLinkTabvarRoute,
+      unlinkTabvarRoute: mockUnlinkTabvarRoute,
       loadTopoInfo: jest.fn().mockResolvedValue({
         topo: mockDetail.sectors[0].topos[0],
         routes: mockDetail.sectors[0].topos[0].routes,
@@ -277,6 +279,36 @@ describe('CragDetailScreen with TopoCard and UnmappedRoutesDrawer', () => {
 
     await waitFor(() => {
       expect(mockLinkTabvarRoute).toHaveBeenCalledWith('topo-1', 'tabvar_route_301');
+    });
+  });
+
+  it('unlinks a connected route when pressing the unlink button on TopoCard', async () => {
+    const detailWithLinkedRoute: CragDetail = {
+      ...mockDetail,
+      sectors: [
+        {
+          ...mockDetail.sectors[0],
+          topos: [
+            {
+              ...mockDetail.sectors[0].topos[0],
+              tabvarRoutes: [mockUnmappedRoute],
+            },
+          ],
+        },
+      ],
+    };
+    mockLoadCragDetail.mockResolvedValue(detailWithLinkedRoute);
+
+    render(<CragDetailScreen />);
+
+    const unlinkBtn = await screen.findByTestId(
+      'crag-detail:topo:topo-1:tabvar-route:tabvar_route_301:unlink',
+    );
+    expect(unlinkBtn).toBeTruthy();
+    fireEvent.press(unlinkBtn);
+
+    await waitFor(() => {
+      expect(mockUnlinkTabvarRoute).toHaveBeenCalledWith('topo-1', 'tabvar_route_301');
     });
   });
 });

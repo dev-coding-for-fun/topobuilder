@@ -19,6 +19,7 @@ type Props = {
   canLinkRoute?: boolean;
   onCreateRoute?: () => void;
   onEditRoute?: (route: Route) => void;
+  onUnlinkRoute?: (route: TabvarRoute) => void;
   isDropTarget?: boolean;
   onRegisterTarget?: (topoId: string, target: TopoTargetMeasurable | null) => void;
   ref?: React.Ref<View>;
@@ -67,6 +68,7 @@ function TopoCardInner(
     canLinkRoute = true,
     onCreateRoute,
     onEditRoute,
+    onUnlinkRoute,
     isDropTarget,
     onRegisterTarget,
   } = props;
@@ -263,6 +265,19 @@ function TopoCardInner(
                     {isLocal ? 'Local' : 'TABVAR'}
                   </Text>
                 </View>
+
+                {!isLocal && onUnlinkRoute ? (
+                  <Pressable
+                    accessibilityLabel={`Unlink ${name} from ${topo.name}`}
+                    accessibilityRole="button"
+                    hitSlop={8}
+                    onPress={() => onUnlinkRoute(item.route)}
+                    style={({ pressed }) => [styles.unlinkButton, pressed && styles.pressed]}
+                    testID={`crag-detail:topo:${topo.id}:tabvar-route:${item.route.appId}:unlink`}
+                  >
+                    <Ionicons color="#64748B" name="unlink-outline" size={16} />
+                  </Pressable>
+                ) : null}
 
                 {isEditableLocal ? (
                   <Ionicons color="#94A3B8" name="chevron-forward" size={14} />
@@ -512,5 +527,14 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     fontSize: 16,
     ...interStyle('700'),
+  },
+  unlinkButton: {
+    alignItems: 'center',
+    borderRadius: 6,
+    height: 28,
+    justifyContent: 'center',
+    marginLeft: 2,
+    paddingHorizontal: 4,
+    width: 28,
   },
 });
