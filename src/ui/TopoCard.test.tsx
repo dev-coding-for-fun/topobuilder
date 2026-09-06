@@ -128,53 +128,6 @@ describe('TopoCard', () => {
     expect(tabvarBadge).toBeTruthy();
   });
 
-  it('renders onLinkRoute button and invokes it on press', () => {
-    const onLinkRoute = jest.fn();
-    render(
-      <TopoCard
-        onLinkRoute={onLinkRoute}
-        onMenu={jest.fn()}
-        onOpen={jest.fn()}
-        onShare={jest.fn()}
-        topo={baseTopo}
-      />,
-    );
-
-    const linkBtn = screen.getByTestId('crag-detail:topo:topo-1:link-route');
-    expect(linkBtn).toBeTruthy();
-    fireEvent.press(linkBtn);
-    expect(onLinkRoute).toHaveBeenCalledTimes(1);
-  });
-
-  it('hides onLinkRoute button when canLinkRoute is false even if onLinkRoute is provided', () => {
-    const onLinkRoute = jest.fn();
-    render(
-      <TopoCard
-        canLinkRoute={false}
-        onLinkRoute={onLinkRoute}
-        onMenu={jest.fn()}
-        onOpen={jest.fn()}
-        onShare={jest.fn()}
-        topo={baseTopo}
-      />,
-    );
-
-    expect(screen.queryByTestId('crag-detail:topo:topo-1:link-route')).toBeNull();
-  });
-
-  it('hides onLinkRoute button when onLinkRoute is omitted', () => {
-    render(
-      <TopoCard
-        onMenu={jest.fn()}
-        onOpen={jest.fn()}
-        onShare={jest.fn()}
-        topo={baseTopo}
-      />,
-    );
-
-    expect(screen.queryByTestId('crag-detail:topo:topo-1:link-route')).toBeNull();
-  });
-
   it('renders onCreateRoute button and invokes it on press', () => {
     const onCreateRoute = jest.fn();
     render(
@@ -191,22 +144,6 @@ describe('TopoCard', () => {
     expect(createBtn).toBeTruthy();
     fireEvent.press(createBtn);
     expect(onCreateRoute).toHaveBeenCalledTimes(1);
-  });
-
-  it('renders both onCreateRoute and onLinkRoute when both are available', () => {
-    render(
-      <TopoCard
-        onCreateRoute={jest.fn()}
-        onLinkRoute={jest.fn()}
-        onMenu={jest.fn()}
-        onOpen={jest.fn()}
-        onShare={jest.fn()}
-        topo={baseTopo}
-      />,
-    );
-
-    expect(screen.getByTestId('crag-detail:topo:topo-1:create-route')).toBeTruthy();
-    expect(screen.getByTestId('crag-detail:topo:topo-1:link-route')).toBeTruthy();
   });
 
   it('invokes onEditRoute when a local route row is pressed', () => {

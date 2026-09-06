@@ -31,8 +31,6 @@ type Props = {
   onOpen: () => void;
   onShare: () => void;
   onMenu: () => void;
-  onLinkRoute?: () => void;
-  canLinkRoute?: boolean;
   onCreateRoute?: () => void;
   onEditRoute?: (route: Route) => void;
   onUnlinkRoute?: (route: TabvarRoute) => void;
@@ -265,8 +263,6 @@ function TopoCardInner(
     onOpen,
     onShare,
     onMenu,
-    onLinkRoute,
-    canLinkRoute = true,
     onCreateRoute,
     onEditRoute,
     onUnlinkRoute,
@@ -628,34 +624,19 @@ function TopoCardInner(
         )}
       </View>
 
-      {/* ── Route Actions (Create & Link) ────────────────────────────────── */}
-      {onCreateRoute || (onLinkRoute && canLinkRoute) ? (
+      {/* ── Route Actions (Create) ──────────────────────────────────────── */}
+      {onCreateRoute ? (
         <View style={styles.cardFooter}>
-          {onCreateRoute ? (
-            <Pressable
-              accessibilityLabel={`Create route in ${topo.name}`}
-              accessibilityRole="button"
-              onPress={onCreateRoute}
-              style={({ pressed }) => [styles.linkButton, pressed && styles.linkButtonPressed]}
-              testID={`crag-detail:topo:${topo.id}:create-route`}
-            >
-              <Ionicons color="#2563EB" name="add-circle-outline" size={16} />
-              <Text style={styles.linkButtonText}>Add Route</Text>
-            </Pressable>
-          ) : null}
-
-          {onLinkRoute && canLinkRoute ? (
-            <Pressable
-              accessibilityLabel={`Link route to ${topo.name}`}
-              accessibilityRole="button"
-              onPress={onLinkRoute}
-              style={({ pressed }) => [styles.linkButton, pressed && styles.linkButtonPressed]}
-              testID={`crag-detail:topo:${topo.id}:link-route`}
-            >
-              <Ionicons color="#2563EB" name="link-outline" size={16} />
-              <Text style={styles.linkButtonText}>Link Route</Text>
-            </Pressable>
-          ) : null}
+          <Pressable
+            accessibilityLabel={`Create route in ${topo.name}`}
+            accessibilityRole="button"
+            onPress={onCreateRoute}
+            style={({ pressed }) => [styles.linkButton, pressed && styles.linkButtonPressed]}
+            testID={`crag-detail:topo:${topo.id}:create-route`}
+          >
+            <Ionicons color="#2563EB" name="add-circle-outline" size={16} />
+            <Text style={styles.linkButtonText}>Add Route</Text>
+          </Pressable>
         </View>
       ) : null}
     </View>

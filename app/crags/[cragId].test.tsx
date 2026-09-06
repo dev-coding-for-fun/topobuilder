@@ -178,47 +178,6 @@ describe('CragDetailScreen with TopoCard and UnmappedRoutesDrawer', () => {
     });
   });
 
-  it('allows linking an unmapped route from the TopoCard + Link Route button', async () => {
-    render(<CragDetailScreen />);
-
-    await screen.findByTestId('crag-detail:sector-container:sector-1');
-
-    // Tap Link Route on TopoCard
-    const linkBtn = screen.getByTestId('crag-detail:topo:topo-1:link-route');
-    fireEvent.press(linkBtn);
-
-    // Link route picker should appear
-    const picker = await screen.findByTestId('crag-detail:link-route-picker');
-    expect(picker).toBeTruthy();
-
-    // Select the unmapped route
-    const routeItem = screen.getByText('Unmapped Classic (5.10a)');
-    fireEvent.press(routeItem);
-
-    await waitFor(() => {
-      expect(mockLinkTabvarRoute).toHaveBeenCalledWith('topo-1', 'tabvar_route_301');
-    });
-  });
-
-  it('hides Link Route button on TopoCard when sector has no unmapped connected routes, but keeps Add Route button', async () => {
-    mockLoadCragDetail.mockResolvedValue({
-      ...mockDetail,
-      sectors: [
-        {
-          ...mockDetail.sectors[0],
-          unmappedRoutes: [],
-        },
-      ],
-    });
-
-    render(<CragDetailScreen />);
-
-    await screen.findByTestId('crag-detail:sector-container:sector-1');
-
-    expect(screen.queryByTestId('crag-detail:topo:topo-1:link-route')).toBeNull();
-    expect(screen.getByTestId('crag-detail:topo:topo-1:create-route')).toBeTruthy();
-  });
-
   it('creates a new route and opens route edit sheet when tapping Add Route on TopoCard', async () => {
     render(<CragDetailScreen />);
 
