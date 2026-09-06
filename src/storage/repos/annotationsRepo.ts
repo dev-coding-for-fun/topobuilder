@@ -87,18 +87,25 @@ export async function listAnnotationsForTopo(
   return rows.map(mapAnnotation);
 }
 
+function buildAnnotationMetadata(annotation: Annotation): {
+  labelFontSize?: number;
+  lineWeight?: Annotation['lineWeight'];
+  stampSize?: Annotation['stampSize'];
+} | undefined {
+  return annotation.labelFontSize || annotation.lineWeight || annotation.stampSize
+    ? {
+        labelFontSize: annotation.labelFontSize,
+        lineWeight: annotation.lineWeight,
+        stampSize: annotation.stampSize,
+      }
+    : undefined;
+}
+
 export async function upsertAnnotation(
   db: TopoDatabase,
   annotation: Annotation,
 ): Promise<void> {
-  const metadata =
-    annotation.labelFontSize || annotation.lineWeight || annotation.stampSize
-      ? {
-          labelFontSize: annotation.labelFontSize,
-          lineWeight: annotation.lineWeight,
-          stampSize: annotation.stampSize,
-        }
-      : undefined;
+  const metadata = buildAnnotationMetadata(annotation);
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
@@ -142,3 +149,40 @@ export async function deleteAnnotation(
     );
   });
 }
+
+export async function replaceAnnotationsForTopo(
+  db: TopoDatabase,
+  topoId: string,
+  annotations: Annotation[],
+  now: string,
+): Promise<void> {
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('DELETE FROM annotations WHERE topo_id = ?', topoId);
+    for (const annotation of annotations) {
+      const metadata = buildAnnotationMetadata(annotation);
+      await db.runAsync(
+        `INSERT OR REPLACE INTO annotations (
+          id, topo_id, route_id, kind, color, label, metadata_json,
+          point_json, points_json, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        annotation.id,
+        annotation.topoId,
+        annotation.routeId ?? null,
+        annotation.kind,
+        annotation.color,
+        annotation.label ?? null,
+        metadata ? JSON.stringify(metadata) : null,
+        'point' in annotation ? JSON.stringify(annotation.point) : null,
+        'points' in annotation ? JSON.stringify(annotation.points) : null,
+        annotation.createdAt,
+        annotation.updatedAt,
+      );
+    }
+    await db.runAsync(
+      'UPDATE topos SET updated_at = ?, tabvar_dirty = 1 WHERE id = ?',
+      now,
+      topoId,
+    );
+  });
+}
+

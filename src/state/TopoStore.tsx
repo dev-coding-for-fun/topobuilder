@@ -75,6 +75,7 @@ import {
 } from '@/storage/repos/topoTabvarRoutesRepo';
 import {
   deleteAnnotation as deleteAnnotationRepo,
+  replaceAnnotationsForTopo,
   upsertAnnotation,
 } from '@/storage/repos/annotationsRepo';
 import { loadGuidebookExportBundle } from '@/storage/repos/guidebookExportRepo';
@@ -155,6 +156,7 @@ type TopoStoreValue = {
   addPathAnnotation: (input: CreatePathAnnotationInput) => Promise<Annotation>;
   updateAnnotation: (annotation: Annotation) => Promise<Annotation>;
   removeAnnotation: (annotation: Annotation) => Promise<void>;
+  replaceAnnotations: (topoId: string, annotations: Annotation[]) => Promise<void>;
 };
 
 const TopoStoreContext = createContext<TopoStoreValue | undefined>(undefined);
@@ -585,6 +587,13 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
     [db],
   );
 
+  const replaceAnnotations = useCallback(
+    async (topoId: string, annotations: Annotation[]) => {
+      await replaceAnnotationsForTopo(requireDb(), topoId, annotations, nowIso());
+    },
+    [db],
+  );
+
   const value = useMemo<TopoStoreValue>(
     () => ({
       isReady: Boolean(db),
@@ -625,6 +634,7 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
       addPathAnnotation,
       updateAnnotation,
       removeAnnotation,
+      replaceAnnotations,
     }),
     [
       addAnnotation,
@@ -659,6 +669,7 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
       renameSector,
       renameTopo,
       reorderTopoRoutes,
+      replaceAnnotations,
       storageError,
       submitToTabvar,
       unlinkTabvarRoute,

@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import { router } from 'expo-router';
 import { Keyboard, StyleSheet } from 'react-native';
 
-import type { NormalizedPoint, TopoEditorBundle, TopoProject } from '@/domain/types';
+import type { Annotation, NormalizedPoint, TopoEditorBundle, TopoProject } from '@/domain/types';
 import { EditorTopBar } from '@/editor/EditorTopBar';
 import { TopoCanvas } from '@/editor/TopoCanvas';
 import { useTopoStore } from '@/state/TopoStore';
@@ -25,16 +25,34 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 jest.mock('@/editor/EditorTopBar', () => ({
-  EditorTopBar: jest.fn(({ canDelete, onDelete }) => {
+  EditorTopBar: jest.fn(({ canDelete, onDelete, canUndo, onUndo, canRedo, onRedo }) => {
     const React = require('react');
-    const { Pressable, Text } = require('react-native');
-    return canDelete
-      ? React.createElement(
-          Pressable,
-          { accessibilityLabel: 'Delete selected annotation', onPress: onDelete },
-          React.createElement(Text, null, 'Delete'),
-        )
-      : null;
+    const { Pressable, Text, View } = require('react-native');
+    return React.createElement(
+      View,
+      null,
+      canUndo
+        ? React.createElement(
+            Pressable,
+            { accessibilityLabel: 'Undo', onPress: onUndo },
+            React.createElement(Text, null, 'Undo'),
+          )
+        : null,
+      canRedo
+        ? React.createElement(
+            Pressable,
+            { accessibilityLabel: 'Redo', onPress: onRedo },
+            React.createElement(Text, null, 'Redo'),
+          )
+        : null,
+      canDelete
+        ? React.createElement(
+            Pressable,
+            { accessibilityLabel: 'Delete selected annotation', onPress: onDelete },
+            React.createElement(Text, null, 'Delete'),
+          )
+        : null,
+    );
   }),
 }));
 
@@ -231,6 +249,7 @@ describe('EditorScreen label editing', () => {
   const attachPhotoFromLibrary = jest.fn();
   const loadTopoEditor = jest.fn();
   const removeAnnotation = jest.fn();
+  const replaceAnnotations = jest.fn();
   const updateAnnotation = jest.fn();
 
   beforeEach(() => {
@@ -278,6 +297,7 @@ describe('EditorScreen label editing', () => {
     updateAnnotation.mockImplementation(async (annotation) => annotation);
     attachPhotoFromLibrary.mockResolvedValue(true);
     removeAnnotation.mockResolvedValue(undefined);
+    replaceAnnotations.mockResolvedValue(undefined);
     (useTopoStore as jest.Mock).mockReturnValue({
       addAnnotation,
       addPathAnnotation,
@@ -285,6 +305,7 @@ describe('EditorScreen label editing', () => {
       isReady: true,
       loadTopoEditor,
       removeAnnotation,
+      replaceAnnotations,
       updateAnnotation,
     });
   });
@@ -831,5 +852,93 @@ describe('EditorScreen label editing', () => {
     expect(StyleSheet.flatten(screen.getByTestId('editor-canvas-region').props.style).marginBottom).toBeUndefined();
     expect(StyleSheet.flatten(screen.getByTestId('editor-bottom-overlay').props.style).bottom).toBe(0);
     expect(StyleSheet.flatten(screen.getByTestId('editor-bottom-overlay').props.style).display).toBeUndefined();
+  });
+
+  it('supports undo and redo when placing annotations', async () => {
+    let currentAnnotations: Annotation[] = [];
+    loadTopoEditor.mockImplementation(async () => ({
+      ...bundleFromProject(project),
+      annotations: currentAnnotations,
+    }));
+    addAnnotation.mockImplementation(async (input: { color?: string; kind: string; point: NormalizedPoint }) => {
+      const created: Annotation = {
+        id: 'bolt-1',
+        topoId: 'project-1',
+        kind: input.kind as 'bolt',
+        color: input.color ?? '#FACC15',
+        point: input.point,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+      currentAnnotations = [created];
+      return created;
+    });
+    replaceAnnotations.mockImplementation(async (_topoId: string, annotations: Annotation[]) => {
+      currentAnnotations = annotations;
+    });
+
+    render(<EditorScreen />);
+    await waitFor(() => expect(TopoCanvas).toHaveBeenCalled());
+
+    expect(screen.queryByLabelText('Undo')).toBeNull();
+    expect(screen.queryByLabelText('Redo')).toBeNull();
+
+    await act(async () => {
+      await latestCanvasProps().onPlaceAnnotation('bolt', { x: 0.5, y: 0.5 }, {});
+    });
+
+    expect(screen.getByLabelText('Undo')).toBeTruthy();
+    expect(screen.queryByLabelText('Redo')).toBeNull();
+
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Undo'));
+    });
+
+    expect(replaceAnnotations).toHaveBeenCalledWith('project-1', []);
+    expect(screen.queryByLabelText('Undo')).toBeNull();
+    expect(screen.getByLabelText('Redo')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Redo'));
+    });
+
+    expect(replaceAnnotations).toHaveBeenCalledWith(
+      'project-1',
+      expect.arrayContaining([expect.objectContaining({ kind: 'bolt' })]),
+    );
+    expect(screen.getByLabelText('Undo')).toBeTruthy();
+    expect(screen.queryByLabelText('Redo')).toBeNull();
+  });
+
+  it('supports undo when deleting an annotation', async () => {
+    loadTopoEditor.mockResolvedValue(bundleFromProject(projectWithAnnotations()));
+    render(<EditorScreen />);
+    await waitFor(() => expect(TopoCanvas).toHaveBeenCalled());
+
+    await act(async () => {
+      latestCanvasProps().onSelectStamp('bolt-1');
+    });
+
+    expect(screen.getByLabelText('Delete selected annotation')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Delete selected annotation'));
+    });
+
+    expect(removeAnnotation).toHaveBeenCalledWith(expect.objectContaining({ id: 'bolt-1' }));
+    expect(screen.getByLabelText('Undo')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Undo'));
+    });
+
+    expect(replaceAnnotations).toHaveBeenCalledWith(
+      'project-1',
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'label-1' }),
+        expect.objectContaining({ id: 'bolt-1' }),
+        expect.objectContaining({ id: 'path-1' }),
+      ]),
+    );
   });
 });

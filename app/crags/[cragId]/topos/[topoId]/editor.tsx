@@ -48,6 +48,7 @@ import {
 } from '@/domain/routeMarkerNumbers';
 import { DEFAULT_LABEL_FONT_SIZE, clampLabelFontSize } from '@/domain/textLabels';
 import { EditorTopBar } from '@/editor/EditorTopBar';
+import { useAnnotationHistory } from '@/editor/useAnnotationHistory';
 import { LineWeightControl } from '@/editor/LineWeightControl';
 import { RouteMarkerNumberControl } from '@/editor/RouteMarkerNumberControl';
 import { StampSizeControl } from '@/editor/StampSizeControl';
@@ -98,8 +99,10 @@ export default function EditorScreen() {
     addPathAnnotation,
     updateAnnotation,
     removeAnnotation,
+    replaceAnnotations,
     attachPhotoFromLibrary,
   } = useTopoStore();
+  const history = useAnnotationHistory(topoId);
   const [loaded, setLoaded] = useState<LoadedTopo>();
   const [activeTool, setActiveTool] = useState<EditorTool>('select');
   const [draftPoints, setDraftPoints] = useState<NormalizedPoint[]>([]);
@@ -420,6 +423,7 @@ export default function EditorScreen() {
     const stampSize = isStampKind(kind) ? currentStampSizeForTopo(photo.id) : undefined;
     const routeMarkerNumber = kind === 'start' ? currentRouteMarkerNumberForTopo(photo.id) : undefined;
 
+    history.recordSnapshot(savedAnnotations);
     const annotation = await addAnnotation({
       topoId: loaded.topo.id,
       routeId: route?.id,
@@ -492,6 +496,7 @@ export default function EditorScreen() {
 
     if (!loaded || !photo || !kind || finalizedPoints.length < 2) return;
 
+    history.recordSnapshot(savedAnnotations);
     const annotation = await addPathAnnotation({
       topoId: loaded.topo.id,
       routeId: route?.id,
@@ -594,7 +599,9 @@ export default function EditorScreen() {
     setLastLabelColorByTopo((colors) => ({ ...colors, [photo.id]: color }));
     const annotation = editingLabelRef.current;
     if (!annotation) return;
+    if (annotation.color === color) return;
 
+    history.recordSnapshot(savedAnnotations);
     const next = { ...annotation, color };
     editingLabelRef.current = next;
     setEditingLabel(next);
@@ -615,7 +622,9 @@ export default function EditorScreen() {
     const points = editingPathPointsRef.current;
     const annotation = savedAnnotations.find((item) => item.id === annotationId);
     if (!annotation || !isPathAnnotation(annotation)) return;
+    if (annotation.color === color) return;
 
+    history.recordSnapshot(savedAnnotations);
     const next = { ...annotation, points: points ?? annotation.points, color };
     const updated = await updateAnnotation(next);
     if (isPathAnnotation(updated)) {
@@ -634,7 +643,9 @@ export default function EditorScreen() {
     const points = editingPathPointsRef.current;
     const annotation = savedAnnotations.find((item) => item.id === annotationId);
     if (!annotation || !isPathAnnotation(annotation)) return;
+    if (annotation.lineWeight === lineWeight) return;
 
+    history.recordSnapshot(savedAnnotations);
     const next = { ...annotation, points: points ?? annotation.points, lineWeight };
     const updated = await updateAnnotation(next);
     if (isPathAnnotation(updated)) {
@@ -662,7 +673,9 @@ export default function EditorScreen() {
     }));
 
     if (!annotation) return;
+    if (annotation.color === color) return;
 
+    history.recordSnapshot(savedAnnotations);
     const next = { ...annotation, color };
     editingStampRef.current = next;
     setEditingStamp(next);
@@ -683,6 +696,9 @@ export default function EditorScreen() {
       return;
     }
 
+    if (annotation.label === routeMarkerNumberLabel(value)) return;
+
+    history.recordSnapshot(savedAnnotations);
     const previousNumber = parseRouteMarkerNumber(annotation.label);
     const next = { ...annotation, label: routeMarkerNumberLabel(value) };
     editingStampRef.current = next;
@@ -723,10 +739,15 @@ export default function EditorScreen() {
   async function changeStampSize(size: StampSize) {
     if (!loaded || !photo) return;
 
+    const stampAnnotations = savedAnnotations.filter(isStampAnnotation);
+    if (stampAnnotations.length > 0 && stampAnnotations.every((annotation) => annotation.stampSize === size)) {
+      return;
+    }
+
+    history.recordSnapshot(savedAnnotations);
     stampSizeByTopoRef.current[photo.id] = size;
     setStampSizeByTopo((sizes) => ({ ...sizes, [photo.id]: size }));
 
-    const stampAnnotations = savedAnnotations.filter(isStampAnnotation);
     const updatedStamps = stampAnnotations.map((annotation) => ({ ...annotation, stampSize: size }));
     const selectedUpdate = updatedStamps.find((annotation) => annotation.id === selectedStampIdRef.current);
     if (selectedUpdate) {
@@ -758,6 +779,7 @@ export default function EditorScreen() {
     if (!annotation) return;
 
     if ((annotation.label ?? '').trim().length === 0) {
+      history.recordSnapshot(savedAnnotations);
       await removeAnnotation(annotation);
       selectedLabelIdRef.current = undefined;
       editingLabelRef.current = undefined;
@@ -767,6 +789,20 @@ export default function EditorScreen() {
       return;
     }
 
+    const original = savedAnnotations.find((item) => item.id === annotation.id);
+    if (
+      original &&
+      'label' in original &&
+      original.label === annotation.label &&
+      'point' in original &&
+      original.point.x === annotation.point.x &&
+      original.point.y === annotation.point.y &&
+      original.labelFontSize === annotation.labelFontSize
+    ) {
+      return;
+    }
+
+    history.recordSnapshot(savedAnnotations);
     await updateAnnotation(annotation);
     await refresh();
   }
@@ -776,7 +812,9 @@ export default function EditorScreen() {
     const points = editingPathPointsRef.current;
     const annotation = savedAnnotations.find((item) => item.id === annotationId);
     if (!annotation || !points || !isPathAnnotation(annotation)) return;
+    if (JSON.stringify(annotation.points) === JSON.stringify(points)) return;
 
+    history.recordSnapshot(savedAnnotations);
     await updateAnnotation({ ...annotation, points });
     await refresh();
   }
@@ -788,6 +826,17 @@ export default function EditorScreen() {
   async function commitSelectedStampEdit() {
     const annotation = editingStampRef.current;
     if (!annotation) return;
+    const original = savedAnnotations.find((item) => item.id === annotation.id);
+    if (
+      original &&
+      'point' in original &&
+      original.point.x === annotation.point.x &&
+      original.point.y === annotation.point.y
+    ) {
+      return;
+    }
+
+    history.recordSnapshot(savedAnnotations);
     await updateAnnotation(annotation);
     await refresh();
   }
@@ -801,26 +850,32 @@ export default function EditorScreen() {
     );
     if (!selectedAnnotation) return;
 
+    history.recordSnapshot(savedAnnotations);
     clearSelectionState();
     await removeAnnotation(selectedAnnotation);
     await refresh();
   }
 
-  async function deleteLastAnnotation() {
-    const last = savedAnnotations.at(-1);
-    if (!last) return;
-    await removeAnnotation(last);
+  async function handleUndo() {
+    if (draftPoints.length > 0) {
+      clearDraftState();
+      return;
+    }
+    const previous = history.undo(savedAnnotations);
+    if (!previous || !photo) return;
+    clearSelectionState();
+    clearDraftState();
+    await replaceAnnotations(photo.id, previous);
     await refresh();
   }
 
-  function handleUndo() {
-    if (draftPoints.length > 0) {
-      setDraftPoints((points) => points.slice(0, -1));
-      draftPointsRef.current = draftPointsRef.current.slice(0, -1);
-      return;
-    }
-    if (savedAnnotations.length === 0) return;
-    void deleteLastAnnotation();
+  async function handleRedo() {
+    const next = history.redo(savedAnnotations);
+    if (!next || !photo) return;
+    clearSelectionState();
+    clearDraftState();
+    await replaceAnnotations(photo.id, next);
+    await refresh();
   }
 
   async function handleImportPhoto() {
@@ -963,15 +1018,19 @@ export default function EditorScreen() {
       </View>
       <SafeAreaView edges={['top']} pointerEvents="box-none" style={styles.topOverlay}>
         <EditorTopBar
-          canRedo={false}
-          canUndo={draftPoints.length > 0 || savedAnnotations.length > 0}
+          canRedo={history.canRedo}
+          canUndo={history.canUndo || draftPoints.length > 0}
           canDelete={Boolean(selectedAnnotation)}
           onBack={navigateToParent}
           onDelete={() => {
             void deleteSelectedAnnotation();
           }}
-          onRedo={() => undefined}
-          onUndo={handleUndo}
+          onRedo={() => {
+            void handleRedo();
+          }}
+          onUndo={() => {
+            void handleUndo();
+          }}
         />
       </SafeAreaView>
       <SafeAreaView
