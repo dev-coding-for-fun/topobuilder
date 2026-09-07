@@ -108,7 +108,7 @@ export default function UnsyncedIssuesScreen() {
   }
 
   return (
-    <Screen edges={['left', 'right', 'bottom']} style={styles.screen} testID="issues:unsynced:screen">
+    <Screen edges={['left', 'right']} style={styles.screen} testID="issues:unsynced:screen">
       <Stack.Screen options={{ title: 'Unsynced Issues' }} />
       <IssueErrorBanner message={actionError} testID="issues:unsynced:action-error" />
 
