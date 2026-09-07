@@ -218,7 +218,7 @@ export default function CragsListScreen() {
   }
 
   return (
-    <Screen edges={['left', 'right', 'bottom']} style={styles.screen} testID="crags:screen">
+    <Screen edges={['left', 'right']} style={styles.screen} testID="crags:screen">
       <Tabs.Screen
         options={{
           title: 'Crags',

@@ -60,7 +60,7 @@ export default function IssuesCragListScreen() {
   }
 
   return (
-    <Screen edges={['left', 'right', 'bottom']} style={styles.screen} testID="issues:crags:screen">
+    <Screen edges={['left', 'right']} style={styles.screen} testID="issues:crags:screen">
       <Stack.Screen
         options={{
           title: 'Issues',

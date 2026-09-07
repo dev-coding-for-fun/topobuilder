@@ -144,7 +144,7 @@ export default function CragIssuesScreen() {
   }
 
   return (
-    <Screen edges={['left', 'right', 'bottom']} style={styles.screen} testID="issues:crag:screen">
+    <Screen edges={['left', 'right']} style={styles.screen} testID="issues:crag:screen">
       <Stack.Screen options={{ title: 'Crag Issues' }} />
 
       <IssueErrorBanner message={actionError} testID="issues:crag:action-error" />
