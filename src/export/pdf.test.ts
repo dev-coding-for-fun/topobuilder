@@ -207,6 +207,54 @@ describe('guidebook PDF export', () => {
     expect(renderTopoRasterBase64).toHaveBeenCalledTimes(1);
   });
 
+  it('renders both local and connected routes in guidebook topo route list', async () => {
+    const bundleWithConnected: GuidebookExportBundle = {
+      ...guidebookBundle,
+      crag: {
+        ...guidebookBundle.crag,
+        sectors: [
+          {
+            ...guidebookBundle.crag.sectors[0],
+            topos: [
+              {
+                ...guidebookBundle.crag.sectors[0].topos[0],
+                routes: [
+                  {
+                    id: 'local-1',
+                    topoId: 'topo-1',
+                    name: 'Local Route',
+                    grade: '5.10a',
+                    sortOrder: 0,
+                    color: '#EF4444',
+                    createdAt: '2026-01-01T00:00:00.000Z',
+                    updatedAt: '2026-01-01T00:00:00.000Z',
+                  },
+                ],
+                tabvarRoutes: [
+                  {
+                    id: 1,
+                    appId: 'tabvar_1',
+                    cragId: 1,
+                    sectorId: 1,
+                    name: 'Connected Route',
+                    gradeYds: '5.12b',
+                    sortOrder: 1,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    const html = await buildGuidebookHtml(bundleWithConnected);
+    expect(html).toContain('Local Route');
+    expect(html).toContain('5.10a');
+    expect(html).toContain('Connected Route');
+    expect(html).toContain('5.12b');
+  });
+
   it('omits the disclaimer when export disclaimer settings are disabled', async () => {
     const html = await buildGuidebookHtml(guidebookBundle, {
       disclaimer: { enabled: false, text: DEFAULT_EXPORT_DISCLAIMER_TEXT },

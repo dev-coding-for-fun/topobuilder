@@ -7,6 +7,7 @@ import { exportSingleTopoImage } from '@/export/image';
 import { exportGuidebookPdf } from '@/export/pdf';
 import { loadTabvarSession } from '@/integrations/tabvar/sessionStore';
 import { useTopoStore } from '@/state/TopoStore';
+import { ActionSheet } from '@/ui/ActionSheet';
 import { BottomSheet } from '@/ui/BottomSheet';
 import { Button } from '@/ui/Button';
 import { interStyle } from '@/ui/fonts';
@@ -37,6 +38,7 @@ export function ShareSheet({ scope, onClose }: Props) {
   const [pdfUri, setPdfUri] = useState<string>();
   const [imageUri, setImageUri] = useState<string>();
   const [exportError, setExportError] = useState<string>();
+  const [routeActionSheetVisible, setRouteActionSheetVisible] = useState(false);
   const [tabvarConnected, setTabvarConnected] = useState(false);
   const [tabvarError, setTabvarError] = useState<string>();
   const [tabvarResult, setTabvarResult] = useState<string>();
@@ -50,6 +52,7 @@ export function ShareSheet({ scope, onClose }: Props) {
     setExportError(undefined);
     setIsExportingPdf(false);
     setIsExportingImage(false);
+    setRouteActionSheetVisible(false);
     if (!scope) return;
     let active = true;
     void loadGuidebookExport(guidebookRequestForScope(scope))
@@ -137,13 +140,23 @@ export function ShareSheet({ scope, onClose }: Props) {
     }
   }
 
-  async function handleExportImage() {
+  function handleImagePress() {
+    const topo = bundle?.crag.sectors[0]?.topos[0];
+    const totalRoutes = (topo?.routes?.length ?? 0) + (topo?.tabvarRoutes?.length ?? 0);
+    if (topo && totalRoutes > 1) {
+      setRouteActionSheetVisible(true);
+    } else {
+      void handleExportImage(false);
+    }
+  }
+
+  async function handleExportImage(includeRoutes = false) {
     if (!bundle) return;
     setIsExportingImage(true);
     setExportError(undefined);
     setPdfUri(undefined);
     try {
-      const uri = await exportSingleTopoImage(bundle);
+      const uri = await exportSingleTopoImage(bundle, { includeRoutes });
       setImageUri(uri);
     } catch (error) {
       setExportError(error instanceof Error ? error.message : 'Could not export the image.');
@@ -168,108 +181,131 @@ export function ShareSheet({ scope, onClose }: Props) {
   }
 
   return (
-    <BottomSheet
-      onClose={onClose}
-      scrollable={false}
-      testID="share-placeholder:sheet"
-      title="Share"
-      visible={Boolean(scope)}
-    >
-      <View style={styles.body}>
-        <Text style={styles.copy} testID="share-placeholder:scope">
-          {scope ? `Sharing the ${KIND_COPY[scope.kind]} “${scope.name}”.` : ''}
-        </Text>
+    <>
+      <BottomSheet
+        onClose={onClose}
+        scrollable={false}
+        testID="share-placeholder:sheet"
+        title="Share"
+        visible={Boolean(scope)}
+      >
+        <View style={styles.body}>
+          <Text style={styles.copy} testID="share-placeholder:scope">
+            {scope ? `Sharing the ${KIND_COPY[scope.kind]} “${scope.name}”.` : ''}
+          </Text>
 
-        <Section title="Connected services">
-          <ExportOption
-            disabled={!tabvarEnabled}
-            icon="cloud-upload-outline"
-            label="Tabvar"
-            onPress={() => {
-              void handleSubmitTabvar();
-            }}
-            subtitle={tabvarSubtitle()}
-            testID="share:submit-tabvar"
-            trailing={
-              isCheckingTabvar || isSubmittingTabvar ? (
-                <ActivityIndicator color="#6B7280" size="small" />
-              ) : undefined
-            }
-          />
-        </Section>
-
-        <Section title="Export file">
-          <ExportOption
-            disabled={!pdfEnabled}
-            icon="document-text-outline"
-            label="PDF"
-            onPress={() => {
-              void handleExportPdf();
-            }}
-            subtitle={pdfSubtitle()}
-            testID="share:export-pdf"
-            trailing={isExportingPdf ? <ActivityIndicator color="#6B7280" size="small" /> : undefined}
-          />
-          <ExportOption
-            disabled
-            icon="code-slash-outline"
-            label="HTML"
-            onPress={() => undefined}
-            subtitle="Coming soon"
-            testID="share:export-html"
-            underConstruction
-          />
-          {isTopoScope ? (
+          <Section title="Connected services">
             <ExportOption
-              disabled={!imageEnabled}
-              icon="image-outline"
-              label="Image"
+              disabled={!tabvarEnabled}
+              icon="cloud-upload-outline"
+              label="Tabvar"
               onPress={() => {
-                void handleExportImage();
+                void handleSubmitTabvar();
               }}
-              subtitle={imageSubtitle()}
-              testID="share:export-image"
+              subtitle={tabvarSubtitle()}
+              testID="share:submit-tabvar"
               trailing={
-                isExportingImage ? <ActivityIndicator color="#6B7280" size="small" /> : undefined
+                isCheckingTabvar || isSubmittingTabvar ? (
+                  <ActivityIndicator color="#6B7280" size="small" />
+                ) : undefined
               }
             />
+          </Section>
+
+          <Section title="Export file">
+            <ExportOption
+              disabled={!pdfEnabled}
+              icon="document-text-outline"
+              label="PDF"
+              onPress={() => {
+                void handleExportPdf();
+              }}
+              subtitle={pdfSubtitle()}
+              testID="share:export-pdf"
+              trailing={isExportingPdf ? <ActivityIndicator color="#6B7280" size="small" /> : undefined}
+            />
+            <ExportOption
+              disabled
+              icon="code-slash-outline"
+              label="HTML"
+              onPress={() => undefined}
+              subtitle="Coming soon"
+              testID="share:export-html"
+              underConstruction
+            />
+            {isTopoScope ? (
+              <ExportOption
+                disabled={!imageEnabled}
+                icon="image-outline"
+                label="Image"
+                onPress={handleImagePress}
+                subtitle={imageSubtitle()}
+                testID="share:export-image"
+                trailing={
+                  isExportingImage ? <ActivityIndicator color="#6B7280" size="small" /> : undefined
+                }
+              />
+            ) : null}
+          </Section>
+
+          {pdfUri ? (
+            <Text style={styles.resultOk} testID="share:export-result">
+              Saved: {pdfUri}
+            </Text>
           ) : null}
-        </Section>
+          {imageUri ? (
+            <Text style={styles.resultOk} testID="share:export-result">
+              Saved: {imageUri}
+            </Text>
+          ) : null}
+          {exportError ? (
+            <Text style={styles.resultError} testID="share:export-error">
+              {exportError}
+            </Text>
+          ) : null}
+          {tabvarResult ? (
+            <Text style={styles.resultOk} testID="share:submit-tabvar-result">
+              {tabvarResult}
+            </Text>
+          ) : null}
+          {tabvarError ? (
+            <Text style={styles.resultError} testID="share:submit-tabvar-error">
+              {tabvarError}
+            </Text>
+          ) : null}
 
-        {pdfUri ? (
-          <Text style={styles.resultOk} testID="share:export-result">
-            Saved: {pdfUri}
-          </Text>
-        ) : null}
-        {imageUri ? (
-          <Text style={styles.resultOk} testID="share:export-result">
-            Saved: {imageUri}
-          </Text>
-        ) : null}
-        {exportError ? (
-          <Text style={styles.resultError} testID="share:export-error">
-            {exportError}
-          </Text>
-        ) : null}
-        {tabvarResult ? (
-          <Text style={styles.resultOk} testID="share:submit-tabvar-result">
-            {tabvarResult}
-          </Text>
-        ) : null}
-        {tabvarError ? (
-          <Text style={styles.resultError} testID="share:submit-tabvar-error">
-            {tabvarError}
-          </Text>
-        ) : null}
+          <Button
+            label="Close"
+            onPress={onClose}
+            testID="share-placeholder:close"
+            variant="secondary"
+          />
+        </View>
+      </BottomSheet>
 
-        <Button
-          label="Close"
-          onPress={onClose}
-          testID="share-placeholder:close"
-          variant="secondary"
-        />
-      </View>
-    </BottomSheet>
+      <ActionSheet
+        items={[
+          {
+            id: 'print-routes',
+            label: 'Print Routes',
+            onPress: () => {
+              void handleExportImage(true);
+            },
+          },
+          {
+            id: 'topo-only',
+            label: 'Topo Only',
+            onPress: () => {
+              void handleExportImage(false);
+            },
+          },
+        ]}
+        onClose={() => setRouteActionSheetVisible(false)}
+        testID="share:image-route-options"
+        title="Export image"
+        visible={routeActionSheetVisible}
+      />
+    </>
   );
 }
 

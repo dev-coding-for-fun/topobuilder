@@ -13,18 +13,27 @@ type Props = {
 };
 
 function summaryFor(topo: TopoWithRoutes): string {
-  const count = topo.routes.length;
+  const localRoutes = topo.routes ?? [];
+  const tabvarRoutes = topo.tabvarRoutes ?? [];
+  const count = localRoutes.length + tabvarRoutes.length;
   if (count === 0) {
     return topo.photoUri ? 'No routes yet' : 'No photo · no routes yet';
   }
   if (count === 1) {
-    const r = topo.routes[0];
-    const grade = r.grade ? `${r.grade} · ` : '';
-    return `${grade}${r.name || 'Route 1'}`;
+    if (localRoutes.length === 1) {
+      const r = localRoutes[0];
+      const grade = r.grade ? `${r.grade} · ` : '';
+      return `${grade}${r.name || 'Route 1'}`;
+    } else {
+      const r = tabvarRoutes[0];
+      const grade = r.gradeYds ? `${r.gradeYds} · ` : '';
+      return `${grade}${r.name}`;
+    }
   }
-  const grades = topo.routes
-    .map((r) => r.grade)
-    .filter((g): g is string => Boolean(g));
+  const grades = [
+    ...localRoutes.map((r) => r.grade),
+    ...tabvarRoutes.map((r) => r.gradeYds),
+  ].filter((g): g is string => Boolean(g));
   if (grades.length > 0) {
     const span = grades.length === 1 ? grades[0] : `${grades[0]} – ${grades[grades.length - 1]}`;
     return `${count} routes · ${span}`;

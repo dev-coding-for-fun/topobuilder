@@ -6,11 +6,13 @@ import { annotationsForPhoto } from '@/domain/annotationFactory';
 import type { PhotoAsset, TopoProject } from '@/domain/types';
 
 import { loadExportSkiaTypefaces } from './exportFonts';
+import { buildRouteFooterRenderScene } from './routeFooter';
 import { buildTopoRenderScene } from './scene';
 import { SkiaTopoImage, SkiaTopoStaticScene } from './SkiaTopoRenderer';
 
 export type RasterTopoOptions = {
   format?: ImageFormat;
+  includeRoutes?: boolean;
   quality?: number;
   targetWidth?: number;
 };
@@ -23,7 +25,7 @@ export async function renderTopoRasterBase64(
   options: RasterTopoOptions = {},
 ) {
   const targetWidth = options.targetWidth ?? Math.min(Math.max(photo.width, DEFAULT_EXPORT_WIDTH), 2400);
-  const size = {
+  const photoSize = {
     width: targetWidth,
     height: Math.round((targetWidth / photo.width) * photo.height),
   };
@@ -35,16 +37,34 @@ export async function renderTopoRasterBase64(
 
   const scene = buildTopoRenderScene({
     annotations: annotationsForPhoto(project.annotations, photo.id),
-    size,
+    size: photoSize,
     sourcePhoto: photo,
     target: 'artifact',
   });
+
+  const footer =
+    options.includeRoutes && project.routes.length > 0
+      ? buildRouteFooterRenderScene({
+          routes: project.routes,
+          startY: photoSize.height,
+          typefaces,
+          width: targetWidth,
+        })
+      : undefined;
+
+  const totalSize = {
+    width: targetWidth,
+    height: photoSize.height + (footer?.height ?? 0),
+  };
+
+  const sceneItems = footer ? [...scene, ...footer.items] : scene;
+
   const renderedImage = await drawAsImage(
     <Group>
-      <SkiaTopoImage image={photoImage} size={size} />
-      <SkiaTopoStaticScene items={scene} typefaces={typefaces} />
+      <SkiaTopoImage image={photoImage} size={photoSize} />
+      <SkiaTopoStaticScene items={sceneItems} typefaces={typefaces} />
     </Group>,
-    size,
+    totalSize,
   );
   if (!renderedImage) {
     throw new Error('Topo scene could not be rasterized for export.');
@@ -52,9 +72,9 @@ export async function renderTopoRasterBase64(
 
   return {
     base64: renderedImage.encodeToBase64(options.format ?? ImageFormat.JPEG, options.quality ?? 92),
-    height: size.height,
+    height: totalSize.height,
     mimeType: imageFormatMimeType(options.format ?? ImageFormat.JPEG),
-    width: size.width,
+    width: totalSize.width,
   };
 }
 

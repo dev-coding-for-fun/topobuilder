@@ -39,4 +39,34 @@ describe('TopoRow', () => {
     expect(screen.queryByTestId('crag-detail:topo:topo-1:thumb-image')).toBeNull();
     expect(screen.getByTestId('crag-detail:topo:topo-1:thumb')).toBeTruthy();
   });
+
+  it('displays combined count and grade span for local and tabvar routes', () => {
+    renderRow({
+      ...baseTopo,
+      routes: [
+        {
+          id: 'route-1',
+          topoId: 'topo-1',
+          name: 'Pine Line',
+          grade: '5.10a',
+          color: '#EF4444',
+          sortOrder: 0,
+          createdAt: '2026-05-30T00:00:00.000Z',
+          updatedAt: '2026-05-30T00:00:00.000Z',
+        },
+      ],
+      tabvarRoutes: [
+        {
+          id: 1,
+          appId: 'tabvar-1',
+          cragId: 1,
+          sectorId: 1,
+          name: 'Solar Flare',
+          gradeYds: '5.11b',
+        },
+      ],
+    });
+
+    expect(screen.getByText('2 routes · 5.10a – 5.11b')).toBeTruthy();
+  });
 });

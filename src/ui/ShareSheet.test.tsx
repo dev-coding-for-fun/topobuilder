@@ -46,6 +46,122 @@ const bundle: GuidebookExportBundle = {
   },
 };
 
+const singleRouteBundle: GuidebookExportBundle = {
+  scope: 'topo',
+  crag: {
+    id: 'crag-1',
+    name: 'Guide Crag',
+    sortOrder: 0,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    sectors: [
+      {
+        id: 'sector-1',
+        cragId: 'crag-1',
+        name: 'Main Wall',
+        sortOrder: 0,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        topos: [
+          {
+            id: 'topo-1',
+            sectorId: 'sector-1',
+            name: 'Topo 1',
+            sortOrder: 0,
+            tabvarDirty: false,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+            annotations: [],
+            photo: {
+              id: 'photo-1',
+              topoId: 'topo-1',
+              uri: 'file://photo.jpg',
+              width: 1000,
+              height: 800,
+              createdAt: '2026-01-01T00:00:00.000Z',
+            },
+            routes: [
+              {
+                id: 'route-1',
+                topoId: 'topo-1',
+                name: 'Route 1',
+                grade: '5.10a',
+                color: '#EF4444',
+                sortOrder: 0,
+                createdAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+};
+
+const multiRouteBundle: GuidebookExportBundle = {
+  scope: 'topo',
+  crag: {
+    id: 'crag-1',
+    name: 'Guide Crag',
+    sortOrder: 0,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    sectors: [
+      {
+        id: 'sector-1',
+        cragId: 'crag-1',
+        name: 'Main Wall',
+        sortOrder: 0,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        topos: [
+          {
+            id: 'topo-1',
+            sectorId: 'sector-1',
+            name: 'Topo 1',
+            sortOrder: 0,
+            tabvarDirty: false,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+            annotations: [],
+            photo: {
+              id: 'photo-1',
+              topoId: 'topo-1',
+              uri: 'file://photo.jpg',
+              width: 1000,
+              height: 800,
+              createdAt: '2026-01-01T00:00:00.000Z',
+            },
+            routes: [
+              {
+                id: 'route-1',
+                topoId: 'topo-1',
+                name: 'Route 1',
+                grade: '5.10a',
+                color: '#EF4444',
+                sortOrder: 0,
+                createdAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+              },
+              {
+                id: 'route-2',
+                topoId: 'topo-1',
+                name: 'Route 2',
+                grade: '5.11b',
+                color: '#3B82F6',
+                sortOrder: 1,
+                createdAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+};
+
 const scopes: ShareScope[] = [
   { kind: 'crag', cragId: 'crag-1', name: 'Guide Crag' },
   { kind: 'sector', sectorId: 'sector-1', name: 'Main Wall' },
@@ -152,7 +268,9 @@ describe('ShareSheet', () => {
     expect(screen.getByText('Annotated topo image')).toBeTruthy();
   });
 
-  it('exports single topo image and shows saved URI', async () => {
+  it('exports single topo image directly when topo has <= 1 route', async () => {
+    loadGuidebookExport.mockResolvedValueOnce(singleRouteBundle);
+
     render(<ShareSheet onClose={jest.fn()} scope={scopes[2]} />);
 
     await waitFor(() => expect(screen.getByTestId('share:export-image')).toBeTruthy());
@@ -160,7 +278,137 @@ describe('ShareSheet', () => {
 
     fireEvent.press(screen.getByTestId('share:export-image'));
 
-    await waitFor(() => expect(exportSingleTopoImage).toHaveBeenCalledWith(bundle));
+    await waitFor(() =>
+      expect(exportSingleTopoImage).toHaveBeenCalledWith(singleRouteBundle, { includeRoutes: false }),
+    );
+    expect(screen.getByText('Saved: file://topo-image.webp')).toBeTruthy();
+  });
+
+  it('shows route options sheet when topo has > 1 route and exports with routes when Print Routes is selected', async () => {
+    loadGuidebookExport.mockResolvedValueOnce(multiRouteBundle);
+
+    render(<ShareSheet onClose={jest.fn()} scope={scopes[2]} />);
+
+    await waitFor(() => expect(screen.getByTestId('share:export-image')).toBeTruthy());
+
+    fireEvent.press(screen.getByTestId('share:export-image'));
+
+    await waitFor(() => expect(screen.getByTestId('share:image-route-options:print-routes')).toBeTruthy());
+    expect(exportSingleTopoImage).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('share:image-route-options:print-routes'));
+
+    await waitFor(() =>
+      expect(exportSingleTopoImage).toHaveBeenCalledWith(multiRouteBundle, { includeRoutes: true }),
+    );
+    expect(screen.getByText('Saved: file://topo-image.webp')).toBeTruthy();
+  });
+
+  it('exports topo only when Topo Only is selected from route options sheet', async () => {
+    loadGuidebookExport.mockResolvedValueOnce(multiRouteBundle);
+
+    render(<ShareSheet onClose={jest.fn()} scope={scopes[2]} />);
+
+    await waitFor(() => expect(screen.getByTestId('share:export-image')).toBeTruthy());
+
+    fireEvent.press(screen.getByTestId('share:export-image'));
+
+    await waitFor(() => expect(screen.getByTestId('share:image-route-options:topo-only')).toBeTruthy());
+
+    fireEvent.press(screen.getByTestId('share:image-route-options:topo-only'));
+
+    await waitFor(() =>
+      expect(exportSingleTopoImage).toHaveBeenCalledWith(multiRouteBundle, { includeRoutes: false }),
+    );
+    expect(screen.getByText('Saved: file://topo-image.webp')).toBeTruthy();
+  });
+
+  it('shows route options sheet when topo has 1 local and 1 connected route (total > 1)', async () => {
+    const mixedBundle: GuidebookExportBundle = {
+      ...singleRouteBundle,
+      crag: {
+        ...singleRouteBundle.crag,
+        sectors: [
+          {
+            ...singleRouteBundle.crag.sectors[0],
+            topos: [
+              {
+                ...singleRouteBundle.crag.sectors[0].topos[0],
+                routes: [singleRouteBundle.crag.sectors[0].topos[0].routes[0]],
+                tabvarRoutes: [
+                  {
+                    id: 99,
+                    appId: 'tabvar-99',
+                    cragId: 1,
+                    sectorId: 1,
+                    name: 'Connected Route',
+                    gradeYds: '5.12a',
+                    sortOrder: 1,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    loadGuidebookExport.mockResolvedValueOnce(mixedBundle);
+
+    render(<ShareSheet onClose={jest.fn()} scope={scopes[2]} />);
+    await waitFor(() => expect(screen.getByTestId('share:export-image')).toBeTruthy());
+
+    fireEvent.press(screen.getByTestId('share:export-image'));
+
+    await waitFor(() => expect(screen.getByTestId('share:image-route-options:print-routes')).toBeTruthy());
+
+    fireEvent.press(screen.getByTestId('share:image-route-options:print-routes'));
+
+    await waitFor(() =>
+      expect(exportSingleTopoImage).toHaveBeenCalledWith(mixedBundle, { includeRoutes: true }),
+    );
+  });
+
+  it('exports directly when topo has 0 local routes and 1 connected route', async () => {
+    const connectedOnlyBundle: GuidebookExportBundle = {
+      ...singleRouteBundle,
+      crag: {
+        ...singleRouteBundle.crag,
+        sectors: [
+          {
+            ...singleRouteBundle.crag.sectors[0],
+            topos: [
+              {
+                ...singleRouteBundle.crag.sectors[0].topos[0],
+                routes: [],
+                tabvarRoutes: [
+                  {
+                    id: 99,
+                    appId: 'tabvar-99',
+                    cragId: 1,
+                    sectorId: 1,
+                    name: 'Connected Route',
+                    gradeYds: '5.12a',
+                    sortOrder: 0,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    loadGuidebookExport.mockResolvedValueOnce(connectedOnlyBundle);
+
+    render(<ShareSheet onClose={jest.fn()} scope={scopes[2]} />);
+    await waitFor(() => expect(screen.getByTestId('share:export-image')).toBeTruthy());
+
+    fireEvent.press(screen.getByTestId('share:export-image'));
+
+    await waitFor(() =>
+      expect(exportSingleTopoImage).toHaveBeenCalledWith(connectedOnlyBundle, { includeRoutes: false }),
+    );
     expect(screen.getByText('Saved: file://topo-image.webp')).toBeTruthy();
   });
 

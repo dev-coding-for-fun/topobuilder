@@ -81,6 +81,36 @@ class FakeGuidebookDb {
     },
   ];
 
+  tabvarRoutes: TableRow[] = [
+    {
+      id: 101,
+      app_id: 'tabvar-1',
+      crag_id: 1,
+      sector_id: 1,
+      name: 'Solar Flare',
+      grade_yds: '5.11b',
+      bolt_count: 6,
+      pitch_count: 1,
+      route_length: 20,
+      climb_style: 'Sport',
+      crag_name: 'Guide Crag',
+      sector_name: 'Main Wall',
+      sort_order: 1,
+      topo_id: 'topo-1',
+      topo_sort_order: 1,
+      alt_names: null,
+      status: null,
+      latitude: null,
+      longitude: null,
+      notes: null,
+      year: null,
+      route_built_date: null,
+      first_ascent_by: null,
+      first_ascent_date: null,
+      created_at: '2026-01-01T00:00:00.000Z',
+    },
+  ];
+
   annotations: TableRow[] = [
     {
       id: 'line-1',
@@ -123,6 +153,9 @@ class FakeGuidebookDb {
     if (sql.includes('FROM routes WHERE topo_id')) {
       return this.routes.filter((row) => row.topo_id === id) as T[];
     }
+    if (sql.includes('FROM tabvar_routes routes')) {
+      return this.tabvarRoutes.filter((row) => row.topo_id === id) as T[];
+    }
     if (sql.includes('FROM annotations WHERE topo_id')) {
       return this.annotations.filter((row) => row.topo_id === id) as T[];
     }
@@ -147,6 +180,7 @@ describe('loadGuidebookExportBundle', () => {
     expect(bundle?.crag.sectors[1].topos).toEqual([]);
     expect(bundle?.crag.sectors[0].topos[0].photo?.uri).toBe('file://topo.jpg');
     expect(bundle?.crag.sectors[0].topos[0].routes[0].name).toBe('Pine Line');
+    expect(bundle?.crag.sectors[0].topos[0].tabvarRoutes?.[0].name).toBe('Solar Flare');
     expect(bundle?.crag.sectors[0].topos[0].annotations[0].id).toBe('line-1');
   });
 

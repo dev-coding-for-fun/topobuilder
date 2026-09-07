@@ -10,6 +10,7 @@ import type {
   TopoProject,
 } from '@/domain/types';
 import { renderTopoRasterBase64 } from '@/rendering/artifact';
+import { unifiedRoutesForTopo } from './image';
 import {
   DEFAULT_EXPORT_DISCLAIMER_SETTINGS,
   type ExportDisclaimerSettings,
@@ -76,7 +77,7 @@ function legacyProjectForTopo(topo: GuidebookTopo): TopoProject | undefined {
     createdAt: topo.createdAt,
     updatedAt: topo.updatedAt,
     photos: [topo.photo],
-    routes: topo.routes,
+    routes: unifiedRoutesForTopo(topo),
     annotations: topo.annotations,
   };
 }
@@ -136,7 +137,7 @@ async function topoSectionHtml(topo: GuidebookTopo) {
       <h3>${escapeHtml(topo.name)}</h3>
       ${paragraphs(topo.description)}
       ${await renderTopoImageHtml(topo)}
-      ${routeListHtml(topo.routes)}
+      ${routeListHtml(unifiedRoutesForTopo(topo))}
     </section>
   `;
 }

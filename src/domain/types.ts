@@ -222,6 +222,7 @@ export type GuidebookTopo = Topo & {
   annotations: Annotation[];
   photo?: PhotoAsset;
   routes: Route[];
+  tabvarRoutes?: TabvarRoute[];
 };
 
 export type GuidebookSector = Sector & {

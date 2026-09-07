@@ -15,6 +15,7 @@ import { listAnnotationsForTopo } from './annotationsRepo';
 import { getCrag } from './cragsRepo';
 import { getSector, listSectorsForCrag } from './sectorsRepo';
 import { listRoutesForTopo } from './routesRepo';
+import { listTabvarRoutesForTopo } from './topoTabvarRoutesRepo';
 import { getTopo, listToposForSector } from './toposRepo';
 
 export async function loadGuidebookExportBundle(
@@ -79,15 +80,17 @@ async function loadGuidebookSector(db: TopoDatabase, sector: Sector): Promise<Gu
 }
 
 async function loadGuidebookTopo(db: TopoDatabase, topo: Topo): Promise<GuidebookTopo> {
-  const [routes, annotations] = await Promise.all([
+  const [routes, annotations, tabvarRoutes] = await Promise.all([
     listRoutesForTopo(db, topo.id),
     listAnnotationsForTopo(db, topo.id),
+    listTabvarRoutesForTopo(db, topo.id),
   ]);
   return {
     ...topo,
     annotations,
     photo: photoAssetForTopo(topo),
     routes,
+    tabvarRoutes,
   };
 }
 

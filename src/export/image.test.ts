@@ -11,6 +11,7 @@ import {
   exportTopoImage,
   extractSingleTopoFromBundle,
   projectForGuidebookTopo,
+  resolveTopoExportBaseFilename,
   sanitizeImageFilename,
 } from './image';
 
@@ -104,9 +105,84 @@ const validTopoBundle: GuidebookExportBundle = {
   selectedTopoId: 'topo-1',
 };
 
+describe('resolveTopoExportBaseFilename', () => {
+  it('uses custom topo name when provided', () => {
+    expect(
+      resolveTopoExportBaseFilename({
+        topoName: 'The Great Arch',
+        sectorName: 'Main Sector',
+        routes: mockProject.routes,
+      }),
+    ).toBe('The Great Arch');
+  });
+
+  it('uses route name when topo has default name "Topo N" and exactly 1 route', () => {
+    expect(
+      resolveTopoExportBaseFilename({
+        topoName: 'Topo 1',
+        sectorName: 'Main Sector',
+        routes: [{ ...mockProject.routes[0], name: 'Sunset Strip' }],
+      }),
+    ).toBe('Sunset Strip');
+
+    expect(
+      resolveTopoExportBaseFilename({
+        topoName: 'Topo 42',
+        sectorName: 'Main Sector',
+        routes: [{ ...mockProject.routes[0], name: 'Red Crack' }],
+      }),
+    ).toBe('Red Crack');
+  });
+
+  it('uses "sector_name - Topo N" when topo has default name and route count is not 1', () => {
+    // 2 routes
+    expect(
+      resolveTopoExportBaseFilename({
+        topoName: 'Topo 2',
+        sectorName: 'Main Sector',
+        routes: [
+          mockProject.routes[0],
+          { ...mockProject.routes[0], id: 'route-2', name: 'Second' },
+        ],
+      }),
+    ).toBe('Main Sector - Topo 2');
+
+    // 0 routes
+    expect(
+      resolveTopoExportBaseFilename({
+        topoName: 'Topo 3',
+        sectorName: 'Main Sector',
+        routes: [],
+      }),
+    ).toBe('Main Sector - Topo 3');
+  });
+
+  it('handles empty topo name by using route name if 1 route, or sector - Topo 1 if not 1 route', () => {
+    expect(
+      resolveTopoExportBaseFilename({
+        topoName: '',
+        sectorName: 'North Wall',
+        routes: [{ ...mockProject.routes[0], name: 'Solo Line' }],
+      }),
+    ).toBe('Solo Line');
+
+    expect(
+      resolveTopoExportBaseFilename({
+        topoName: '',
+        sectorName: 'North Wall',
+        routes: [],
+      }),
+    ).toBe('North Wall - Topo 1');
+  });
+});
+
 describe('sanitizeImageFilename', () => {
   it('converts special characters and spaces to hyphens and downcases', () => {
     expect(sanitizeImageFilename('Upper Wall #2 (Direct!)')).toBe('upper-wall-2-direct');
+  });
+
+  it('collapses multiple consecutive hyphens into a single hyphen', () => {
+    expect(sanitizeImageFilename('Main Sector - Topo 2')).toBe('main-sector-topo-2');
   });
 
   it('falls back to "topo" when name contains no alphanumeric characters', () => {
@@ -128,6 +204,71 @@ describe('projectForGuidebookTopo', () => {
     expect(project?.name).toBe(topo.name);
     expect(project?.photos).toEqual([topo.photo]);
     expect(project?.routes).toEqual(topo.routes);
+  });
+
+  it('unifies local and connected tabvar routes in sortOrder', () => {
+    const topoWithBoth = {
+      ...validTopoBundle.crag.sectors[0].topos[0],
+      annotations: [
+        {
+          id: 'line-2',
+          topoId: 'topo-1',
+          routeAppId: 'tabvar_route_123',
+          kind: 'climbLine' as const,
+          color: '#10B981',
+          points: [
+            { x: 0.2, y: 0.2 },
+            { x: 0.5, y: 0.5 },
+          ],
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+      routes: [
+        {
+          id: 'local-1',
+          topoId: 'topo-1',
+          name: 'Second Local',
+          grade: '5.10b',
+          color: '#EF4444',
+          sortOrder: 2,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+      tabvarRoutes: [
+        {
+          id: 1,
+          appId: 'tabvar_route_123',
+          cragId: 1,
+          sectorId: 1,
+          name: 'First Tabvar',
+          gradeYds: '5.11a',
+          sortOrder: 0,
+        },
+        {
+          id: 2,
+          appId: 'tabvar_route_456',
+          cragId: 1,
+          sectorId: 1,
+          name: 'Third Tabvar',
+          gradeYds: '5.12c',
+          sortOrder: 5,
+        },
+      ],
+    };
+
+    const project = projectForGuidebookTopo(topoWithBoth);
+    expect(project?.routes).toHaveLength(3);
+    // Ordered by sortOrder: First Tabvar (0), Second Local (2), Third Tabvar (5)
+    expect(project?.routes[0].name).toBe('First Tabvar');
+    expect(project?.routes[0].grade).toBe('5.11a');
+
+    expect(project?.routes[1].name).toBe('Second Local');
+    expect(project?.routes[1].grade).toBe('5.10b');
+
+    expect(project?.routes[2].name).toBe('Third Tabvar');
+    expect(project?.routes[2].grade).toBe('5.12c');
   });
 });
 
@@ -204,6 +345,155 @@ describe('exportSingleTopoImage', () => {
     const uri = await exportSingleTopoImage(validTopoBundle);
     expect(renderTopoRasterBase64).toHaveBeenCalled();
     expect(uri).toBe('file:///cache/upper-wall.webp');
+  });
+
+  it('passes includeRoutes option to renderTopoRasterBase64', async () => {
+    await exportSingleTopoImage(validTopoBundle, { includeRoutes: true });
+    expect(renderTopoRasterBase64).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ includeRoutes: true }),
+    );
+  });
+
+  it('resolves filename to route name when topo name is default "Topo 1" with 1 route', async () => {
+    const bundleDefaultName: GuidebookExportBundle = {
+      ...validTopoBundle,
+      crag: {
+        ...validTopoBundle.crag,
+        sectors: [
+          {
+            ...validTopoBundle.crag.sectors[0],
+            topos: [
+              {
+                ...validTopoBundle.crag.sectors[0].topos[0],
+                name: 'Topo 1',
+                routes: [{ ...mockProject.routes[0], name: 'Sunset Strip' }],
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    const uri = await exportSingleTopoImage(bundleDefaultName);
+    expect(uri).toBe('file:///cache/sunset-strip.webp');
+  });
+
+  it('resolves filename to "sector - topo" when topo name is default "Topo 2" with multiple routes', async () => {
+    const bundleDefaultMulti: GuidebookExportBundle = {
+      ...validTopoBundle,
+      crag: {
+        ...validTopoBundle.crag,
+        sectors: [
+          {
+            ...validTopoBundle.crag.sectors[0],
+            name: 'Main Sector',
+            topos: [
+              {
+                ...validTopoBundle.crag.sectors[0].topos[0],
+                name: 'Topo 2',
+                routes: [
+                  mockProject.routes[0],
+                  { ...mockProject.routes[0], id: 'route-2', name: 'Second' },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    const uri = await exportSingleTopoImage(bundleDefaultMulti);
+    expect(uri).toBe('file:///cache/main-sector-topo-2.webp');
+  });
+
+  it('resolves filename to connected route name when default topo has 0 local routes and 1 connected route', async () => {
+    const bundleWithConnectedRoute: GuidebookExportBundle = {
+      ...validTopoBundle,
+      crag: {
+        ...validTopoBundle.crag,
+        sectors: [
+          {
+            ...validTopoBundle.crag.sectors[0],
+            topos: [
+              {
+                ...validTopoBundle.crag.sectors[0].topos[0],
+                name: 'Topo 1',
+                routes: [],
+                tabvarRoutes: [
+                  {
+                    id: 42,
+                    appId: 'tabvar_42',
+                    cragId: 1,
+                    sectorId: 1,
+                    name: 'Super Crack',
+                    gradeYds: '5.10c',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    const uri = await exportSingleTopoImage(bundleWithConnectedRoute);
+    expect(uri).toBe('file:///cache/super-crack.webp');
+  });
+
+  it('passes both local and connected routes to renderTopoRasterBase64 when includeRoutes is true', async () => {
+    const bundleWithBoth: GuidebookExportBundle = {
+      ...validTopoBundle,
+      crag: {
+        ...validTopoBundle.crag,
+        sectors: [
+          {
+            ...validTopoBundle.crag.sectors[0],
+            topos: [
+              {
+                ...validTopoBundle.crag.sectors[0].topos[0],
+                routes: [
+                  {
+                    id: 'local-1',
+                    topoId: 'topo-1',
+                    name: 'Local Route',
+                    grade: '5.9',
+                    color: '#FF0000',
+                    sortOrder: 0,
+                    createdAt: '2026-01-01T00:00:00.000Z',
+                    updatedAt: '2026-01-01T00:00:00.000Z',
+                  },
+                ],
+                tabvarRoutes: [
+                  {
+                    id: 99,
+                    appId: 'tabvar_99',
+                    cragId: 1,
+                    sectorId: 1,
+                    name: 'Connected Route',
+                    gradeYds: '5.12a',
+                    sortOrder: 1,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    await exportSingleTopoImage(bundleWithBoth, { includeRoutes: true });
+    expect(renderTopoRasterBase64).toHaveBeenCalledWith(
+      expect.objectContaining({
+        routes: expect.arrayContaining([
+          expect.objectContaining({ name: 'Local Route' }),
+          expect.objectContaining({ name: 'Connected Route' }),
+        ]),
+      }),
+      expect.anything(),
+      expect.objectContaining({ includeRoutes: true }),
+    );
   });
 
   it('throws when topo has no photo', async () => {

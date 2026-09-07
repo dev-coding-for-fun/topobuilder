@@ -87,4 +87,45 @@ describe('renderTopoRasterBase64', () => {
       }),
     );
   });
+
+  it('includes route footer below the topo image when includeRoutes is true', async () => {
+    const projectWithRoutes: TopoProject = {
+      ...project,
+      routes: [
+        {
+          color: '#DC2626',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          grade: '5.10a',
+          id: 'route-1',
+          name: 'First Climb',
+          sortOrder: 1,
+          topoId: project.id,
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    };
+
+    await renderTopoRasterBase64(projectWithRoutes, projectWithRoutes.photos[0], {
+      format: ImageFormat.WEBP,
+      includeRoutes: true,
+      targetWidth: 1000,
+    });
+
+    const calls = (drawAsImage as jest.Mock).mock.calls;
+    const [element, size] = calls[calls.length - 1];
+    expect(size.width).toBe(1000);
+    // Height should be photo height (800) + footer height (> 0)
+    expect(size.height).toBeGreaterThan(800);
+
+    const staticScene = element.props.children.find(
+      (child: any) => child?.type === SkiaTopoStaticScene,
+    );
+    expect(staticScene.props.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'footer-background' }),
+        expect.objectContaining({ id: 'footer-top-divider' }),
+        expect.objectContaining({ id: 'footer-route-route-1-name', text: 'First Climb' }),
+      ]),
+    );
+  });
 });
