@@ -2,6 +2,7 @@ import { render } from '@testing-library/react-native';
 import { Skia, useTypeface } from '@shopify/react-native-skia';
 
 import { SKIA_INTER_FONT_BY_WEIGHT } from '@/rendering/skiaFontRegistry';
+import type { SkiaTextTypefaces } from '@/rendering/SkiaTopoRenderer';
 
 import { AnnotationShape } from './AnnotationShapes';
 
@@ -128,6 +129,37 @@ describe('AnnotationShape route markers', () => {
     );
 
     expect(UNSAFE_getByProps({ text: '12' }).props.color).toBe('#F8FAFC');
+  });
+
+  it('renders large circle stamp number text immediately when typefaces prop is supplied', () => {
+    (useTypeface as jest.Mock).mockReturnValue(null);
+
+    const typefaces = {
+      '400': 'regular-typeface',
+      '700': 'bold-typeface',
+    } as unknown as SkiaTextTypefaces;
+
+    const { UNSAFE_getByProps } = render(
+      <AnnotationShape
+        annotation={{
+          id: 'start-1',
+          topoId: 'topo-1',
+          kind: 'start',
+          color: '#FACC15',
+          label: '1',
+          point: { x: 0.5, y: 0.5 },
+          stampSize: 'large',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        }}
+        imageScale={1}
+        size={{ width: 1000, height: 1000 }}
+        typefaces={typefaces}
+      />,
+    );
+
+    expect(UNSAFE_getByProps({ text: '1' })).toBeTruthy();
+    expect(Skia.Font).toHaveBeenCalledWith('bold-typeface', expect.any(Number));
   });
 });
 

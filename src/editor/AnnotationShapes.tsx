@@ -17,7 +17,7 @@ import {
 } from '@/domain/textLabels';
 import type { Annotation, MarkerAnnotation, NormalizedPoint } from '@/domain/types';
 import { buildTopoRenderScene } from '@/rendering/scene';
-import { SkiaTopoScene } from '@/rendering/SkiaTopoRenderer';
+import { SkiaTopoScene, type SkiaTextTypefaces } from '@/rendering/SkiaTopoRenderer';
 
 const HANDLE_RADIUS = 9;
 const LABEL_HANDLE_RADIUS = 8;
@@ -147,13 +147,15 @@ export const AnnotationShape = memo(function AnnotationShape({
   annotation,
   imageScale,
   size,
+  typefaces,
 }: {
   annotation: Annotation;
   imageScale: number;
   size: { width: number; height: number };
+  typefaces?: SkiaTextTypefaces | null;
 }) {
   const scene = buildTopoRenderScene({ annotations: [annotation], labelScale: imageScale, size });
-  return <SkiaTopoScene items={scene} />;
+  return <SkiaTopoScene items={scene} typefaces={typefaces} />;
 });
 
 export function screenFrameForLabel({

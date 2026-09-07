@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { GuidebookExportBundle, GuidebookExportRequest } from '@/domain/types';
+import { exportSingleTopoImage } from '@/export/image';
 import { exportGuidebookPdf } from '@/export/pdf';
 import { loadTabvarSession } from '@/integrations/tabvar/sessionStore';
 import { useTopoStore } from '@/state/TopoStore';
@@ -29,10 +30,12 @@ const KIND_COPY: Record<ShareScope['kind'], string> = {
 export function ShareSheet({ scope, onClose }: Props) {
   const { loadGuidebookExport, submitToTabvar } = useTopoStore();
   const [bundle, setBundle] = useState<GuidebookExportBundle>();
-  const [isExporting, setIsExporting] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isExportingImage, setIsExportingImage] = useState(false);
   const [isCheckingTabvar, setIsCheckingTabvar] = useState(false);
   const [isSubmittingTabvar, setIsSubmittingTabvar] = useState(false);
   const [pdfUri, setPdfUri] = useState<string>();
+  const [imageUri, setImageUri] = useState<string>();
   const [exportError, setExportError] = useState<string>();
   const [tabvarConnected, setTabvarConnected] = useState(false);
   const [tabvarError, setTabvarError] = useState<string>();
@@ -43,8 +46,10 @@ export function ShareSheet({ scope, onClose }: Props) {
   useEffect(() => {
     setBundle(undefined);
     setPdfUri(undefined);
+    setImageUri(undefined);
     setExportError(undefined);
-    setIsExporting(false);
+    setIsExportingPdf(false);
+    setIsExportingImage(false);
     if (!scope) return;
     let active = true;
     void loadGuidebookExport(guidebookRequestForScope(scope))
@@ -88,15 +93,24 @@ export function ShareSheet({ scope, onClose }: Props) {
   }, [scope]);
 
   const isTopoScope = scope?.kind === 'topo';
+  const isExporting = isExportingPdf || isExportingImage;
   const pdfEnabled = Boolean(scope) && Boolean(bundle) && !isExporting;
+  const imageEnabled = isTopoScope && Boolean(bundle) && !isExporting;
   const tabvarEnabled =
     Boolean(scope) && Boolean(bundle) && tabvarConnected && !isCheckingTabvar && !isSubmittingTabvar;
 
   function pdfSubtitle(): string {
-    if (isExporting) return 'Generating…';
+    if (isExportingPdf) return 'Generating…';
     if (pdfUri) return 'Saved — tap to generate again';
     if (!bundle) return 'Loading export data…';
     return 'Guidebook-style PDF';
+  }
+
+  function imageSubtitle(): string {
+    if (isExportingImage) return 'Generating…';
+    if (imageUri) return 'Saved — tap to generate again';
+    if (!bundle) return 'Loading export data…';
+    return 'Annotated topo image';
   }
 
   function tabvarSubtitle(): string {
@@ -110,15 +124,31 @@ export function ShareSheet({ scope, onClose }: Props) {
 
   async function handleExportPdf() {
     if (!bundle) return;
-    setIsExporting(true);
+    setIsExportingPdf(true);
     setExportError(undefined);
+    setImageUri(undefined);
     try {
       const uri = await exportGuidebookPdf(bundle);
       setPdfUri(uri);
     } catch (error) {
       setExportError(error instanceof Error ? error.message : 'Could not generate the PDF.');
     } finally {
-      setIsExporting(false);
+      setIsExportingPdf(false);
+    }
+  }
+
+  async function handleExportImage() {
+    if (!bundle) return;
+    setIsExportingImage(true);
+    setExportError(undefined);
+    setPdfUri(undefined);
+    try {
+      const uri = await exportSingleTopoImage(bundle);
+      setImageUri(uri);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : 'Could not export the image.');
+    } finally {
+      setIsExportingImage(false);
     }
   }
 
@@ -178,7 +208,7 @@ export function ShareSheet({ scope, onClose }: Props) {
             }}
             subtitle={pdfSubtitle()}
             testID="share:export-pdf"
-            trailing={isExporting ? <ActivityIndicator color="#6B7280" size="small" /> : undefined}
+            trailing={isExportingPdf ? <ActivityIndicator color="#6B7280" size="small" /> : undefined}
           />
           <ExportOption
             disabled
@@ -191,13 +221,17 @@ export function ShareSheet({ scope, onClose }: Props) {
           />
           {isTopoScope ? (
             <ExportOption
-              disabled
+              disabled={!imageEnabled}
               icon="image-outline"
-              label="PNG"
-              onPress={() => undefined}
-              subtitle="Image only — coming soon"
-              testID="share:export-png"
-              underConstruction
+              label="Image"
+              onPress={() => {
+                void handleExportImage();
+              }}
+              subtitle={imageSubtitle()}
+              testID="share:export-image"
+              trailing={
+                isExportingImage ? <ActivityIndicator color="#6B7280" size="small" /> : undefined
+              }
             />
           ) : null}
         </Section>
@@ -205,6 +239,11 @@ export function ShareSheet({ scope, onClose }: Props) {
         {pdfUri ? (
           <Text style={styles.resultOk} testID="share:export-result">
             Saved: {pdfUri}
+          </Text>
+        ) : null}
+        {imageUri ? (
+          <Text style={styles.resultOk} testID="share:export-result">
+            Saved: {imageUri}
           </Text>
         ) : null}
         {exportError ? (

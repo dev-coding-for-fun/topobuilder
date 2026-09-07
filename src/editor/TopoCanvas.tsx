@@ -56,7 +56,7 @@ import {
   SelectedLabelHandles,
   SelectedPathHandles,
 } from '@/editor/AnnotationShapes';
-import { SkiaTextFontProvider } from '@/rendering/SkiaTopoRenderer';
+import { SkiaTextFontProvider, useSkiaInterTypefaces } from '@/rendering/SkiaTopoRenderer';
 import { interStyle } from '@/ui/fonts';
 
 const MAX_ZOOM = 6;
@@ -1066,6 +1066,7 @@ export function TopoCanvas({
           textColour: selectedLabel.color,
         })
       : undefined;
+  const typefaces = useSkiaInterTypefaces();
   const drawableAnnotations = useMemo(
     () => annotationsInCanvasStackOrder(annotations, selectedLabel?.id),
     [annotations, selectedLabel?.id],
@@ -1074,8 +1075,8 @@ export function TopoCanvas({
   return (
     <GestureDetector gesture={composedGesture}>
       <Animated.View ref={containerRef} onLayout={handleLayout} style={styles.container}>
-        <SkiaTextFontProvider>
-          <Canvas pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <Canvas pointerEvents="none" style={StyleSheet.absoluteFill}>
+          <SkiaTextFontProvider typefaces={typefaces}>
             <Group transform={groupTransform}>
               <Group transform={[{ translateX: imageFit.offsetX }, { translateY: imageFit.offsetY }]}>
                 {image ? (
@@ -1096,6 +1097,7 @@ export function TopoCanvas({
                     key={annotation.id}
                     imageScale={imageFit.scale}
                     size={renderableSize}
+                    typefaces={typefaces}
                   />
                 ))}
                 {selectedPath ? <SelectedPathHandles points={selectedPath.points} size={renderableSize} /> : null}
@@ -1118,8 +1120,8 @@ export function TopoCanvas({
                 ) : null}
               </Group>
             </Group>
-          </Canvas>
-        </SkiaTextFontProvider>
+          </SkiaTextFontProvider>
+        </Canvas>
         {selectedLabelBackdrop ? (
           <View
             pointerEvents="none"

@@ -205,3 +205,8 @@ if (MockView && (!MockView.prototype || !MockView.prototype.measureInWindow)) {
   };
 }
 
+beforeEach(() => {
+  const { clearCachedSkiaInterTypefacesForTests } = require('@/rendering/SkiaTopoRenderer');
+  clearCachedSkiaInterTypefacesForTests();
+});
+

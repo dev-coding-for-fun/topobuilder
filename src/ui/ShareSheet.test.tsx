@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import type { GuidebookExportBundle } from '@/domain/types';
+import { exportSingleTopoImage } from '@/export/image';
 import { exportGuidebookPdf } from '@/export/pdf';
 import { loadTabvarSession } from '@/integrations/tabvar/sessionStore';
 import { useTopoStore } from '@/state/TopoStore';
@@ -19,6 +20,10 @@ jest.mock('react-native-keyboard-controller', () => {
 
 jest.mock('@/export/pdf', () => ({
   exportGuidebookPdf: jest.fn(async () => 'file://guidebook.pdf'),
+}));
+
+jest.mock('@/export/image', () => ({
+  exportSingleTopoImage: jest.fn(async () => 'file://topo-image.webp'),
 }));
 
 jest.mock('@/integrations/tabvar/sessionStore', () => ({
@@ -126,6 +131,49 @@ describe('ShareSheet', () => {
 
     await waitFor(() =>
       expect(screen.getByTestId('share:submit-tabvar-error').props.children).toBe('Tabvar failed'),
+    );
+    expect(screen.getByTestId('share-placeholder:sheet')).toBeTruthy();
+  });
+
+  it('offers Image export only for topo scope, not for crag or sector scopes', async () => {
+    const { unmount: unmountCrag } = render(<ShareSheet onClose={jest.fn()} scope={scopes[0]} />);
+    await waitFor(() => expect(screen.getByText('Guidebook-style PDF')).toBeTruthy());
+    expect(screen.queryByTestId('share:export-image')).toBeNull();
+    unmountCrag();
+
+    const { unmount: unmountSector } = render(<ShareSheet onClose={jest.fn()} scope={scopes[1]} />);
+    await waitFor(() => expect(screen.getByText('Guidebook-style PDF')).toBeTruthy());
+    expect(screen.queryByTestId('share:export-image')).toBeNull();
+    unmountSector();
+
+    render(<ShareSheet onClose={jest.fn()} scope={scopes[2]} />);
+    await waitFor(() => expect(screen.getByTestId('share:export-image')).toBeTruthy());
+    expect(screen.getByText('Image')).toBeTruthy();
+    expect(screen.getByText('Annotated topo image')).toBeTruthy();
+  });
+
+  it('exports single topo image and shows saved URI', async () => {
+    render(<ShareSheet onClose={jest.fn()} scope={scopes[2]} />);
+
+    await waitFor(() => expect(screen.getByTestId('share:export-image')).toBeTruthy());
+    expect(screen.getByText('Annotated topo image')).toBeTruthy();
+
+    fireEvent.press(screen.getByTestId('share:export-image'));
+
+    await waitFor(() => expect(exportSingleTopoImage).toHaveBeenCalledWith(bundle));
+    expect(screen.getByText('Saved: file://topo-image.webp')).toBeTruthy();
+  });
+
+  it('surfaces runtime image export errors without dismissing the sheet', async () => {
+    (exportSingleTopoImage as jest.Mock).mockRejectedValueOnce(new Error('Raster failed'));
+
+    render(<ShareSheet onClose={jest.fn()} scope={scopes[2]} />);
+    await waitFor(() => expect(screen.getByTestId('share:export-image')).toBeTruthy());
+
+    fireEvent.press(screen.getByTestId('share:export-image'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('share:export-error').props.children).toBe('Raster failed'),
     );
     expect(screen.getByTestId('share-placeholder:sheet')).toBeTruthy();
   });

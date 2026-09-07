@@ -42,10 +42,13 @@ export function SkiaTopoImage({
 
 export function SkiaTopoScene({
   items,
+  typefaces: explicitTypefaces,
 }: {
   items: TopoRenderItem[];
+  typefaces?: SkiaTextTypefaces | null;
 }) {
-  const typefaces = useContext(SkiaTextTypefacesContext);
+  const contextTypefaces = useContext(SkiaTextTypefacesContext);
+  const typefaces = explicitTypefaces !== undefined ? explicitTypefaces : contextTypefaces;
 
   if (typefaces !== undefined) {
     return <SkiaTopoSceneContent items={items} typefaces={typefaces} />;
@@ -54,8 +57,15 @@ export function SkiaTopoScene({
   return <SkiaTopoSceneWithLocalFonts items={items} />;
 }
 
-export function SkiaTextFontProvider({ children }: { children: ReactNode }) {
-  const typefaces = useSkiaInterTypefaces();
+export function SkiaTextFontProvider({
+  children,
+  typefaces: explicitTypefaces,
+}: {
+  children: ReactNode;
+  typefaces?: SkiaTextTypefaces | null;
+}) {
+  const localTypefaces = useSkiaInterTypefaces();
+  const typefaces = explicitTypefaces !== undefined ? explicitTypefaces : localTypefaces;
 
   return (
     <SkiaTextTypefacesContext.Provider value={typefaces}>
@@ -74,19 +84,26 @@ function SkiaTopoSceneWithLocalFonts({
   return <SkiaTopoSceneContent items={items} typefaces={typefaces} />;
 }
 
-function useSkiaInterTypefaces() {
+let cachedInterTypefaces: SkiaTextTypefaces | null = null;
+
+export function clearCachedSkiaInterTypefacesForTests() {
+  cachedInterTypefaces = null;
+}
+
+export function useSkiaInterTypefaces() {
   const regularTypeface = useTypeface(SKIA_INTER_FONT_BY_WEIGHT['400']);
   const boldTypeface = useTypeface(SKIA_INTER_FONT_BY_WEIGHT['700']);
 
   return useMemo(() => {
-    if (!regularTypeface || !boldTypeface) {
-      return null;
+    if (regularTypeface && boldTypeface) {
+      cachedInterTypefaces = {
+        '400': regularTypeface,
+        '700': boldTypeface,
+      } satisfies SkiaTextTypefaces;
+      return cachedInterTypefaces;
     }
 
-    return {
-      '400': regularTypeface,
-      '700': boldTypeface,
-    } satisfies SkiaTextTypefaces;
+    return cachedInterTypefaces;
   }, [boldTypeface, regularTypeface]);
 }
 

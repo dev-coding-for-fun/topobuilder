@@ -190,4 +190,47 @@ describe('SkiaTopoScene bundled font gate', () => {
     expect(loadedFont.getTextWidth).toHaveBeenCalledWith('12');
     expect(UNSAFE_getByProps({ text: '12' }).props.x).toBe(194);
   });
+
+  it('uses explicit typefaces prop immediately without calling useTypeface', () => {
+    const explicitTypefaces = {
+      '400': 'regular-explicit',
+      '700': 'bold-explicit',
+    } as unknown as SkiaTextTypefaces;
+
+    render(<SkiaTopoScene items={[textItem]} typefaces={explicitTypefaces} />);
+
+    expect(useTypeface).not.toHaveBeenCalled();
+    expect(Skia.Font).toHaveBeenCalledWith('bold-explicit', textItem.fontSize);
+  });
+
+  it('renders text immediately from memory cache when useTypeface returns null on new component instance', () => {
+    (useTypeface as jest.Mock)
+      .mockReturnValueOnce('cached-regular')
+      .mockReturnValueOnce('cached-bold');
+
+    const first = render(<SkiaTopoScene items={[textItem]} />);
+    expect(first.UNSAFE_queryByProps({ text: 'Pitch 1' })).toBeTruthy();
+
+    // Second component mounts (e.g. newly placed stamp), hook starts with null
+    (useTypeface as jest.Mock).mockReturnValue(null);
+    const second = render(<SkiaTopoScene items={[{ ...textItem, id: 'start-1:text', text: '1' }]} />);
+    expect(second.UNSAFE_queryByProps({ text: '1' })).toBeTruthy();
+    expect(Skia.Font).toHaveBeenCalledWith('cached-bold', textItem.fontSize);
+  });
+
+  it('passes explicit typefaces through SkiaTextFontProvider without extra hook calls', () => {
+    const explicitTypefaces = {
+      '400': 'regular-prov',
+      '700': 'bold-prov',
+    } as unknown as SkiaTextTypefaces;
+
+    render(
+      <SkiaTextFontProvider typefaces={explicitTypefaces}>
+        <SkiaTopoScene items={[textItem]} />
+      </SkiaTextFontProvider>,
+    );
+
+    expect(Skia.Font).toHaveBeenCalledWith('bold-prov', textItem.fontSize);
+  });
 });
+
