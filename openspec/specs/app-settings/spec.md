@@ -17,26 +17,27 @@ The system SHALL provide an app-wide Settings screen at `/settings`, reached fro
 - **THEN** no link to a Crag- or Topo-scoped settings screen is shown
 
 ### Requirement: Connected Services Section
-The Settings screen SHALL display a "Connected Services" section listing TABVAR, Mountain Project, and theCrag, each with a connection-status label and a tap target. Tapping any row SHALL open a placeholder authentication flow that does not perform any network call in this change.
+The Settings screen SHALL display a "Connected Services" section listing TABVAR and Cloudflare R2. Mountain Project and theCrag are omitted. Cloudflare R2 SHALL be displayed as disabled with an under-construction indicator.
 
 #### Scenario: Listing connected services
 - **WHEN** the user opens Settings
-- **THEN** rows for TABVAR, Mountain Project, and theCrag are visible, each labelled "Not connected" by default
+- **THEN** TABVAR and Cloudflare R2 are visible in Connected Services, while Mountain Project and theCrag are not displayed
+- **AND** Cloudflare R2 is disabled and displays an under-construction indicator
 
-#### Scenario: Tapping a service opens a placeholder
-- **WHEN** the user taps any service row
-- **THEN** the system opens a placeholder screen or sheet that explains authentication is not implemented yet, and provides a "Disconnect" stub for symmetry
+#### Scenario: Interacting with Cloudflare R2 row
+- **WHEN** the user attempts to tap the Cloudflare R2 row in Settings
+- **THEN** no navigation occurs because the row is disabled
 
 #### Scenario: No real network calls are made
 - **WHEN** the user interacts with any Connected Services control
 - **THEN** the app makes no outbound HTTP request as part of this change
 
 ### Requirement: Cloudflare R2 Sub-Screen
-The Settings screen SHALL include a Cloudflare R2 row that navigates to `/settings/cloudflare-r2`. The sub-screen SHALL display input controls for: Cloudflare Account ID, Access Key ID, Secret Access Key, Bucket Name, Region. It SHALL also display a "Test connection" action and a "Save" action. None of these controls SHALL perform real R2 calls or persist values in this change.
+The Cloudflare R2 sub-screen at `/settings/cloudflare-r2` SHALL display input controls for: Cloudflare Account ID, Access Key ID, Secret Access Key, Bucket Name, Endpoint. It SHALL also display a "Test connection" action and a "Save" action. None of these controls SHALL perform real R2 calls or persist values in this change.
 
 #### Scenario: Navigating to the R2 sub-screen
-- **WHEN** the user taps the Cloudflare R2 row in Settings
-- **THEN** the system navigates to `/settings/cloudflare-r2` showing the input fields and actions described
+- **WHEN** the user opens `/settings/cloudflare-r2`
+- **THEN** the system displays the input fields and actions described
 
 #### Scenario: Save action is a no-op placeholder
 - **WHEN** the user taps "Save" on the R2 sub-screen

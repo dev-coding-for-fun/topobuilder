@@ -118,3 +118,33 @@ describe('SettingsScreen Developer storage wipe', () => {
   });
 });
 
+describe('SettingsScreen connected services', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('does not display Mountain Project or theCrag rows', async () => {
+    (loadTabvarSession as jest.Mock).mockResolvedValue(undefined);
+
+    render(<SettingsScreen />);
+
+    expect(screen.queryByTestId('settings:mountain-project')).toBeNull();
+    expect(screen.queryByTestId('settings:thecrag')).toBeNull();
+  });
+
+  it('renders Cloudflare R2 as disabled with under construction icon and does not navigate', async () => {
+    (loadTabvarSession as jest.Mock).mockResolvedValue(undefined);
+
+    render(<SettingsScreen />);
+
+    const r2Row = await screen.findByTestId('settings:r2');
+    expect(r2Row).toBeTruthy();
+
+    const underConstructionIcon = await screen.findByTestId('settings:r2:under-construction');
+    expect(underConstructionIcon).toBeTruthy();
+
+    fireEvent.press(r2Row);
+    expect(router.push).not.toHaveBeenCalled();
+  });
+});
+

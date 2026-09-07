@@ -100,7 +100,7 @@ test.describe('mobile web shell', () => {
     await expect(page.getByTestId('share-placeholder:sheet')).not.toBeVisible();
   });
 
-  test('navigates from settings to the Cloudflare R2 placeholder screen', async ({ page }) => {
+  test('shows Cloudflare R2 as disabled and under construction in settings', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByTestId('crags:screen')).toBeVisible();
 
@@ -108,8 +108,14 @@ test.describe('mobile web shell', () => {
     await expect(page.getByTestId('settings:screen')).toBeVisible();
     await expect(page.getByTestId('settings:tabvar')).toContainText('Not connected');
     await expect(page.getByTestId('settings:r2')).toContainText('Cloudflare R2');
+    await expect(page.getByTestId('settings:r2')).toBeDisabled();
+    await expect(page.getByTestId('settings:r2:under-construction')).toBeVisible();
+    await expect(page.getByTestId('settings:mountain-project')).toHaveCount(0);
+    await expect(page.getByTestId('settings:thecrag')).toHaveCount(0);
+  });
 
-    await page.getByTestId('settings:r2').click();
+  test('renders Cloudflare R2 placeholder screen directly', async ({ page }) => {
+    await page.goto('/settings/cloudflare-r2');
     await expect(page.getByTestId('settings:r2-screen')).toBeVisible();
     await expect(page.getByTestId('settings:r2:account-id')).toBeVisible();
     await expect(page.getByTestId('settings:r2:access-key-id')).toBeVisible();

@@ -8,6 +8,7 @@ const port = Number(process.env.PLAYWRIGHT_WEB_PORT ?? 8091);
 
 const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 const exportResult = spawnSync(npx, ['expo', 'export', '--platform', 'web'], {
+  shell: true,
   stdio: 'inherit',
 });
 

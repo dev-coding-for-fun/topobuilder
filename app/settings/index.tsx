@@ -34,26 +34,12 @@ export default function SettingsScreen() {
           <TabvarSyncPanel />
           <Row
             disabled
-            icon="cloud-upload-outline"
-            onPress={() => undefined}
-            subtitle="Not connected — coming soon"
-            testID="settings:mountain-project"
-            title="Mountain Project"
-          />
-          <Row
-            disabled
-            icon="cloud-upload-outline"
-            onPress={() => undefined}
-            subtitle="Not connected — coming soon"
-            testID="settings:thecrag"
-            title="theCrag"
-          />
-          <Row
             icon="server-outline"
-            onPress={() => router.push('/settings/cloudflare-r2')}
+            onPress={() => undefined}
             subtitle="Personal photo backup"
             testID="settings:r2"
             title="Cloudflare R2"
+            underConstruction
           />
         </Section>
 
@@ -404,6 +390,7 @@ function Row({
   icon,
   onPress,
   disabled,
+  underConstruction,
   testID,
 }: {
   title: string;
@@ -411,19 +398,42 @@ function Row({
   icon?: keyof typeof Ionicons.glyphMap;
   onPress: () => void;
   disabled?: boolean;
+  underConstruction?: boolean;
   testID?: string;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityState={{ disabled: Boolean(disabled) }}
       disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [styles.row, pressed && !disabled && styles.pressed]}
       testID={testID}
     >
-      {icon ? <Ionicons color="#374151" name={icon} size={20} style={styles.rowIcon} /> : null}
+      {icon ? (
+        <Ionicons
+          color={underConstruction ? '#9CA3AF' : '#374151'}
+          name={icon}
+          size={20}
+          style={styles.rowIcon}
+        />
+      ) : null}
       <View style={styles.rowCopy}>
-        <Text style={styles.rowTitle}>{title}</Text>
+        <View style={styles.rowTitleRow}>
+          <Text style={[styles.rowTitle, underConstruction && styles.rowTitleDisabled]}>
+            {title}
+          </Text>
+          {underConstruction ? (
+            <Ionicons
+              accessibilityLabel="Under construction"
+              color="#D97706"
+              name="construct-outline"
+              size={14}
+              style={styles.constructIcon}
+              testID={testID ? `${testID}:under-construction` : undefined}
+            />
+          ) : null}
+        </View>
         {subtitle ? <Text style={styles.rowSubtitle}>{subtitle}</Text> : null}
       </View>
       {!disabled ? <Ionicons color="#9CA3AF" name="chevron-forward" size={18} /> : null}
@@ -470,6 +480,9 @@ function errorMessage(error: unknown, fallback: string) {
 }
 
 const styles = StyleSheet.create({
+  constructIcon: {
+    marginLeft: 6,
+  },
   disclaimerEditor: {
     gap: 8,
     paddingHorizontal: 14,
@@ -527,6 +540,13 @@ const styles = StyleSheet.create({
     color: '#111827',
     fontSize: 16,
     ...interStyle('700'),
+  },
+  rowTitleDisabled: {
+    color: '#9CA3AF',
+  },
+  rowTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
   },
   scroll: {
     paddingBottom: 60,
