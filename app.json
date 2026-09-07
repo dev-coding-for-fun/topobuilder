@@ -12,7 +12,9 @@
     },
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.bowvalleydev.topobuilder",
       "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "TopoBuilder uses the camera to capture rock face photos for offline topo markup.",
         "NSPhotoLibraryUsageDescription": "TopoBuilder imports rock face photos so you can mark up climbing routes offline.",
         "UIBackgroundModes": [
