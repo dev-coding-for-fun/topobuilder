@@ -76,8 +76,7 @@ export function IssueRow({ issue, resolving, onOpen, onResolve }: Props) {
             </View>
           ) : null}
           <Text numberOfLines={1} style={styles.footerText}>
-            {issue.reportedBy ? `Reported by ${issue.reportedBy}` : 'Reported'} ·{' '}
-            {formatDate(issue.updatedAt)}
+            Updated {formatDate(issue.updatedAt)}
           </Text>
         </View>
 

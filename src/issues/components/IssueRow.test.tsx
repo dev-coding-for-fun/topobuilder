@@ -32,6 +32,14 @@ describe('IssueRow', () => {
     expect(screen.getByText('Bolts · Rusted · bolts 2')).toBeTruthy();
     expect(screen.getByTestId('issues:issue-row:123:attachments')).toBeTruthy();
     expect(screen.getByText('Mark resolved')).toBeTruthy();
+    expect(screen.getByText(/Updated /)).toBeTruthy();
+  });
+
+  it('does not display details of who submitted the issue', () => {
+    render(<IssueRow issue={issue} onOpen={jest.fn()} onResolve={jest.fn()} />);
+
+    expect(screen.queryByText(/Jane Doe/)).toBeNull();
+    expect(screen.queryByText(/Reported by/)).toBeNull();
   });
 
   it('resolves from the status control without opening the edit sheet', () => {
