@@ -114,9 +114,36 @@ describe('CragsListScreen', () => {
     expect(screen.getByTestId('crags:connected-card:102')).toBeTruthy();
     expect(screen.getByText('Wasootch Slabs')).toBeTruthy();
     expect(screen.getByText('2 topos in workspace')).toBeTruthy();
+
+    // My Crags has Cougar Canyon + Wasootch Slabs (count = 2)
+    expect(screen.getByTestId('crags:section:my_crags:count').props.children).toBe(2);
+    // Connected Crags has Heart Creek with 0 topos (count = 1)
+    expect(screen.getByTestId('crags:section:connected_crags:count').props.children).toBe(1);
   });
 
-  it('renders empty workspace prompt under My Crags when only connected crags exist', () => {
+  it('renders connected crag with >0 topos in My Crags without empty workspace prompt', () => {
+    (useTopoStore as unknown as jest.Mock).mockReturnValue({
+      ...defaultStoreMock,
+      cragSummaries: [],
+      connectedCrags: [mockAdoptedConnectedCrag],
+    });
+
+    render(<CragsListScreen />);
+
+    // My Crags section exists and contains Wasootch Slabs
+    expect(screen.getByTestId('crags:section:my_crags')).toBeTruthy();
+    expect(screen.getByTestId('crags:section:my_crags:count').props.children).toBe(1);
+    expect(screen.getByTestId('crags:connected-card:102')).toBeTruthy();
+    expect(screen.getByText('Wasootch Slabs')).toBeTruthy();
+
+    // No empty workspace prompt
+    expect(screen.queryByTestId('crags:my-crags:empty')).toBeNull();
+
+    // Connected Crags section is omitted because no 0-topo connected crags exist
+    expect(screen.queryByTestId('crags:section:connected_crags')).toBeNull();
+  });
+
+  it('renders empty workspace prompt under My Crags when only connected crags with 0 topos exist', () => {
     (useTopoStore as unknown as jest.Mock).mockReturnValue({
       ...defaultStoreMock,
       cragSummaries: [],

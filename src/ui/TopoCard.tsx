@@ -192,13 +192,7 @@ function formatSummary(localRoutes: Route[], tabvarRoutes: TabvarRoute[]): strin
     const grade = r.gradeYds ? `${r.gradeYds} · ` : '';
     return `${grade}${r.name}`;
   }
-  if (localCount > 0 && tabvarCount > 0) {
-    return `${total} routes (${tabvarCount} TABVAR · ${localCount} local)`;
-  }
-  if (tabvarCount > 0) {
-    return `${tabvarCount} ${tabvarCount === 1 ? 'TABVAR route' : 'TABVAR routes'}`;
-  }
-  return `${localCount} ${localCount === 1 ? 'local route' : 'local routes'}`;
+  return `${total} routes`;
 }
 
 function RouteRowDragHandle({

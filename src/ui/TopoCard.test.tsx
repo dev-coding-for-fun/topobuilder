@@ -128,6 +128,45 @@ describe('TopoCard', () => {
     expect(tabvarBadge).toBeTruthy();
   });
 
+  it('renders a plain route count in the sub-line without bracketed local or tabvar breakdown', () => {
+    render(
+      <TopoCard
+        onMenu={jest.fn()}
+        onOpen={jest.fn()}
+        onShare={jest.fn()}
+        topo={baseTopo}
+      />,
+    );
+
+    // baseTopo has 1 local and 1 tabvar route (total 2)
+    const meta = screen.getByTestId('crag-detail:topo:topo-1:meta');
+    expect(meta.props.children).toBe('2 routes');
+  });
+
+  it('renders single route name and "No routes yet" in sub-line', () => {
+    const { rerender } = render(
+      <TopoCard
+        onMenu={jest.fn()}
+        onOpen={jest.fn()}
+        onShare={jest.fn()}
+        topo={{ ...baseTopo, routes: [mockLocalRoute], tabvarRoutes: [] }}
+      />,
+    );
+
+    expect(screen.getByTestId('crag-detail:topo:topo-1:meta').props.children).toBe('5.9 · Warmup Slab');
+
+    rerender(
+      <TopoCard
+        onMenu={jest.fn()}
+        onOpen={jest.fn()}
+        onShare={jest.fn()}
+        topo={{ ...baseTopo, routes: [], tabvarRoutes: [] }}
+      />,
+    );
+
+    expect(screen.getByTestId('crag-detail:topo:topo-1:meta').props.children).toBe('No routes yet');
+  });
+
   it('renders onCreateRoute button and invokes it on press', () => {
     const onCreateRoute = jest.fn();
     render(

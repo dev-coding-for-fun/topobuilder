@@ -53,6 +53,16 @@ export default function CragsListScreen() {
     [cragSummaries],
   );
 
+  const connectedCragsWithTopos = useMemo(
+    () => connectedCrags.filter((c) => (c.topoCount ?? 0) > 0),
+    [connectedCrags],
+  );
+
+  const connectedCragsWithoutTopos = useMemo(
+    () => connectedCrags.filter((c) => (c.topoCount ?? 0) === 0),
+    [connectedCrags],
+  );
+
   const hasNoCrags = isReady && myCrags.length === 0 && connectedCrags.length === 0;
   const isSearching = search.trim().length > 0;
   const needle = search.trim().toLowerCase();
@@ -62,13 +72,22 @@ export default function CragsListScreen() {
     return myCrags.filter((crag) => crag.name.toLowerCase().includes(needle));
   }, [myCrags, needle]);
 
-  const filteredConnectedCrags = useMemo(() => {
-    if (!needle) return connectedCrags;
-    return connectedCrags.filter((crag) => crag.name.toLowerCase().includes(needle));
-  }, [connectedCrags, needle]);
+  const filteredConnectedWithTopos = useMemo(() => {
+    if (!needle) return connectedCragsWithTopos;
+    return connectedCragsWithTopos.filter((crag) => crag.name.toLowerCase().includes(needle));
+  }, [connectedCragsWithTopos, needle]);
+
+  const filteredConnectedWithoutTopos = useMemo(() => {
+    if (!needle) return connectedCragsWithoutTopos;
+    return connectedCragsWithoutTopos.filter((crag) => crag.name.toLowerCase().includes(needle));
+  }, [connectedCragsWithoutTopos, needle]);
+
+  const totalMyCragsCount = myCrags.length + connectedCragsWithTopos.length;
+  const filteredMyCragsCount = filteredMyCrags.length + filteredConnectedWithTopos.length;
+  const filteredConnectedCount = filteredConnectedWithoutTopos.length;
 
   const hasNoSearchResults =
-    isReady && !hasNoCrags && isSearching && filteredMyCrags.length === 0 && filteredConnectedCrags.length === 0;
+    isReady && !hasNoCrags && isSearching && filteredMyCragsCount === 0 && filteredConnectedCount === 0;
 
   const sections = useMemo<CragsSection[]>(() => {
     if (!isReady || hasNoCrags || hasNoSearchResults) return [];
@@ -77,28 +96,42 @@ export default function CragsListScreen() {
 
     // My Crags Section
     if (isSearching) {
-      if (filteredMyCrags.length > 0) {
+      if (filteredMyCragsCount > 0) {
         result.push({
           type: 'my_crags',
           title: 'My Crags',
           badge: 'LOCAL',
           subtitle: 'Locally created crags in your workspace',
-          count: filteredMyCrags.length,
-          data: filteredMyCrags.map((crag) => ({
-            type: 'my_crag',
-            key: `crag-${crag.id}`,
-            data: crag,
-          })),
+          count: filteredMyCragsCount,
+          data: [
+            ...filteredMyCrags.map((crag) => ({
+              type: 'my_crag' as const,
+              key: `crag-${crag.id}`,
+              data: crag,
+            })),
+            ...filteredConnectedWithTopos.map((item) => ({
+              type: 'connected_crag' as const,
+              key: `connected-${item.tabvarCragId}`,
+              data: item,
+            })),
+          ],
         });
       }
     } else {
       const data: CragsListItem[] =
-        myCrags.length > 0
-          ? myCrags.map((crag) => ({
-              type: 'my_crag',
-              key: `crag-${crag.id}`,
-              data: crag,
-            }))
+        totalMyCragsCount > 0
+          ? [
+              ...myCrags.map((crag) => ({
+                type: 'my_crag' as const,
+                key: `crag-${crag.id}`,
+                data: crag,
+              })),
+              ...connectedCragsWithTopos.map((item) => ({
+                type: 'connected_crag' as const,
+                key: `connected-${item.tabvarCragId}`,
+                data: item,
+              })),
+            ]
           : [{ type: 'my_crags_empty', key: 'my_crags_empty' }];
 
       result.push({
@@ -106,36 +139,36 @@ export default function CragsListScreen() {
         title: 'My Crags',
         badge: 'LOCAL',
         subtitle: 'Locally created crags in your workspace',
-        count: myCrags.length,
+        count: totalMyCragsCount,
         data,
       });
     }
 
     // Connected Crags Section
     if (isSearching) {
-      if (filteredConnectedCrags.length > 0) {
+      if (filteredConnectedCount > 0) {
         result.push({
           type: 'connected_crags',
           title: 'Connected Crags',
           badge: 'TABVAR',
           subtitle: 'External catalog crags with official routes and sectors',
-          count: filteredConnectedCrags.length,
-          data: filteredConnectedCrags.map((item) => ({
-            type: 'connected_crag',
+          count: filteredConnectedCount,
+          data: filteredConnectedWithoutTopos.map((item) => ({
+            type: 'connected_crag' as const,
             key: `connected-${item.tabvarCragId}`,
             data: item,
           })),
         });
       }
-    } else if (connectedCrags.length > 0) {
+    } else if (connectedCragsWithoutTopos.length > 0) {
       result.push({
         type: 'connected_crags',
         title: 'Connected Crags',
         badge: 'TABVAR',
         subtitle: 'External catalog crags with official routes and sectors',
-        count: connectedCrags.length,
-        data: connectedCrags.map((item) => ({
-          type: 'connected_crag',
+        count: connectedCragsWithoutTopos.length,
+        data: connectedCragsWithoutTopos.map((item) => ({
+          type: 'connected_crag' as const,
           key: `connected-${item.tabvarCragId}`,
           data: item,
         })),
@@ -148,10 +181,15 @@ export default function CragsListScreen() {
     hasNoCrags,
     hasNoSearchResults,
     isSearching,
+    filteredMyCragsCount,
+    filteredConnectedCount,
+    totalMyCragsCount,
     myCrags,
-    connectedCrags,
+    connectedCragsWithTopos,
+    connectedCragsWithoutTopos,
     filteredMyCrags,
-    filteredConnectedCrags,
+    filteredConnectedWithTopos,
+    filteredConnectedWithoutTopos,
   ]);
 
   async function handleCreate(name: string) {
@@ -307,7 +345,7 @@ export default function CragsListScreen() {
                 </View>
               ) : null}
               <View style={styles.countPill}>
-                <Text style={styles.countPillText}>{section.count}</Text>
+                <Text style={styles.countPillText} testID={`crags:section:${section.type}:count`}>{section.count}</Text>
               </View>
             </View>
             {section.subtitle ? (
