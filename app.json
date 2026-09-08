@@ -73,7 +73,15 @@
         }
       ],
       "expo-background-task",
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "project": "bolted-app",
+          "organization": "tabvar-k0"
+        }
+      ]
     ],
     "extra": {
       "router": {},

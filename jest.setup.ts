@@ -1,3 +1,17 @@
+jest.mock('@sentry/react-native', () => ({
+  init: jest.fn(),
+  wrap: <T>(component: T): T => component,
+  reactNavigationIntegration: jest.fn(() => ({
+    registerNavigationContainer: jest.fn(),
+  })),
+  captureException: jest.fn(),
+  captureMessage: jest.fn(),
+  setUser: jest.fn(),
+  setTag: jest.fn(),
+  setContext: jest.fn(),
+  addBreadcrumb: jest.fn(),
+}));
+
 jest.mock('@shopify/react-native-skia', () => ({
   Canvas: 'Canvas',
   Circle: 'Circle',

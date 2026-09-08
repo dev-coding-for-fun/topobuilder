@@ -1,4 +1,4 @@
-import { Stack, usePathname } from 'expo-router';
+import { Stack, useNavigationContainerRef, usePathname } from 'expo-router';
 import { useFonts } from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -13,6 +13,28 @@ import { IssueStoreProvider } from '@/state/IssueStore';
 import { registerIssueSyncRuntime } from '@/issues/syncRuntime';
 import { stackScreenOptionsForPathname } from '@/navigation/stackScreenOptions';
 import { interFontMap, interStyle } from '@/ui/fonts';
+
+import Constants from 'expo-constants';
+import * as Sentry from '@sentry/react-native';
+
+const routingInstrumentation = Sentry.reactNavigationIntegration({
+  enableTimeToInitialDisplay: Platform.OS !== 'web',
+});
+
+const sentryDsn =
+  process.env.EXPO_PUBLIC_SENTRY_DSN ??
+  (Constants.expoConfig?.extra?.sentryDsn as string | undefined);
+
+if (sentryDsn) {
+  Sentry.init({
+    dsn: sentryDsn,
+    tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
+    integrations: [
+      routingInstrumentation,
+    ],
+    enableNativeFramesTracking: Platform.OS !== 'web',
+  });
+}
 
 SplashScreen.preventAutoHideAsync();
 SplashScreen.setOptions({ duration: 200, fade: true });
@@ -49,13 +71,15 @@ function installInterDefaults() {
   merge(TextInput as unknown as ComponentWithDefaults);
 }
 
-export default function RootLayout() {
+function RootLayout() {
   return (
     <StrictMode>
       {Platform.OS === 'web' ? <RootLayoutWithRuntimeFonts /> : <RootLayoutShell />}
     </StrictMode>
   );
 }
+
+export default Sentry.wrap(RootLayout);
 
 function RootLayoutWithRuntimeFonts() {
   const [fontsLoaded, fontError] = useFonts(interFontMap);
@@ -75,6 +99,13 @@ function RootLayoutWithRuntimeFonts() {
 
 function RootLayoutShell() {
   const pathname = usePathname();
+  const navigationRef = useNavigationContainerRef();
+
+  useEffect(() => {
+    if (navigationRef?.current) {
+      routingInstrumentation.registerNavigationContainer(navigationRef);
+    }
+  }, [navigationRef]);
 
   useEffect(() => {
     SplashScreen.hideAsync();
