@@ -67,6 +67,7 @@ export function TopoInfoSheet({ topoId, onClose, onAfterChange }: Props) {
         await commitDescription();
         onClose();
       }}
+      scrollable={false}
       testID="topo-info:sheet"
       title="Topo info"
       visible={Boolean(topoId)}
