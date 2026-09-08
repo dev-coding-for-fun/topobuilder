@@ -273,6 +273,45 @@ function distanceToSegment(
   return pointDistance(point, { x: start.x + t * dx, y: start.y + t * dy });
 }
 
+export function projectPointOntoSegment(
+  point: NormalizedPoint,
+  start: NormalizedPoint,
+  end: NormalizedPoint,
+  size: Size,
+): NormalizedPoint {
+  const p = denormalizePoint(point, size);
+  const s = denormalizePoint(start, size);
+  const e = denormalizePoint(end, size);
+
+  const dx = e.x - s.x;
+  const dy = e.y - s.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared === 0) {
+    return start;
+  }
+
+  const t = clamp(((p.x - s.x) * dx + (p.y - s.y) * dy) / lengthSquared);
+  return {
+    x: start.x + t * (end.x - start.x),
+    y: start.y + t * (end.y - start.y),
+  };
+}
+
+export function insertControlPoint(
+  points: NormalizedPoint[],
+  segmentIndex: number,
+  point: NormalizedPoint,
+): NormalizedPoint[] {
+  if (segmentIndex < 0 || segmentIndex >= points.length - 1) {
+    return points;
+  }
+  return [
+    ...points.slice(0, segmentIndex + 1),
+    point,
+    ...points.slice(segmentIndex + 1),
+  ];
+}
+
 /**
  * The user view transform is `screen = scale * canvas + translation`, applied on top of
  * a base "cover" placement of the photo inside the canvas. This helper clamps the

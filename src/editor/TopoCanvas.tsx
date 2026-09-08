@@ -19,6 +19,7 @@ import {
   findNearestPolylineSegment,
   minContainScale,
   pointDistance,
+  projectPointOntoSegment,
   screenToNormalizedImagePoint,
 } from '@/domain/geometry';
 import {
@@ -81,6 +82,8 @@ type TopoCanvasProps = {
   onCommitSelectedPathEdit: () => void;
   onExtendPathDraft: (point: NormalizedPoint, sampleSize: { width: number; height: number }) => void;
   onFinishPathDraft: (point: NormalizedPoint, sampleSize: { width: number; height: number }) => void;
+  onInsertSelectedPathPoint?: (index: number, point: NormalizedPoint) => void;
+  onLongPressSelectedPathPoint?: (pointIndex: number) => void;
   onMoveSelectedPathPoint: (
     pointIndex: number,
     point: NormalizedPoint,
@@ -116,6 +119,8 @@ export function TopoCanvas({
   onChangeSelectedLabelText,
   onCommitSelectedLabelEdit,
   onCommitSelectedStampEdit,
+  onInsertSelectedPathPoint,
+  onLongPressSelectedPathPoint,
   onMoveSelectedLabel,
   onMoveSelectedPathPoint,
   onMoveSelectedStamp,
@@ -336,6 +341,48 @@ export function TopoCanvas({
     }
   };
 
+  const longPressRef = useRef<
+    (screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) => void
+  >(() => undefined);
+  longPressRef.current = (screenX, screenY, viewTx, viewTy, viewScale) => {
+    if (!selectedPath || imageFit.width <= 0 || imageFit.height <= 0) {
+      return;
+    }
+
+    setViewport({ scale: viewScale, tx: viewTx, ty: viewTy });
+    const point = normalizedPointAt(screenX, screenY, viewTx, viewTy, viewScale);
+    const displaySize = sampleSizeFor(viewScale);
+
+    const controlPointHit = findNearestPointIndex(
+      selectedPath.points,
+      point,
+      displaySize,
+      HANDLE_HIT_RADIUS,
+    );
+
+    if (controlPointHit) {
+      onLongPressSelectedPathPoint?.(controlPointHit.index);
+      return;
+    }
+
+    const segmentHit = findNearestPolylineSegment(
+      selectedPath.points,
+      point,
+      displaySize,
+      LINE_HIT_RADIUS,
+    );
+
+    if (segmentHit) {
+      const newPoint = projectPointOntoSegment(
+        point,
+        selectedPath.points[segmentHit.index],
+        selectedPath.points[segmentHit.index + 1],
+        displaySize,
+      );
+      onInsertSelectedPathPoint?.(segmentHit.index + 1, newPoint);
+    }
+  };
+
   const beginPathRef = useRef<
     (screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) => void
   >(() => undefined);
@@ -519,6 +566,10 @@ export function TopoCanvas({
 
   function dispatchTap(screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) {
     placeRef.current(screenX, screenY, viewTx, viewTy, viewScale);
+  }
+
+  function dispatchLongPress(screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) {
+    longPressRef.current(screenX, screenY, viewTx, viewTy, viewScale);
   }
 
   function dispatchBeginPath(screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) {
@@ -1017,13 +1068,30 @@ export function TopoCanvas({
     [],
   );
 
+  const longPressGesture = useMemo(
+    () =>
+      Gesture.LongPress()
+        .minDuration(500)
+        .maxDistance(TAP_MAX_DELTA)
+        .onStart((event) => {
+          runOnJS(dispatchLongPress)(event.x, event.y, tx.value, ty.value, scale.value);
+        }),
+    // dispatchLongPress is stable across renders; it dereferences longPressRef internally.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
   const composedGesture = useMemo(
     () => {
       if (gestureMode === 'draw') {
         return Gesture.Simultaneous(drawGesture, pinchGesture);
       }
       if (gestureMode === 'editPath') {
-        return Gesture.Race(tapGesture, Gesture.Simultaneous(controlPointGesture, pinchGesture));
+        return Gesture.Race(
+          longPressGesture,
+          tapGesture,
+          Gesture.Simultaneous(controlPointGesture, pinchGesture),
+        );
       }
       if (gestureMode === 'editLabel') {
         return Gesture.Race(tapGesture, Gesture.Simultaneous(labelGesture, pinchGesture));
@@ -1033,7 +1101,7 @@ export function TopoCanvas({
       }
       return Gesture.Race(tapGesture, Gesture.Simultaneous(panGesture, pinchGesture));
     },
-    [controlPointGesture, drawGesture, gestureMode, labelGesture, panGesture, pinchGesture, stampGesture, tapGesture],
+    [controlPointGesture, drawGesture, gestureMode, labelGesture, longPressGesture, panGesture, pinchGesture, stampGesture, tapGesture],
   );
 
   const groupTransform = useDerivedValue(

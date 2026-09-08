@@ -568,6 +568,37 @@ export default function EditorScreen() {
     });
   }
 
+  async function insertSelectedPathPoint(
+    pointIndex: number,
+    point: NormalizedPoint,
+  ) {
+    const annotationId = selectedPathIdRef.current;
+    if (!annotationId) return;
+
+    const annotation = savedAnnotations.find((item) => item.id === annotationId);
+    if (!annotation || !isPathAnnotation(annotation)) return;
+
+    const currentPoints = editingPathPointsRef.current ?? annotation.points;
+    if (pointIndex <= 0 || pointIndex >= currentPoints.length) return;
+
+    const nextPoints = [
+      ...currentPoints.slice(0, pointIndex),
+      point,
+      ...currentPoints.slice(pointIndex),
+    ];
+
+    editingPathPointsRef.current = nextPoints;
+    setEditingPathPoints(nextPoints);
+
+    history.recordSnapshot(savedAnnotations);
+    await updateAnnotation({ ...annotation, points: nextPoints });
+    await refresh();
+  }
+
+  function handleLongPressSelectedPathPoint(_pointIndex: number) {
+    // Reserved for future control point long-press behavior.
+  }
+
   function changeSelectedLabelText(label: string) {
     const annotation = editingLabelRef.current;
     if (!annotation) return;
@@ -1030,6 +1061,8 @@ export default function EditorScreen() {
           onCommitSelectedStampEdit={commitSelectedStampEdit}
           onExtendPathDraft={extendPathDraft}
           onFinishPathDraft={finishPathDraft}
+          onInsertSelectedPathPoint={insertSelectedPathPoint}
+          onLongPressSelectedPathPoint={handleLongPressSelectedPathPoint}
           onMoveSelectedLabel={moveSelectedLabel}
           onMoveSelectedPathPoint={moveSelectedPathPoint}
           onMoveSelectedStamp={moveSelectedStamp}

@@ -8,10 +8,12 @@ import {
   findNearestPolylineSegment,
   fitContain,
   fitCover,
+  insertControlPoint,
   minContainScale,
   moveControlPoint,
   normalizePoint,
   normalizedToScreenPoint,
+  projectPointOntoSegment,
   screenToNormalizedImagePoint,
   screenToImagePoint,
 } from './geometry';
@@ -191,4 +193,64 @@ describe('geometry helpers', () => {
       expect(minContainScale({ width: 1000, height: 500 }, { width: 0, height: 0 })).toBe(1);
     });
   });
+
+  describe('projectPointOntoSegment', () => {
+    const size = { width: 1000, height: 1000 };
+    const start = { x: 0.1, y: 0.2 };
+    const end = { x: 0.9, y: 0.2 };
+
+    it('projects a point directly above or below the segment onto the horizontal line', () => {
+      const projected = projectPointOntoSegment({ x: 0.5, y: 0.25 }, start, end, size);
+      expect(projected.x).toBeCloseTo(0.5);
+      expect(projected.y).toBeCloseTo(0.2);
+    });
+
+    it('clamps to the start endpoint if the point is beyond the start', () => {
+      const projected = projectPointOntoSegment({ x: 0.05, y: 0.2 }, start, end, size);
+      expect(projected.x).toBeCloseTo(0.1);
+      expect(projected.y).toBeCloseTo(0.2);
+    });
+
+    it('clamps to the end endpoint if the point is beyond the end', () => {
+      const projected = projectPointOntoSegment({ x: 0.95, y: 0.2 }, start, end, size);
+      expect(projected.x).toBeCloseTo(0.9);
+      expect(projected.y).toBeCloseTo(0.2);
+    });
+  });
+
+  describe('insertControlPoint', () => {
+    const points = [
+      { x: 0.1, y: 0.1 },
+      { x: 0.5, y: 0.5 },
+      { x: 0.9, y: 0.9 },
+    ];
+
+    it('inserts a new point between existing points at segmentIndex', () => {
+      const newPoint = { x: 0.3, y: 0.3 };
+      const updated = insertControlPoint(points, 0, newPoint);
+      expect(updated).toEqual([
+        { x: 0.1, y: 0.1 },
+        { x: 0.3, y: 0.3 },
+        { x: 0.5, y: 0.5 },
+        { x: 0.9, y: 0.9 },
+      ]);
+    });
+
+    it('inserts a point into the second segment', () => {
+      const newPoint = { x: 0.7, y: 0.7 };
+      const updated = insertControlPoint(points, 1, newPoint);
+      expect(updated).toEqual([
+        { x: 0.1, y: 0.1 },
+        { x: 0.5, y: 0.5 },
+        { x: 0.7, y: 0.7 },
+        { x: 0.9, y: 0.9 },
+      ]);
+    });
+
+    it('returns original points if segmentIndex is out of range', () => {
+      expect(insertControlPoint(points, -1, { x: 0.2, y: 0.2 })).toBe(points);
+      expect(insertControlPoint(points, 2, { x: 0.2, y: 0.2 })).toBe(points);
+    });
+  });
 });
+

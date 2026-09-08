@@ -524,6 +524,35 @@ describe('EditorScreen label editing', () => {
     );
   });
 
+  it('inserts a new control point into a selected line when onInsertSelectedPathPoint is called', async () => {
+    loadTopoEditor.mockResolvedValue(bundleFromProject(projectWithAnnotations()));
+
+    render(<EditorScreen />);
+    await waitFor(() => expect(TopoCanvas).toHaveBeenCalled());
+
+    act(() => {
+      latestCanvasProps().onSelectPath('path-1', [
+        { x: 0.1, y: 0.1 },
+        { x: 0.8, y: 0.8 },
+      ]);
+    });
+
+    await act(async () => {
+      await latestCanvasProps().onInsertSelectedPathPoint?.(1, { x: 0.45, y: 0.45 });
+    });
+
+    expect(updateAnnotation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'path-1',
+        points: [
+          { x: 0.1, y: 0.1 },
+          { x: 0.45, y: 0.45 },
+          { x: 0.8, y: 0.8 },
+        ],
+      }),
+    );
+  });
+
   it('keeps stamp colour defaults independent by stamp kind', async () => {
     render(<EditorScreen />);
     await waitFor(() => expect(TopoCanvas).toHaveBeenCalled());
