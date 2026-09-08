@@ -5,6 +5,7 @@ import {
   Rect,
 } from '@shopify/react-native-skia';
 import { memo } from 'react';
+import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
 
 import { denormalizePoint, normalizedToScreenPoint } from '@/domain/geometry';
 import {
@@ -38,20 +39,55 @@ type Viewport = {
 
 export function SelectedPathHandles({
   points,
+  scale,
   size,
 }: {
   points: NormalizedPoint[];
+  scale?: SharedValue<number> | number;
   size: { width: number; height: number };
 }) {
+  const outerRadius = useDerivedValue(() => {
+    'worklet';
+    const s =
+      typeof scale === 'object' && scale !== null && 'value' in scale
+        ? (scale as SharedValue<number>).value
+        : typeof scale === 'number'
+          ? scale
+          : 1;
+    return (HANDLE_RADIUS + 3) / (s > 0 ? s : 1);
+  }, [scale]);
+
+  const middleRadius = useDerivedValue(() => {
+    'worklet';
+    const s =
+      typeof scale === 'object' && scale !== null && 'value' in scale
+        ? (scale as SharedValue<number>).value
+        : typeof scale === 'number'
+          ? scale
+          : 1;
+    return HANDLE_RADIUS / (s > 0 ? s : 1);
+  }, [scale]);
+
+  const innerRadius = useDerivedValue(() => {
+    'worklet';
+    const s =
+      typeof scale === 'object' && scale !== null && 'value' in scale
+        ? (scale as SharedValue<number>).value
+        : typeof scale === 'number'
+          ? scale
+          : 1;
+    return (HANDLE_RADIUS - 4) / (s > 0 ? s : 1);
+  }, [scale]);
+
   return (
     <Group>
       {points.map((point, index) => {
         const next = denormalizePoint(point, size);
         return (
           <Group key={`${point.x}-${point.y}-${index}`}>
-            <Circle color="#0F172A" cx={next.x} cy={next.y} r={HANDLE_RADIUS + 3} />
-            <Circle color="#F8FAFC" cx={next.x} cy={next.y} r={HANDLE_RADIUS} />
-            <Circle color="#1D4ED8" cx={next.x} cy={next.y} r={HANDLE_RADIUS - 4} />
+            <Circle color="#0F172A" cx={next.x} cy={next.y} r={outerRadius} />
+            <Circle color="#F8FAFC" cx={next.x} cy={next.y} r={middleRadius} />
+            <Circle color="#1D4ED8" cx={next.x} cy={next.y} r={innerRadius} />
           </Group>
         );
       })}

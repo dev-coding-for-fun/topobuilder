@@ -4,7 +4,7 @@ import { Skia, useTypeface } from '@shopify/react-native-skia';
 import { SKIA_INTER_FONT_BY_WEIGHT } from '@/rendering/skiaFontRegistry';
 import type { SkiaTextTypefaces } from '@/rendering/SkiaTopoRenderer';
 
-import { AnnotationShape } from './AnnotationShapes';
+import { AnnotationShape, SelectedPathHandles } from './AnnotationShapes';
 
 function mockSkiaInterFontsLoaded() {
   (useTypeface as jest.Mock).mockReturnValue('sk-typeface');
@@ -275,5 +275,60 @@ describe('AnnotationShape labels', () => {
 
     expect(makeFont).not.toHaveBeenCalled();
     expect(Skia.FontMgr.System).not.toHaveBeenCalled();
+  });
+});
+
+describe('SelectedPathHandles', () => {
+  const points = [
+    { x: 0.2, y: 0.3 },
+    { x: 0.6, y: 0.7 },
+  ];
+  const size = { width: 1000, height: 1000 };
+
+  it('renders handles with standard radii at default scale (scale=1)', () => {
+    const { UNSAFE_getAllByProps } = render(
+      <SelectedPathHandles points={points} size={size} />,
+    );
+
+    const outerCircles = UNSAFE_getAllByProps({ color: '#0F172A' });
+    const middleCircles = UNSAFE_getAllByProps({ color: '#F8FAFC' });
+    const innerCircles = UNSAFE_getAllByProps({ color: '#1D4ED8' });
+
+    expect(outerCircles).toHaveLength(2);
+    expect(middleCircles).toHaveLength(2);
+    expect(innerCircles).toHaveLength(2);
+
+    expect(outerCircles[0].props.r).toBe(12);
+    expect(middleCircles[0].props.r).toBe(9);
+    expect(innerCircles[0].props.r).toBe(5);
+  });
+
+  it('inversely scales radii when zoomed in (scale=2) so handles remain the same size on screen', () => {
+    const { UNSAFE_getAllByProps } = render(
+      <SelectedPathHandles points={points} scale={2} size={size} />,
+    );
+
+    const outerCircles = UNSAFE_getAllByProps({ color: '#0F172A' });
+    const middleCircles = UNSAFE_getAllByProps({ color: '#F8FAFC' });
+    const innerCircles = UNSAFE_getAllByProps({ color: '#1D4ED8' });
+
+    expect(outerCircles[0].props.r).toBe(6);
+    expect(middleCircles[0].props.r).toBe(4.5);
+    expect(innerCircles[0].props.r).toBe(2.5);
+  });
+
+  it('inversely scales radii when scale is a SharedValue', () => {
+    const scaleSharedValue = { value: 3 } as unknown as import('react-native-reanimated').SharedValue<number>;
+    const { UNSAFE_getAllByProps } = render(
+      <SelectedPathHandles points={points} scale={scaleSharedValue} size={size} />,
+    );
+
+    const outerCircles = UNSAFE_getAllByProps({ color: '#0F172A' });
+    const middleCircles = UNSAFE_getAllByProps({ color: '#F8FAFC' });
+    const innerCircles = UNSAFE_getAllByProps({ color: '#1D4ED8' });
+
+    expect(outerCircles[0].props.r).toBe(4);
+    expect(middleCircles[0].props.r).toBe(3);
+    expect(innerCircles[0].props.r).toBeCloseTo(5 / 3);
   });
 });

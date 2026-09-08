@@ -1100,7 +1100,13 @@ export function TopoCanvas({
                     typefaces={typefaces}
                   />
                 ))}
-                {selectedPath ? <SelectedPathHandles points={selectedPath.points} size={renderableSize} /> : null}
+                {selectedPath ? (
+                  <SelectedPathHandles
+                    points={selectedPath.points}
+                    scale={scale}
+                    size={renderableSize}
+                  />
+                ) : null}
                 {selectedStamp ? (
                   <Circle
                     color="#1D4ED8"
