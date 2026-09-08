@@ -74,6 +74,7 @@
       ],
       "expo-background-task",
       "expo-notifications",
+      "expo-updates",
       [
         "@sentry/react-native/expo",
         {
@@ -83,6 +84,14 @@
         }
       ]
     ],
+    "updates": {
+      "url": "https://u.expo.dev/af515901-0cc7-42ee-98bd-be3f1de39aa1",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
     "extra": {
       "router": {},
       "eas": {
