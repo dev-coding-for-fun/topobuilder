@@ -970,4 +970,74 @@ describe('EditorScreen label editing', () => {
       ]),
     );
   });
+
+  it('deletes a control point on a line with more than 2 points, updating the line and recording undo history', async () => {
+    const multiPointPath: TopoProject = {
+      ...project,
+      annotations: [
+        {
+          id: 'path-1',
+          topoId: 'project-1',
+          kind: 'climbLine',
+          color: '#2563EB',
+          points: [
+            { x: 0.1, y: 0.1 },
+            { x: 0.5, y: 0.5 },
+            { x: 0.8, y: 0.8 },
+          ],
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    };
+    loadTopoEditor.mockResolvedValue(bundleFromProject(multiPointPath));
+
+    render(<EditorScreen />);
+    await waitFor(() => expect(TopoCanvas).toHaveBeenCalled());
+
+    act(() => {
+      latestCanvasProps().onSelectPath('path-1', [
+        { x: 0.1, y: 0.1 },
+        { x: 0.5, y: 0.5 },
+        { x: 0.8, y: 0.8 },
+      ]);
+    });
+
+    await act(async () => {
+      await latestCanvasProps().onDeleteSelectedPathPoint?.(1);
+    });
+
+    expect(updateAnnotation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'path-1',
+        points: [
+          { x: 0.1, y: 0.1 },
+          { x: 0.8, y: 0.8 },
+        ],
+      }),
+    );
+    expect(screen.getByLabelText('Undo')).toBeTruthy();
+  });
+
+  it('deletes the entire line annotation when deleting a control point on a 2-point line', async () => {
+    loadTopoEditor.mockResolvedValue(bundleFromProject(projectWithAnnotations()));
+
+    render(<EditorScreen />);
+    await waitFor(() => expect(TopoCanvas).toHaveBeenCalled());
+
+    act(() => {
+      latestCanvasProps().onSelectPath('path-1', [
+        { x: 0.1, y: 0.1 },
+        { x: 0.8, y: 0.8 },
+      ]);
+    });
+
+    await act(async () => {
+      await latestCanvasProps().onDeleteSelectedPathPoint?.(0);
+    });
+
+    expect(removeAnnotation).toHaveBeenCalledWith(expect.objectContaining({ id: 'path-1' }));
+    expect(latestTopBarProps().canDelete).toBe(false);
+    expect(screen.getByLabelText('Undo')).toBeTruthy();
+  });
 });

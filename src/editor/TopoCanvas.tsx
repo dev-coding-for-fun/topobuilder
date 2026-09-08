@@ -7,9 +7,18 @@ import {
   useImage,
 } from '@shopify/react-native-skia';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { LayoutChangeEvent, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  LayoutChangeEvent,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { runOnJS, useDerivedValue, useSharedValue } from 'react-native-reanimated';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import {
   clampPan,
@@ -18,6 +27,7 @@ import {
   findNearestPointIndex,
   findNearestPolylineSegment,
   minContainScale,
+  normalizedToScreenPoint,
   pointDistance,
   projectPointOntoSegment,
   screenToNormalizedImagePoint,
@@ -82,6 +92,7 @@ type TopoCanvasProps = {
   onCommitSelectedPathEdit: () => void;
   onExtendPathDraft: (point: NormalizedPoint, sampleSize: { width: number; height: number }) => void;
   onFinishPathDraft: (point: NormalizedPoint, sampleSize: { width: number; height: number }) => void;
+  onDeleteSelectedPathPoint?: (pointIndex: number) => void;
   onInsertSelectedPathPoint?: (index: number, point: NormalizedPoint) => void;
   onLongPressSelectedPathPoint?: (pointIndex: number) => void;
   onMoveSelectedPathPoint: (
@@ -114,6 +125,7 @@ export function TopoCanvas({
   selectedPathId,
   onBeginPathDraft,
   onCommitSelectedPathEdit,
+  onDeleteSelectedPathPoint,
   onExtendPathDraft,
   onFinishPathDraft,
   onChangeSelectedLabelText,
@@ -217,6 +229,20 @@ export function TopoCanvas({
         ? 'editStamp'
         : 'pan';
 
+  const [deleteHandleIndex, setDeleteHandleIndex] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    setDeleteHandleIndex(undefined);
+  }, [selectedPathId, activeTool]);
+
+  const dismissDeleteHandleRef = useRef<() => void>(() => undefined);
+  dismissDeleteHandleRef.current = () => {
+    setDeleteHandleIndex(undefined);
+  };
+  function dispatchDismissDeleteHandle() {
+    dismissDeleteHandleRef.current();
+  }
+
   // Reset zoom/pan whenever the photo changes so each topo opens at the cover view.
   useEffect(() => {
     scale.value = 1;
@@ -224,6 +250,26 @@ export function TopoCanvas({
     ty.value = 0;
     setViewport({ scale: 1, tx: 0, ty: 0 });
   }, [photo.id, scale, tx, ty]);
+
+  const activeDeleteHandle =
+    selectedPath &&
+    deleteHandleIndex !== undefined &&
+    deleteHandleIndex < selectedPath.points.length
+      ? selectedPath.points[deleteHandleIndex]
+      : undefined;
+
+  const deleteButtonPosition = useMemo(() => {
+    if (!activeDeleteHandle || canvasSize.width <= 1 || canvasSize.height <= 1) {
+      return undefined;
+    }
+    const screen = normalizedToScreenPoint(activeDeleteHandle, imageFit, viewport);
+    const buttonLeft = Math.max(8, Math.min(screen.x - 14, canvasSize.width - 36));
+    const buttonTop =
+      screen.y - 42 < 8
+        ? Math.min(screen.y + 14, canvasSize.height - 36)
+        : Math.max(8, screen.y - 42);
+    return { x: buttonLeft, y: buttonTop };
+  }, [activeDeleteHandle, canvasSize.height, canvasSize.width, imageFit, viewport]);
 
   function handleLayout(event: LayoutChangeEvent) {
     const { width, height } = event.nativeEvent.layout;
@@ -257,6 +303,7 @@ export function TopoCanvas({
     (screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) => void
   >(() => undefined);
   placeRef.current = (screenX, screenY, viewTx, viewTy, viewScale) => {
+    setDeleteHandleIndex(undefined);
     if (imageFit.width <= 0 || imageFit.height <= 0) {
       return;
     }
@@ -361,9 +408,12 @@ export function TopoCanvas({
     );
 
     if (controlPointHit) {
+      setDeleteHandleIndex(controlPointHit.index);
       onLongPressSelectedPathPoint?.(controlPointHit.index);
       return;
     }
+
+    setDeleteHandleIndex(undefined);
 
     const segmentHit = findNearestPolylineSegment(
       selectedPath.points,
@@ -423,6 +473,7 @@ export function TopoCanvas({
     (screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) => void
   >(() => undefined);
   beginControlPointDragRef.current = (screenX, screenY, viewTx, viewTy, viewScale) => {
+    setDeleteHandleIndex(undefined);
     if (!selectedPath || imageFit.width <= 0 || imageFit.height <= 0) {
       dragHandleIndexRef.current = -1;
       return;
@@ -455,6 +506,7 @@ export function TopoCanvas({
     (screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) => void
   >(() => undefined);
   beginLabelDragRef.current = (screenX, screenY, viewTx, viewTy, viewScale) => {
+    setDeleteHandleIndex(undefined);
     if (!selectedLabel || imageFit.width <= 0 || imageFit.height <= 0) {
       labelDragModeRef.current = 'none';
       return;
@@ -529,6 +581,7 @@ export function TopoCanvas({
     (screenX: number, screenY: number, viewTx: number, viewTy: number, viewScale: number) => void
   >(() => undefined);
   beginStampDragRef.current = (screenX, screenY, viewTx, viewTy, viewScale) => {
+    setDeleteHandleIndex(undefined);
     if (!selectedStamp || imageFit.width <= 0 || imageFit.height <= 0) {
       stampDragModeRef.current = 'none';
       return;
@@ -748,6 +801,7 @@ export function TopoCanvas({
         .onStart(() => {
           startTx.value = tx.value;
           startTy.value = ty.value;
+          runOnJS(dispatchDismissDeleteHandle)();
         })
         .onChange((event) => {
           const next = clampPan(
@@ -893,6 +947,7 @@ export function TopoCanvas({
           startTy.value = ty.value;
           startFocalX.value = event.focalX;
           startFocalY.value = event.focalY;
+          runOnJS(dispatchDismissDeleteHandle)();
         })
         .onChange((event) => {
           // Right before pinch.onEnd, when a finger lifts, gesture-handler can fire one
@@ -951,6 +1006,7 @@ export function TopoCanvas({
     }
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault();
+      setDeleteHandleIndex(undefined);
       const rect = node.getBoundingClientRect();
       const focalX = event.clientX - rect.left;
       const focalY = event.clientY - rect.top;
@@ -1141,107 +1197,140 @@ export function TopoCanvas({
   );
 
   return (
-    <GestureDetector gesture={composedGesture}>
-      <Animated.View ref={containerRef} onLayout={handleLayout} style={styles.container}>
-        <Canvas pointerEvents="none" style={StyleSheet.absoluteFill}>
-          <SkiaTextFontProvider typefaces={typefaces}>
-            <Group transform={groupTransform}>
-              <Group transform={[{ translateX: imageFit.offsetX }, { translateY: imageFit.offsetY }]}>
-                {image ? (
-                  <SkiaImage
-                    image={image}
-                    x={0}
-                    y={0}
-                    width={imageFit.width}
-                    height={imageFit.height}
-                    fit="contain"
-                  />
-                ) : (
-                  <Rect x={0} y={0} width={imageFit.width} height={imageFit.height} color="#CBD5E1" />
-                )}
-                {drawableAnnotations.map((annotation) => (
-                  <AnnotationShape
-                    annotation={annotation}
-                    key={annotation.id}
-                    imageScale={imageFit.scale}
-                    size={renderableSize}
-                    typefaces={typefaces}
-                  />
-                ))}
-                {selectedPath ? (
-                  <SelectedPathHandles
-                    points={selectedPath.points}
-                    scale={scale}
-                    size={renderableSize}
-                  />
-                ) : null}
-                {selectedStamp ? (
-                  <Circle
-                    color="#1D4ED8"
-                    cx={denormalizePoint(selectedStamp.point, renderableSize).x}
-                    cy={denormalizePoint(selectedStamp.point, renderableSize).y}
-                    r={18}
-                    strokeWidth={2}
-                    style="stroke"
-                  />
-                ) : null}
-                {selectedLabel ? (
-                  <SelectedLabelHandles
-                    annotation={selectedLabel}
-                    imageScale={imageFit.scale}
-                    size={renderableSize}
-                  />
-                ) : null}
+    <View onLayout={handleLayout} style={styles.container}>
+      <GestureDetector gesture={composedGesture}>
+        <Animated.View ref={containerRef} style={StyleSheet.absoluteFill}>
+          <Canvas pointerEvents="none" style={StyleSheet.absoluteFill}>
+            <SkiaTextFontProvider typefaces={typefaces}>
+              <Group transform={groupTransform}>
+                <Group transform={[{ translateX: imageFit.offsetX }, { translateY: imageFit.offsetY }]}>
+                  {image ? (
+                    <SkiaImage
+                      image={image}
+                      x={0}
+                      y={0}
+                      width={imageFit.width}
+                      height={imageFit.height}
+                      fit="contain"
+                    />
+                  ) : (
+                    <Rect x={0} y={0} width={imageFit.width} height={imageFit.height} color="#CBD5E1" />
+                  )}
+                  {drawableAnnotations.map((annotation) => (
+                    <AnnotationShape
+                      annotation={annotation}
+                      key={annotation.id}
+                      imageScale={imageFit.scale}
+                      size={renderableSize}
+                      typefaces={typefaces}
+                    />
+                  ))}
+                  {selectedPath ? (
+                    <SelectedPathHandles
+                      points={selectedPath.points}
+                      scale={scale}
+                      size={renderableSize}
+                    />
+                  ) : null}
+                  {selectedStamp ? (
+                    <Circle
+                      color="#1D4ED8"
+                      cx={denormalizePoint(selectedStamp.point, renderableSize).x}
+                      cy={denormalizePoint(selectedStamp.point, renderableSize).y}
+                      r={18}
+                      strokeWidth={2}
+                      style="stroke"
+                    />
+                  ) : null}
+                  {selectedLabel ? (
+                    <SelectedLabelHandles
+                      annotation={selectedLabel}
+                      imageScale={imageFit.scale}
+                      size={renderableSize}
+                    />
+                  ) : null}
+                </Group>
               </Group>
-            </Group>
-          </SkiaTextFontProvider>
-        </Canvas>
-        {selectedLabelBackdrop ? (
-          <View
-            pointerEvents="none"
-            style={[
-              styles.labelBackdrop,
-              {
-                backgroundColor: selectedLabelBackdrop.backgroundColor,
-                borderRadius: LABEL_BACKDROP_RADIUS,
-                height: selectedLabelBackdrop.height,
-                left: selectedLabelBackdrop.x,
-                top: selectedLabelBackdrop.y,
-                width: selectedLabelBackdrop.width,
-              },
-            ]}
-          />
-        ) : null}
-        {selectedLabel && selectedLabelFrame ? (
-          <TextInput
-            autoFocus
-            multiline
-            onBlur={onCommitSelectedLabelEdit}
-            onChangeText={onChangeSelectedLabelText}
-            pointerEvents="auto"
-            style={[
-              styles.labelInput,
-              {
-                color: selectedLabel.color,
-                fontSize: selectedLabelFrame.fontSize,
-                height: selectedLabelFrame.height,
-                left: selectedLabelFrame.x,
-                lineHeight: selectedLabelFrame.lineHeight,
-                paddingLeft: selectedLabelFrame.leadingInset,
-                top: selectedLabelFrame.y,
-                width: selectedLabelFrame.width,
-              },
-            ]}
-            value={labelText(selectedLabel)}
-          />
-        ) : null}
-        {!image && (
-          <View pointerEvents="none" style={styles.loading}>
-            <Text style={styles.loadingText}>Loading topo photo...</Text>
-          </View>
-        )}
-      </Animated.View>
-    </GestureDetector>
+            </SkiaTextFontProvider>
+          </Canvas>
+          {selectedLabelBackdrop ? (
+            <View
+              pointerEvents="none"
+              style={[
+                styles.labelBackdrop,
+                {
+                  backgroundColor: selectedLabelBackdrop.backgroundColor,
+                  borderRadius: LABEL_BACKDROP_RADIUS,
+                  height: selectedLabelBackdrop.height,
+                  left: selectedLabelBackdrop.x,
+                  top: selectedLabelBackdrop.y,
+                  width: selectedLabelBackdrop.width,
+                },
+              ]}
+            />
+          ) : null}
+          {selectedLabel && selectedLabelFrame ? (
+            <TextInput
+              autoFocus
+              multiline
+              onBlur={onCommitSelectedLabelEdit}
+              onChangeText={onChangeSelectedLabelText}
+              pointerEvents="auto"
+              style={[
+                styles.labelInput,
+                {
+                  color: selectedLabel.color,
+                  fontSize: selectedLabelFrame.fontSize,
+                  height: selectedLabelFrame.height,
+                  left: selectedLabelFrame.x,
+                  lineHeight: selectedLabelFrame.lineHeight,
+                  paddingLeft: selectedLabelFrame.leadingInset,
+                  top: selectedLabelFrame.y,
+                  width: selectedLabelFrame.width,
+                },
+              ]}
+              value={labelText(selectedLabel)}
+            />
+          ) : null}
+          {!image && (
+            <View pointerEvents="none" style={styles.loading}>
+              <Text style={styles.loadingText}>Loading topo photo...</Text>
+            </View>
+          )}
+        </Animated.View>
+      </GestureDetector>
+      {activeDeleteHandle && deleteButtonPosition && deleteHandleIndex !== undefined ? (
+        <Pressable
+          accessibilityLabel="Delete control point"
+          accessibilityRole="button"
+          onPointerDown={(event) => {
+            if (Platform.OS === 'web') {
+              event.stopPropagation?.();
+            }
+          }}
+          onPress={(event) => {
+            if (Platform.OS === 'web') {
+              event.stopPropagation?.();
+            }
+            const indexToDelete = deleteHandleIndex;
+            setDeleteHandleIndex(undefined);
+            if (indexToDelete !== undefined) {
+              onDeleteSelectedPathPoint?.(indexToDelete);
+            }
+          }}
+          style={[
+            styles.deleteHandleButton,
+            {
+              left: deleteButtonPosition.x,
+              top: deleteButtonPosition.y,
+            },
+          ]}
+          testID="editor:delete-control-point"
+        >
+          <Ionicons color="#FFFFFF" name="close" size={16} />
+        </Pressable>
+      ) : null}
+    </View>
   );
 }
 
@@ -1286,6 +1375,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#0F172A',
     flex: 1,
     overflow: 'hidden',
+  },
+  deleteHandleButton: {
+    alignItems: 'center',
+    backgroundColor: '#DC2626',
+    borderColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 2,
+    elevation: 6,
+    height: 28,
+    justifyContent: 'center',
+    position: 'absolute',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 3,
+    width: 28,
+    zIndex: 10,
   },
   loading: {
     alignItems: 'center',

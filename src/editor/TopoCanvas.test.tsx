@@ -1,9 +1,11 @@
-import { act, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import { View } from 'react-native';
 
 import type { Annotation, PhotoAsset } from '@/domain/types';
 
 import { annotationsInCanvasStackOrder, TopoCanvas } from './TopoCanvas';
+
+jest.mock('@expo/vector-icons/Ionicons', () => 'Ionicons');
 
 let mockTapEnd: ((event: { x: number; y: number }) => void) | undefined;
 let mockLongPressStart: ((event: { x: number; y: number }) => void) | undefined;
@@ -126,6 +128,7 @@ function renderCanvas({
   onSelectPath = jest.fn(),
   onSelectStamp = jest.fn(),
   onCommitSelectedPathEdit = jest.fn(),
+  onDeleteSelectedPathPoint = jest.fn(),
   onInsertSelectedPathPoint = jest.fn(),
   onLongPressSelectedPathPoint = jest.fn(),
   onMoveSelectedPathPoint = jest.fn(),
@@ -138,6 +141,7 @@ function renderCanvas({
   annotations: Annotation[];
   onCommitSelectedStampEdit?: jest.Mock;
   onCommitSelectedPathEdit?: jest.Mock;
+  onDeleteSelectedPathPoint?: jest.Mock;
   onInsertSelectedPathPoint?: jest.Mock;
   onLongPressSelectedPathPoint?: jest.Mock;
   onMoveSelectedPathPoint?: jest.Mock;
@@ -160,6 +164,7 @@ function renderCanvas({
       onCommitSelectedLabelEdit={jest.fn()}
       onCommitSelectedPathEdit={onCommitSelectedPathEdit}
       onCommitSelectedStampEdit={onCommitSelectedStampEdit}
+      onDeleteSelectedPathPoint={onDeleteSelectedPathPoint}
       onExtendPathDraft={jest.fn()}
       onFinishPathDraft={jest.fn()}
       onInsertSelectedPathPoint={onInsertSelectedPathPoint}
@@ -182,6 +187,7 @@ function renderCanvas({
     ...result,
     onCommitSelectedPathEdit,
     onCommitSelectedStampEdit,
+    onDeleteSelectedPathPoint,
     onInsertSelectedPathPoint,
     onLongPressSelectedPathPoint,
     onMoveSelectedPathPoint,
@@ -594,5 +600,105 @@ describe('TopoCanvas long press interactions', () => {
     expect(onInsertSelectedPathPoint).not.toHaveBeenCalled();
     expect(onLongPressSelectedPathPoint).not.toHaveBeenCalled();
   });
+
+  it('shows delete button on long pressing an existing control point, and deletes it when pressed', () => {
+    const result = renderCanvas({
+      annotations: [path],
+      selectedPathId: 'path-1',
+    });
+    layoutCanvas(result);
+
+    const { onDeleteSelectedPathPoint, onLongPressSelectedPathPoint, queryByTestId, getByTestId } = result;
+
+    expect(queryByTestId('editor:delete-control-point')).toBeNull();
+
+    act(() => {
+      // Near control point 0 at (200, 500)
+      mockLongPressStart?.({ x: 205, y: 500 });
+    });
+
+    expect(onLongPressSelectedPathPoint).toHaveBeenCalledWith(0);
+    const deleteButton = getByTestId('editor:delete-control-point');
+    expect(deleteButton).toBeTruthy();
+
+    act(() => {
+      fireEvent.press(deleteButton);
+    });
+
+    expect(onDeleteSelectedPathPoint).toHaveBeenCalledWith(0);
+    expect(queryByTestId('editor:delete-control-point')).toBeNull();
+  });
+
+  it('dismisses delete button when user taps elsewhere on canvas', () => {
+    const result = renderCanvas({
+      annotations: [path],
+      selectedPathId: 'path-1',
+    });
+    layoutCanvas(result);
+
+    const { onDeleteSelectedPathPoint, queryByTestId } = result;
+
+    act(() => {
+      mockLongPressStart?.({ x: 205, y: 500 });
+    });
+    expect(queryByTestId('editor:delete-control-point')).toBeTruthy();
+
+    act(() => {
+      mockTapEnd?.({ x: 500, y: 500 });
+    });
+
+    expect(queryByTestId('editor:delete-control-point')).toBeNull();
+    expect(onDeleteSelectedPathPoint).not.toHaveBeenCalled();
+  });
+
+  it('dismisses delete button when user begins dragging', () => {
+    const result = renderCanvas({
+      annotations: [path],
+      selectedPathId: 'path-1',
+    });
+    layoutCanvas(result);
+
+    const { onDeleteSelectedPathPoint, queryByTestId } = result;
+
+    act(() => {
+      mockLongPressStart?.({ x: 205, y: 500 });
+    });
+    expect(queryByTestId('editor:delete-control-point')).toBeTruthy();
+
+    act(() => {
+      mockPanChains[0]?.triggerStart({ x: 200, y: 500 });
+    });
+
+    expect(queryByTestId('editor:delete-control-point')).toBeNull();
+    expect(onDeleteSelectedPathPoint).not.toHaveBeenCalled();
+  });
+
+  it('moves delete button when long-pressing a different control point', () => {
+    const result = renderCanvas({
+      annotations: [path],
+      selectedPathId: 'path-1',
+    });
+    layoutCanvas(result);
+
+    const { onDeleteSelectedPathPoint, getByTestId } = result;
+
+    act(() => {
+      mockLongPressStart?.({ x: 205, y: 500 });
+    });
+    expect(getByTestId('editor:delete-control-point')).toBeTruthy();
+
+    act(() => {
+      // Near control point 1 at (800, 500)
+      mockLongPressStart?.({ x: 802, y: 500 });
+    });
+
+    const deleteButton = getByTestId('editor:delete-control-point');
+    act(() => {
+      fireEvent.press(deleteButton);
+    });
+
+    expect(onDeleteSelectedPathPoint).toHaveBeenCalledWith(1);
+  });
 });
+
 

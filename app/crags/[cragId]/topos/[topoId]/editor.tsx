@@ -595,6 +595,33 @@ export default function EditorScreen() {
     await refresh();
   }
 
+  async function deleteSelectedPathPoint(pointIndex: number) {
+    const annotationId = selectedPathIdRef.current;
+    if (!annotationId) return;
+
+    const annotation = savedAnnotations.find((item) => item.id === annotationId);
+    if (!annotation || !isPathAnnotation(annotation)) return;
+
+    const currentPoints = editingPathPointsRef.current ?? annotation.points;
+    if (pointIndex < 0 || pointIndex >= currentPoints.length) return;
+
+    if (currentPoints.length <= 2) {
+      history.recordSnapshot(savedAnnotations);
+      clearSelectionState();
+      await removeAnnotation(annotation);
+      await refresh();
+      return;
+    }
+
+    const nextPoints = currentPoints.filter((_, idx) => idx !== pointIndex);
+    editingPathPointsRef.current = nextPoints;
+    setEditingPathPoints(nextPoints);
+
+    history.recordSnapshot(savedAnnotations);
+    await updateAnnotation({ ...annotation, points: nextPoints });
+    await refresh();
+  }
+
   function handleLongPressSelectedPathPoint(_pointIndex: number) {
     // Reserved for future control point long-press behavior.
   }
@@ -1059,6 +1086,7 @@ export default function EditorScreen() {
           onCommitSelectedLabelEdit={commitSelectedLabelEdit}
           onCommitSelectedPathEdit={commitSelectedPathEdit}
           onCommitSelectedStampEdit={commitSelectedStampEdit}
+          onDeleteSelectedPathPoint={deleteSelectedPathPoint}
           onExtendPathDraft={extendPathDraft}
           onFinishPathDraft={finishPathDraft}
           onInsertSelectedPathPoint={insertSelectedPathPoint}
