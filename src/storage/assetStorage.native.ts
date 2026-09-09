@@ -1,6 +1,10 @@
 import * as FileSystem from 'expo-file-system/legacy';
+import { SaveFormat, manipulateAsync } from 'expo-image-manipulator';
 
 import { createId } from '@/domain/ids';
+
+/** HEIC/HEIF cannot be decoded by Skia; transcode to JPEG on import. */
+const HEIC_EXTENSIONS = new Set(['heic', 'heif']);
 
 function getAssetRoot() {
   return `${FileSystem.documentDirectory ?? ''}topos`;
@@ -23,12 +27,25 @@ export async function copyPhotoIntoLibrary(sourceUri: string, topoId: string): P
     await FileSystem.makeDirectoryAsync(topoDir, { intermediates: true });
   }
 
-  const extension = sourceUri.split('.').pop()?.split('?')[0] || 'jpg';
-  const fileName = `${createId('photo')}.${extension}`;
+  const rawExtension = sourceUri.split('.').pop()?.split('?')[0]?.toLowerCase() ?? 'jpg';
+
+  if (HEIC_EXTENSIONS.has(rawExtension)) {
+    // Transcode HEIC/HEIF → JPEG so Skia can decode the image in the editor.
+    const transcoded = await manipulateAsync(sourceUri, [], {
+      compress: 0.92,
+      format: SaveFormat.JPEG,
+    });
+    const fileName = `${createId('photo')}.jpg`;
+    const relativePath = `topos/${topoId}/${fileName}`;
+    const destination = `${FileSystem.documentDirectory ?? ''}${relativePath}`;
+    await FileSystem.copyAsync({ from: transcoded.uri, to: destination });
+    return relativePath;
+  }
+
+  const fileName = `${createId('photo')}.${rawExtension}`;
   const relativePath = `topos/${topoId}/${fileName}`;
   const destination = `${FileSystem.documentDirectory ?? ''}${relativePath}`;
   await FileSystem.copyAsync({ from: sourceUri, to: destination });
-
   return relativePath;
 }
 

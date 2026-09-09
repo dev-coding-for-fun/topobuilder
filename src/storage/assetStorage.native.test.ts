@@ -5,7 +5,13 @@ jest.mock('expo-file-system/legacy', () => ({
   copyAsync: jest.fn().mockResolvedValue(undefined),
 }));
 
+jest.mock('expo-image-manipulator', () => ({
+  SaveFormat: { JPEG: 'jpeg' },
+  manipulateAsync: jest.fn().mockResolvedValue({ uri: 'file:///tmp/transcoded.jpg' }),
+}));
+
 import * as FileSystem from 'expo-file-system/legacy';
+import { manipulateAsync } from 'expo-image-manipulator';
 import { copyPhotoIntoLibrary, resolvePhotoUri } from './assetStorage.native';
 
 describe('native asset storage', () => {
@@ -28,6 +34,34 @@ describe('native asset storage', () => {
       const result = await copyPhotoIntoLibrary('file:///tmp/source.png', 'topo-123');
 
       expect(result).toMatch(/\.png$/);
+    });
+
+    it('transcodes .heic to .jpg', async () => {
+      const result = await copyPhotoIntoLibrary('file:///tmp/source.heic', 'topo-123');
+
+      expect(manipulateAsync).toHaveBeenCalledWith(
+        'file:///tmp/source.heic',
+        [],
+        { compress: 0.92, format: 'jpeg' },
+      );
+      expect(result).toMatch(/^topos\/topo-123\/photo_[a-z0-9_]+\.jpg$/);
+      expect(FileSystem.copyAsync).toHaveBeenCalledWith({
+        from: 'file:///tmp/transcoded.jpg',
+        to: `file:///var/mobile/Containers/Data/Application/TEST-UUID/Documents/${result}`,
+      });
+    });
+
+    it('transcodes .heif to .jpg', async () => {
+      const result = await copyPhotoIntoLibrary('file:///tmp/source.heif', 'topo-123');
+
+      expect(manipulateAsync).toHaveBeenCalled();
+      expect(result).toMatch(/\.jpg$/);
+    });
+
+    it('does not transcode non-HEIC formats', async () => {
+      await copyPhotoIntoLibrary('file:///tmp/source.png', 'topo-123');
+
+      expect(manipulateAsync).not.toHaveBeenCalled();
     });
   });
 
@@ -57,3 +91,4 @@ describe('native asset storage', () => {
     });
   });
 });
+
