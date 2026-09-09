@@ -17,15 +17,17 @@ import { interFontMap, interStyle } from '@/ui/fonts';
 import Constants from 'expo-constants';
 import * as Sentry from '@sentry/react-native';
 
-const routingInstrumentation = Sentry.reactNavigationIntegration({
-  enableTimeToInitialDisplay: Platform.OS !== 'web',
-});
-
 const sentryDsn =
   process.env.EXPO_PUBLIC_SENTRY_DSN ??
   (Constants.expoConfig?.extra?.sentryDsn as string | undefined);
 
-if (sentryDsn) {
+const routingInstrumentation = sentryDsn
+  ? Sentry.reactNavigationIntegration({
+      enableTimeToInitialDisplay: Platform.OS !== 'web',
+    })
+  : undefined;
+
+if (sentryDsn && routingInstrumentation) {
   Sentry.init({
     dsn: sentryDsn,
     tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
@@ -79,7 +81,7 @@ function RootLayout() {
   );
 }
 
-export default Sentry.wrap(RootLayout);
+export default sentryDsn ? Sentry.wrap(RootLayout) : RootLayout;
 
 function RootLayoutWithRuntimeFonts() {
   const [fontsLoaded, fontError] = useFonts(interFontMap);
@@ -102,7 +104,7 @@ function RootLayoutShell() {
   const navigationRef = useNavigationContainerRef();
 
   useEffect(() => {
-    if (navigationRef?.current) {
+    if (routingInstrumentation && navigationRef?.current) {
       routingInstrumentation.registerNavigationContainer(navigationRef);
     }
   }, [navigationRef]);
