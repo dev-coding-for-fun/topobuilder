@@ -40,4 +40,20 @@ describe('AnnotationColorControl', () => {
 
     expect(onSelectColor).toHaveBeenCalledWith('#2563EB');
   });
+
+  it('renders swatches in a 2-row grid of 5 swatches each when expanded', () => {
+    render(
+      <AnnotationColorControl
+        currentColor="#111827"
+        expanded
+        onSelectColor={jest.fn()}
+        swatches={ANNOTATION_COLOUR_PALETTE}
+      />,
+    );
+
+    const choicesContainer = screen.getByLabelText('Annotation colour choices');
+    expect(choicesContainer.props.children).toHaveLength(2);
+    expect(choicesContainer.props.children[0].props.children).toHaveLength(5);
+    expect(choicesContainer.props.children[1].props.children).toHaveLength(5);
+  });
 });

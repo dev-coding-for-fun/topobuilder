@@ -4,6 +4,16 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { AnnotationColourSwatch } from '@/domain/annotationColours';
 import { interStyle } from '@/ui/fonts';
 
+const SWATCHES_PER_ROW = 5;
+
+function chunkSwatches(items: AnnotationColourSwatch[], size: number): AnnotationColourSwatch[][] {
+  const chunks: AnnotationColourSwatch[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
 export function AnnotationColorControl({
   currentColor,
   expanded,
@@ -34,36 +44,42 @@ export function AnnotationColorControl({
   }
 
   if (isExpanded) {
+    const swatchRows = chunkSwatches(swatches, SWATCHES_PER_ROW);
+
     return (
       <View accessibilityLabel={`${targetLabel} choices`} style={styles.expanded}>
-        {swatches.map((swatch) => {
-          const isSelected = swatch.value.toUpperCase() === currentColor.toUpperCase();
-          return (
-            <Pressable
-              accessibilityLabel={`${swatch.label} ${targetLabel.toLowerCase()}`}
-              accessibilityRole="button"
-              accessibilityState={{ selected: isSelected }}
-              key={swatch.id}
-              onPress={() => {
-                onSelectColor(swatch.value);
-                setExpanded(false);
-              }}
-              style={({ pressed }) => [
-                styles.swatchButton,
-                isSelected && styles.selectedSwatchButton,
-                pressed && styles.pressed,
-              ]}
-            >
-              <View
-                style={[
-                  styles.swatch,
-                  { backgroundColor: swatch.value },
-                  swatch.value.toUpperCase() === '#F8FAFC' && styles.lightSwatch,
-                ]}
-              />
-            </Pressable>
-          );
-        })}
+        {swatchRows.map((row, rowIndex) => (
+          <View key={rowIndex} style={styles.gridRow}>
+            {row.map((swatch) => {
+              const isSelected = swatch.value.toUpperCase() === currentColor.toUpperCase();
+              return (
+                <Pressable
+                  accessibilityLabel={`${swatch.label} ${targetLabel.toLowerCase()}`}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isSelected }}
+                  key={swatch.id}
+                  onPress={() => {
+                    onSelectColor(swatch.value);
+                    setExpanded(false);
+                  }}
+                  style={({ pressed }) => [
+                    styles.swatchButton,
+                    isSelected && styles.selectedSwatchButton,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.swatch,
+                      { backgroundColor: swatch.value },
+                      swatch.value.toUpperCase() === '#F8FAFC' ? styles.lightSwatch : null,
+                    ]}
+                  />
+                </Pressable>
+              );
+            })}
+          </View>
+        ))}
       </View>
     );
   }
@@ -126,10 +142,15 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 20,
     borderWidth: 1,
-    flexDirection: 'row',
+    flexDirection: 'column',
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 6,
+  },
+  gridRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
   },
   lightSwatch: {
     borderColor: '#94A3B8',
