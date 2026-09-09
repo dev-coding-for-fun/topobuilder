@@ -1,5 +1,6 @@
 import {
   Circle,
+  DashPathEffect,
   Group,
   Image as SkiaImage,
   Line,
@@ -186,7 +187,9 @@ function primitiveRenderItem(item: TopoRenderItem) {
         strokeJoin="round"
         strokeWidth={item.strokeWidth}
         style="stroke"
-      />
+      >
+        {item.dash ? <DashPathEffect intervals={item.dash} /> : null}
+      </Path>
     );
   }
 

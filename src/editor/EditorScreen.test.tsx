@@ -114,6 +114,22 @@ jest.mock('@/editor/LineWeightControl', () => ({
   },
 }));
 
+jest.mock('@/editor/LineStyleControl', () => ({
+  LineStyleControl: ({ onSelectStyle }: { onSelectStyle: (style: string) => void }) => {
+    const React = require('react');
+    const { Pressable, Text } = require('react-native');
+    return React.createElement(
+      React.Fragment,
+      null,
+      React.createElement(
+        Pressable,
+        { accessibilityLabel: 'Dashed line style', onPress: () => onSelectStyle('dashed') },
+        React.createElement(Text, null, 'Dashed'),
+      ),
+    );
+  },
+}));
+
 jest.mock('@/editor/TopoCanvas', () => ({
   TopoCanvas: jest.fn(() => null),
 }));
@@ -515,6 +531,47 @@ describe('EditorScreen label editing', () => {
           id: 'path-1',
           color: '#2563EB',
           lineWeight: 'large',
+          points: [
+            { x: 0.1, y: 0.1 },
+            { x: 0.8, y: 0.8 },
+          ],
+        }),
+      ),
+    );
+  });
+
+  it('shows line style control and updates selected path style', async () => {
+    loadTopoEditor.mockResolvedValue(bundleFromProject(projectWithAnnotations()));
+
+    render(<EditorScreen />);
+    await waitFor(() => expect(TopoCanvas).toHaveBeenCalled());
+
+    expect(screen.queryByLabelText('Dashed line style')).toBeNull();
+
+    fireEvent.press(screen.getByLabelText('Line tool'));
+    expect(screen.getByLabelText('Dashed line style')).toBeTruthy();
+
+    fireEvent.press(screen.getByLabelText('Bolt'));
+    expect(screen.queryByLabelText('Dashed line style')).toBeNull();
+
+    act(() => {
+      latestCanvasProps().onSelectPath('path-1', [
+        { x: 0.1, y: 0.1 },
+        { x: 0.8, y: 0.8 },
+      ]);
+    });
+    expect(screen.getByLabelText('Dashed line style')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Dashed line style'));
+    });
+
+    await waitFor(() =>
+      expect(updateAnnotation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'path-1',
+          color: '#2563EB',
+          lineStyle: 'dashed',
           points: [
             { x: 0.1, y: 0.1 },
             { x: 0.8, y: 0.8 },

@@ -15,6 +15,7 @@ jest.mock('@sentry/react-native', () => ({
 jest.mock('@shopify/react-native-skia', () => ({
   Canvas: 'Canvas',
   Circle: 'Circle',
+  DashPathEffect: 'DashPathEffect',
   Group: 'Group',
   Image: 'Image',
   Line: 'Line',

@@ -123,6 +123,7 @@ export type BaseAnnotation = {
   label?: string;
   labelFontSize?: number;
   lineWeight?: 'small' | 'medium' | 'large';
+  lineStyle?: 'solid' | 'dashed' | 'dotted';
   stampSize?: 'small' | 'medium' | 'large';
   createdAt: string;
   updatedAt: string;

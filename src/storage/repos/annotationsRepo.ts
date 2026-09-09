@@ -1,4 +1,5 @@
 import type { Annotation, PathAnnotationKind } from '@/domain/types';
+import { isLineStyle } from '@/domain/lineStyles';
 import { isLineWeight } from '@/domain/lineWeights';
 import { isStampSize } from '@/domain/stampSizes';
 
@@ -21,6 +22,7 @@ type AnnotationRow = {
 function parseAnnotationMetadata(value: string | null): {
   labelFontSize?: number;
   lineWeight?: Annotation['lineWeight'];
+  lineStyle?: Annotation['lineStyle'];
   stampSize?: Annotation['stampSize'];
 } {
   if (!value) {
@@ -30,6 +32,7 @@ function parseAnnotationMetadata(value: string | null): {
     const metadata = JSON.parse(value) as {
       labelFontSize?: unknown;
       lineWeight?: unknown;
+      lineStyle?: unknown;
       stampSize?: unknown;
     };
     return {
@@ -38,6 +41,7 @@ function parseAnnotationMetadata(value: string | null): {
           ? metadata.labelFontSize
           : undefined,
       lineWeight: isLineWeight(metadata.lineWeight) ? metadata.lineWeight : undefined,
+      lineStyle: isLineStyle(metadata.lineStyle) ? metadata.lineStyle : undefined,
       stampSize: isStampSize(metadata.stampSize) ? metadata.stampSize : undefined,
     };
   } catch {
@@ -56,6 +60,7 @@ function mapAnnotation(row: AnnotationRow): Annotation {
     label: row.label ?? undefined,
     labelFontSize: metadata.labelFontSize,
     lineWeight: metadata.lineWeight,
+    lineStyle: metadata.lineStyle,
     stampSize: metadata.stampSize,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -90,12 +95,14 @@ export async function listAnnotationsForTopo(
 function buildAnnotationMetadata(annotation: Annotation): {
   labelFontSize?: number;
   lineWeight?: Annotation['lineWeight'];
+  lineStyle?: Annotation['lineStyle'];
   stampSize?: Annotation['stampSize'];
 } | undefined {
-  return annotation.labelFontSize || annotation.lineWeight || annotation.stampSize
+  return annotation.labelFontSize || annotation.lineWeight || annotation.lineStyle || annotation.stampSize
     ? {
         labelFontSize: annotation.labelFontSize,
         lineWeight: annotation.lineWeight,
+        lineStyle: annotation.lineStyle,
         stampSize: annotation.stampSize,
       }
     : undefined;

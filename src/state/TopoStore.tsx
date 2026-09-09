@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 
 import { createAnnotation } from '@/domain/annotationFactory';
 import { createId, nowIso } from '@/domain/ids';
+import type { LineStyle } from '@/domain/lineStyles';
 import type { LineWeight } from '@/domain/lineWeights';
 import type { StampSize } from '@/domain/stampSizes';
 import type {
@@ -89,6 +90,7 @@ type CreateAnnotationInput = {
   label?: string;
   labelFontSize?: number;
   lineWeight?: LineWeight;
+  lineStyle?: LineStyle;
   stampSize?: StampSize;
 };
 
@@ -99,6 +101,7 @@ type CreatePathAnnotationInput = {
   points: NormalizedPoint[];
   color?: string;
   lineWeight?: LineWeight;
+  lineStyle?: LineStyle;
 };
 
 type RouteFieldUpdate = Partial<
@@ -560,6 +563,7 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
         point: input.points[0] ?? { x: 0, y: 0 },
         color: input.color,
         lineWeight: input.lineWeight,
+        lineStyle: input.lineStyle,
         now,
       });
       if ('points' in annotation) {

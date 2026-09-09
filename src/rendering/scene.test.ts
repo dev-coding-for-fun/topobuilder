@@ -168,6 +168,67 @@ describe('buildTopoRenderScene', () => {
       ]),
     ).toBe('M 0 0 Q 50 100 75 50 L 100 0');
   });
+
+  it('computes dash intervals based on lineStyle and lineWeight', () => {
+    const scene = buildTopoRenderScene({
+      annotations: [
+        {
+          ...base,
+          id: 'solid-line',
+          kind: 'climbLine',
+          lineStyle: 'solid',
+          lineWeight: 'medium',
+          points: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+        },
+        {
+          ...base,
+          id: 'dashed-line',
+          kind: 'climbLine',
+          lineStyle: 'dashed',
+          lineWeight: 'medium', // strokeWidth = 5
+          points: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+        },
+        {
+          ...base,
+          id: 'dotted-line',
+          kind: 'climbLine',
+          lineStyle: 'dotted',
+          lineWeight: 'medium', // strokeWidth = 5
+          points: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+        },
+        {
+          ...base,
+          id: 'walkoff-default',
+          kind: 'walkoff',
+          lineWeight: 'medium', // strokeWidth = 5 -> dotted
+          points: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+        },
+        {
+          ...base,
+          id: 'scramble-default',
+          kind: 'scramble',
+          lineWeight: 'medium', // strokeWidth = 5 -> dashed
+          points: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+        },
+      ],
+      size: { width: 1000, height: 800 },
+    });
+
+    const solid = expectRenderItem(scene, 'solid-line', 'path');
+    expect(solid.dash).toBeUndefined();
+
+    const dashed = expectRenderItem(scene, 'dashed-line', 'path');
+    expect(dashed.dash).toEqual([15, 8]); // [5 * 3, 5 * 1.6]
+
+    const dotted = expectRenderItem(scene, 'dotted-line', 'path');
+    expect(dotted.dash).toEqual([0.1, 11]); // [0.1, 5 * 2.2]
+
+    const walkoffDefault = expectRenderItem(scene, 'walkoff-default', 'path');
+    expect(walkoffDefault.dash).toEqual([0.1, 11]);
+
+    const scrambleDefault = expectRenderItem(scene, 'scramble-default', 'path');
+    expect(scrambleDefault.dash).toEqual([15, 8]);
+  });
 });
 
 function expectRenderItem<TKind extends TopoRenderItem['kind']>(

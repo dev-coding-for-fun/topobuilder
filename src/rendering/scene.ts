@@ -1,6 +1,7 @@
 import { isLabelAnnotation, isMarkerAnnotation, isPathAnnotation, isStampAnnotation } from '@/domain/annotationFactory';
 import { chooseContrastingTextColour, chooseTextBackdrop, rgbaString } from '@/domain/annotationColours';
 import { denormalizePoint, type Size } from '@/domain/geometry';
+import { lineDashForStyle, lineStyleForAnnotation } from '@/domain/lineStyles';
 import { lineStrokeWidthForWeight, lineWeightForAnnotation, pdfLineStrokeWidthForWeight } from '@/domain/lineWeights';
 import { stampScaleForSize, stampSizeForAnnotation } from '@/domain/stampSizes';
 import type { Annotation, MarkerAnnotation, NormalizedPoint, PhotoAsset } from '@/domain/types';
@@ -148,12 +149,12 @@ export function smoothedRenderPath(points: RenderPoint[]) {
 }
 
 function pathItem(annotation: Annotation & { points: NormalizedPoint[] }, size: Size, target: 'editor' | 'artifact'): TopoRenderItem[] {
-  const dash =
-    annotation.kind === 'walkoff'
-      ? [8, 10]
-      : annotation.kind === 'scramble'
-        ? [16, 8]
-        : undefined;
+  const strokeWidth =
+    target === 'artifact'
+      ? pdfLineStrokeWidthForWeight(lineWeightForAnnotation(annotation))
+      : lineStrokeWidthForWeight(lineWeightForAnnotation(annotation));
+  const style = lineStyleForAnnotation(annotation);
+  const dash = lineDashForStyle(style, strokeWidth);
 
   return [
     {
@@ -162,10 +163,7 @@ function pathItem(annotation: Annotation & { points: NormalizedPoint[] }, size: 
       color: annotation.color,
       dash,
       points: annotation.points.map((point) => denormalizePoint(point, size)),
-      strokeWidth:
-        target === 'artifact'
-          ? pdfLineStrokeWidthForWeight(lineWeightForAnnotation(annotation))
-          : lineStrokeWidthForWeight(lineWeightForAnnotation(annotation)),
+      strokeWidth,
     },
   ];
 }

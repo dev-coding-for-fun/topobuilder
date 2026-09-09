@@ -22,6 +22,12 @@ import {
   moveControlPoint,
 } from '@/domain/geometry';
 import {
+  DEFAULT_LINE_STYLE,
+  defaultLineStyleForKind,
+  type LineStyle,
+  lineStyleForAnnotation,
+} from '@/domain/lineStyles';
+import {
   DEFAULT_LINE_WEIGHT,
   type LineWeight,
   lineWeightForAnnotation,
@@ -49,6 +55,7 @@ import {
 import { DEFAULT_LABEL_FONT_SIZE, clampLabelFontSize } from '@/domain/textLabels';
 import { EditorTopBar } from '@/editor/EditorTopBar';
 import { useAnnotationHistory } from '@/editor/useAnnotationHistory';
+import { LineStyleControl } from '@/editor/LineStyleControl';
 import { LineWeightControl } from '@/editor/LineWeightControl';
 import { RouteMarkerNumberControl } from '@/editor/RouteMarkerNumberControl';
 import { StampSizeControl } from '@/editor/StampSizeControl';
@@ -62,7 +69,7 @@ import { interStyle } from '@/ui/fonts';
 
 const CONTROL_POINT_MIN_DISTANCE = 44;
 
-type ContextControl = 'colour' | 'lineWeight' | 'stampSize';
+type ContextControl = 'colour' | 'lineWeight' | 'lineStyle' | 'stampSize';
 
 type LoadedTopo = {
   topo: Topo;
@@ -121,6 +128,7 @@ export default function EditorScreen() {
   const [lastLabelColorByTopo, setLastLabelColorByTopo] = useState<Record<string, string>>({});
   const [lastLineColorByTopo, setLastLineColorByTopo] = useState<Record<string, string>>({});
   const [lastLineWeightByTopo, setLastLineWeightByTopo] = useState<Record<string, LineWeight>>({});
+  const [lastLineStyleByTopo, setLastLineStyleByTopo] = useState<Record<string, LineStyle>>({});
   const [lastStampColorByTopo, setLastStampColorByTopo] = useState<Record<string, Partial<Record<StampAnnotationKind, string>>>>({});
   const [nextRouteMarkerNumberByTopo, setNextRouteMarkerNumberByTopo] = useState<Record<string, RouteMarkerNumber>>({});
   const [stampSizeByTopo, setStampSizeByTopo] = useState<Record<string, StampSize>>({});
@@ -137,6 +145,7 @@ export default function EditorScreen() {
   const lastLabelColorByTopoRef = useRef<Record<string, string>>({});
   const lastLineColorByTopoRef = useRef<Record<string, string>>({});
   const lastLineWeightByTopoRef = useRef<Record<string, LineWeight>>({});
+  const lastLineStyleByTopoRef = useRef<Record<string, LineStyle>>({});
   const lastStampColorByTopoRef = useRef<Record<string, Partial<Record<StampAnnotationKind, string>>>>({});
   const nextRouteMarkerNumberByTopoRef = useRef<Record<string, RouteMarkerNumber>>({});
   const stampSizeByTopoRef = useRef<Record<string, StampSize>>({});
@@ -283,6 +292,7 @@ export default function EditorScreen() {
       kind: activeTool,
       color: currentLineColorForTopo(photo.id),
       lineWeight: currentLineWeightForTopo(photo.id),
+      lineStyle: currentLineStyleForTopo(photo.id, isPathKind(activeTool) ? activeTool : undefined),
       points: draftPoints,
       createdAt: now,
       updatedAt: now,
@@ -376,6 +386,10 @@ export default function EditorScreen() {
 
   function currentLineWeightForTopo(id: string) {
     return lastLineWeightByTopoRef.current[id] ?? DEFAULT_LINE_WEIGHT;
+  }
+
+  function currentLineStyleForTopo(id: string, kind?: PathAnnotationKind) {
+    return lastLineStyleByTopoRef.current[id] ?? (kind ? defaultLineStyleForKind(kind) : DEFAULT_LINE_STYLE);
   }
 
   function currentStampColorForTopo(id: string, kind: StampAnnotationKind) {
@@ -516,12 +530,15 @@ export default function EditorScreen() {
       points: finalizedPoints,
       color: currentLineColorForTopo(photo.id),
       lineWeight: currentLineWeightForTopo(photo.id),
+      lineStyle: currentLineStyleForTopo(photo.id, kind),
     });
     if (isPathAnnotation(annotation)) {
       lastLineColorByTopoRef.current[photo.id] = annotation.color;
       lastLineWeightByTopoRef.current[photo.id] = lineWeightForAnnotation(annotation);
+      lastLineStyleByTopoRef.current[photo.id] = lineStyleForAnnotation(annotation);
       setLastLineColorByTopo((colors) => ({ ...colors, [photo.id]: annotation.color }));
       setLastLineWeightByTopo((weights) => ({ ...weights, [photo.id]: lineWeightForAnnotation(annotation) }));
+      setLastLineStyleByTopo((styles) => ({ ...styles, [photo.id]: lineStyleForAnnotation(annotation) }));
     }
     const selectedPoints = 'points' in annotation ? annotation.points : finalizedPoints;
     draftKindRef.current = undefined;
@@ -717,6 +734,27 @@ export default function EditorScreen() {
 
     history.recordSnapshot(savedAnnotations);
     const next = { ...annotation, points: points ?? annotation.points, lineWeight };
+    const updated = await updateAnnotation(next);
+    if (isPathAnnotation(updated)) {
+      editingPathPointsRef.current = updated.points;
+      setEditingPathPoints(updated.points);
+    }
+    await refresh();
+  }
+
+  async function changeSelectedPathStyle(lineStyle: LineStyle) {
+    if (!photo) return;
+
+    lastLineStyleByTopoRef.current[photo.id] = lineStyle;
+    setLastLineStyleByTopo((styles) => ({ ...styles, [photo.id]: lineStyle }));
+    const annotationId = selectedPathIdRef.current;
+    const points = editingPathPointsRef.current;
+    const annotation = savedAnnotations.find((item) => item.id === annotationId);
+    if (!annotation || !isPathAnnotation(annotation)) return;
+    if (annotation.lineStyle === lineStyle) return;
+
+    history.recordSnapshot(savedAnnotations);
+    const next = { ...annotation, points: points ?? annotation.points, lineStyle };
     const updated = await updateAnnotation(next);
     if (isPathAnnotation(updated)) {
       editingPathPointsRef.current = updated.points;
@@ -1058,6 +1096,14 @@ export default function EditorScreen() {
     selectedPath && isPathAnnotation(selectedPath)
       ? lineWeightForAnnotation(selectedPath)
       : lastLineWeightByTopo[photo.id] ?? DEFAULT_LINE_WEIGHT;
+  const canChooseLineStyle = canChooseLineWeight;
+  const currentLineStyle =
+    selectedPath && isPathAnnotation(selectedPath)
+      ? lineStyleForAnnotation(selectedPath)
+      : lastLineStyleByTopo[photo.id] ??
+        (activeTool !== 'select' && isPathKind(activeTool)
+          ? defaultLineStyleForKind(activeTool)
+          : DEFAULT_LINE_STYLE);
   const canChooseStampSize = activeTool !== 'select' && isStampKind(activeTool);
   const routeMarkerNumberControlValue =
     editingStamp?.kind === 'start'
@@ -1178,6 +1224,16 @@ export default function EditorScreen() {
                 void changeSelectedPathWeight(weight);
               }}
               visibleLabel="Weight"
+            />
+          ) : null}
+          {canChooseLineStyle ? (
+            <LineStyleControl
+              currentStyle={currentLineStyle}
+              expanded={openContextControl === 'lineStyle'}
+              onExpandedChange={(expanded) => setOpenContextControl(expanded ? 'lineStyle' : undefined)}
+              onSelectStyle={(style) => {
+                void changeSelectedPathStyle(style);
+              }}
             />
           ) : null}
           {canChooseStampSize ? (
