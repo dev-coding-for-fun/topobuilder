@@ -148,3 +148,18 @@ describe('SettingsScreen connected services', () => {
   });
 });
 
+describe('SettingsScreen diagnostic logging', () => {
+  it('renders start logging button and send diagnostic log button', async () => {
+    (loadTabvarSession as jest.Mock).mockResolvedValue(undefined);
+
+    render(<SettingsScreen />);
+
+    expect(await screen.findByTestId('settings:diagnostics')).toBeTruthy();
+    const toggleButton = await screen.findByTestId('settings:diagnostics-toggle');
+    expect(toggleButton).toBeTruthy();
+
+    const shareButton = await screen.findByTestId('settings:diagnostics-share');
+    expect(shareButton).toBeTruthy();
+  });
+});
+

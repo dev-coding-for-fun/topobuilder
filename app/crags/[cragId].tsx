@@ -11,6 +11,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import type { CragDetail, Route, SectorWithTopos, TabvarRoute, TopoWithRoutes } from '@/domain/types';
+import { logDiagnostic } from '@/diagnostics/logger';
 import { useTopoStore } from '@/state/TopoStore';
 import { ActionSheet, type ActionItem } from '@/ui/ActionSheet';
 import { Button } from '@/ui/Button';
@@ -67,14 +68,72 @@ export default function CragDetailScreen() {
   const [sheet, setSheet] = useState<Sheet>();
   const [shareScope, setShareScope] = useState<ShareScope>();
 
-  const refresh = useCallback(async () => {
-    if (!cragId || !isReady) return;
-    setDetail(await loadCragDetail(cragId));
+  const renderCountRef = useRef(0);
+  renderCountRef.current += 1;
+  const renderNum = renderCountRef.current;
+
+  logDiagnostic('REACT_RENDER', `CragDetailScreen render #${renderNum}`, {
+    cragId,
+    isReady,
+    hasDetail: !!detail,
+    sectorsCount: detail?.sectors?.length,
+    totalTopos: detail?.sectors?.reduce((sum, s) => sum + s.topos.length, 0),
+    activeSheet: sheet?.kind,
+  });
+
+  useEffect(() => {
+    logDiagnostic('REACT_LIFECYCLE', `CragDetailScreen mounted for cragId=${cragId}`);
+    return () => {
+      logDiagnostic('REACT_LIFECYCLE', `CragDetailScreen unmounted for cragId=${cragId}`);
+    };
+  }, [cragId]);
+
+  const prevDetailRef = useRef<CragDetail | undefined>(undefined);
+  useEffect(() => {
+    if (prevDetailRef.current !== detail) {
+      logDiagnostic('REACT_EFFECT', `detail state updated on render #${renderNum}`, {
+        prevSectorsCount: prevDetailRef.current?.sectors?.length,
+        newSectorsCount: detail?.sectors?.length,
+        newSectors: detail?.sectors?.map((s) => ({ id: s.id, name: s.name, topos: s.topos.length })),
+      });
+      prevDetailRef.current = detail;
+    }
+  }, [detail, renderNum]);
+
+  const prevSheetRef = useRef<Sheet | undefined>(undefined);
+  useEffect(() => {
+    if (prevSheetRef.current?.kind !== sheet?.kind) {
+      logDiagnostic('REACT_EFFECT', `sheet state changed: ${prevSheetRef.current?.kind ?? 'none'} -> ${sheet?.kind ?? 'none'}`);
+      prevSheetRef.current = sheet;
+    }
+  }, [sheet]);
+
+  const refresh = useCallback(async (reason = 'default') => {
+    logDiagnostic('SCREEN_FLOW', `refresh() invoked (reason="${reason}")`, { cragId, isReady });
+    if (!cragId || !isReady) {
+      logDiagnostic('SCREEN_FLOW', 'refresh() skipped - missing cragId or store not ready', { cragId, isReady });
+      return;
+    }
+    try {
+      const start = Date.now();
+      const nextDetail = await loadCragDetail(cragId);
+      logDiagnostic('SCREEN_FLOW', `loadCragDetail resolved in ${Date.now() - start}ms`, {
+        found: !!nextDetail,
+        sectorsCount: nextDetail?.sectors?.length,
+      });
+      setDetail(nextDetail);
+      logDiagnostic('SCREEN_FLOW', 'setDetail() called with loaded detail');
+    } catch (err) {
+      logDiagnostic('SCREEN_ERROR', 'Error in refresh()', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }, [cragId, isReady, loadCragDetail]);
 
   useFocusEffect(
     useCallback(() => {
-      void refresh();
+      logDiagnostic('REACT_LIFECYCLE', 'CragDetailScreen focus gained (useFocusEffect)');
+      void refresh('useFocusEffect');
     }, [refresh]),
   );
 
@@ -437,16 +496,35 @@ export default function CragDetailScreen() {
   const topoCount = sectors.reduce((sum, s) => sum + s.topos.length, 0);
 
   async function handleAddTopo(sector: SectorWithTopos) {
-    const topo = await createTopo(sector.id);
-    await refresh();
-    router.push(`/crags/${crag.id}/topos/${topo.id}/editor`);
+    logDiagnostic('USER_ACTION', `handleAddTopo triggered for sector="${sector.name}" (${sector.id})`);
+    try {
+      const topo = await createTopo(sector.id);
+      logDiagnostic('ACTION_FLOW', `createTopo completed: topo id=${topo.id}, refreshing screen...`);
+      await refresh('after-add-topo');
+      logDiagnostic('ACTION_FLOW', 'refresh completed, navigating to topo editor');
+      router.push(`/crags/${crag.id}/topos/${topo.id}/editor`);
+    } catch (err) {
+      logDiagnostic('ACTION_ERROR', 'Error in handleAddTopo', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   async function handleAddTopoForRoute(sector: SectorWithTopos, route: TabvarRoute) {
-    const topo = await createTopo(sector.id, route.name);
-    await linkTabvarRoute(topo.id, route.appId);
-    await refresh();
-    router.push(`/crags/${crag.id}/topos/${topo.id}/editor`);
+    logDiagnostic('USER_ACTION', `handleAddTopoForRoute triggered for sector="${sector.name}", route="${route.name}"`);
+    try {
+      const topo = await createTopo(sector.id, route.name);
+      logDiagnostic('ACTION_FLOW', `createTopo completed: topo id=${topo.id}, linking tabvar route...`);
+      await linkTabvarRoute(topo.id, route.appId);
+      logDiagnostic('ACTION_FLOW', 'linkTabvarRoute completed, refreshing screen...');
+      await refresh('after-add-topo-for-route');
+      logDiagnostic('ACTION_FLOW', 'refresh completed, navigating to topo editor');
+      router.push(`/crags/${crag.id}/topos/${topo.id}/editor`);
+    } catch (err) {
+      logDiagnostic('ACTION_ERROR', 'Error in handleAddTopoForRoute', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   async function handleCreateRouteForTopo(topo: TopoWithRoutes) {
@@ -497,7 +575,20 @@ export default function CragDetailScreen() {
       />
 
       <View onLayout={updateScreenOffset} ref={screenRef} style={styles.screenContent}>
-        <ScrollView contentContainerStyle={styles.scroll} scrollEnabled={!activeDrag}>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          onContentSizeChange={(w, h) => {
+            logDiagnostic('LAYOUT_SCROLLVIEW', `ScrollView onContentSizeChange: ${w}x${h}`, {
+              sectorsCount: sectors.length,
+              topoCount,
+            });
+          }}
+          onLayout={(e) => {
+            const { width, height } = e.nativeEvent.layout;
+            logDiagnostic('LAYOUT_SCROLLVIEW', `ScrollView onLayout: ${width}x${height}`);
+          }}
+          scrollEnabled={!activeDrag}
+        >
         <Text style={styles.summary} testID="crag-detail:summary">
           {sectors.length} {sectors.length === 1 ? 'sector' : 'sectors'} · {topoCount}{' '}
           {topoCount === 1 ? 'topo' : 'topos'}
@@ -506,6 +597,10 @@ export default function CragDetailScreen() {
         {sectors.map((sector, index) => (
             <View
               key={sector.id}
+              onLayout={(e) => {
+                const { width, height } = e.nativeEvent.layout;
+                logDiagnostic('LAYOUT_SECTOR', `Sector block "${sector.name}" (${sector.id}) onLayout: ${width}x${height}`);
+              }}
               style={[styles.sectorBlock, index > 0 && styles.sectorBlockSpaced]}
               testID={`crag-detail:sector-container:${sector.id}`}
             >
@@ -567,7 +662,10 @@ export default function CragDetailScreen() {
         <View style={styles.addSectorWrap}>
           <Button
             label="+ Add sector"
-            onPress={() => setSheet({ kind: 'add-sector' })}
+            onPress={() => {
+              logDiagnostic('USER_ACTION', 'User clicked "+ Add sector" button');
+              setSheet({ kind: 'add-sector' });
+            }}
             testID="crag-detail:add-sector"
             variant="secondary"
           />
@@ -628,11 +726,28 @@ export default function CragDetailScreen() {
       {/* ── Add sector ──────────────────────────── */}
       <NameEntrySheet
         confirmLabel="Add sector"
-        onCancel={() => setSheet(undefined)}
-        onConfirm={async (name) => {
-          await createSector(crag.id, name);
-          await refresh();
+        onCancel={() => {
+          logDiagnostic('USER_ACTION', 'User cancelled "Add sector" sheet');
           setSheet(undefined);
+        }}
+        onConfirm={async (name) => {
+          logDiagnostic('USER_ACTION', `User confirmed "Add sector" with name="${name}"`);
+          try {
+            const start = Date.now();
+            const newSector = await createSector(crag.id, name);
+            logDiagnostic('ACTION_FLOW', `createSector completed in ${Date.now() - start}ms`, {
+              newSectorId: newSector.id,
+              newSectorName: newSector.name,
+            });
+            await refresh('after-add-sector');
+            logDiagnostic('ACTION_FLOW', 'refresh completed after add-sector, dismissing sheet');
+            setSheet(undefined);
+          } catch (err) {
+            logDiagnostic('ACTION_ERROR', 'Error in onConfirm for add sector', {
+              error: err instanceof Error ? err.message : String(err),
+            });
+            setSheet(undefined);
+          }
         }}
         placeholder="e.g. Yellow Wall"
         testID="crag-detail:add-sector-sheet"
@@ -789,6 +904,7 @@ function SectorMenuSheets({
         onCancel={onClose}
         onConfirm={async (name) => {
           if (!sector) return;
+          logDiagnostic('USER_ACTION', `Confirmed rename sector: "${sector.name}" -> "${name}"`);
           await renameSector(sector.id, name);
           await refresh();
           onClose();
@@ -810,12 +926,15 @@ function SectorMenuSheets({
         onCancel={onClose}
         onConfirm={async () => {
           if (!sector) return;
+          logDiagnostic('USER_ACTION', `Confirmed delete sector: "${sector.name}" (${sector.id})`);
           try {
             await deleteSector(sector.id);
             await refresh();
             onClose();
           } catch (error) {
-            // last-sector refusal — surface as alert-like message
+            logDiagnostic('ACTION_ERROR', 'Error deleting sector', {
+              error: error instanceof Error ? error.message : String(error),
+            });
             console.warn(error);
             onClose();
           }
@@ -884,6 +1003,7 @@ function TopoMenuSheets({
         onCancel={onClose}
         onConfirm={async (name) => {
           if (!topo) return;
+          logDiagnostic('USER_ACTION', `Confirmed rename topo: "${topo.name}" -> "${name}"`);
           await renameTopo(topo.id, name);
           await refresh();
           onClose();
@@ -921,6 +1041,7 @@ function TopoMenuSheets({
         onCancel={onClose}
         onConfirm={async () => {
           if (!topo) return;
+          logDiagnostic('USER_ACTION', `Confirmed delete topo: "${topo.name}" (${topo.id})`);
           await deleteTopo(topo.id);
           await refresh();
           onClose();

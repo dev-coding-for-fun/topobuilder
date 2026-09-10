@@ -15,6 +15,13 @@ import {
   loadExportDisclaimerSettings,
   saveExportDisclaimerSettings,
 } from '@/settings/exportDisclaimer';
+import {
+  clearDiagnosticLogs,
+  shareDiagnosticLog,
+  startDiagnosticLogging,
+  stopDiagnosticLogging,
+  useDiagnosticLogging,
+} from '@/diagnostics/logger';
 import { wipeLocalStorage } from '@/storage/wipeStorage';
 import { Button } from '@/ui/Button';
 import { ConfirmSheet } from '@/ui/ConfirmSheet';
@@ -76,6 +83,10 @@ export default function SettingsScreen() {
             testID="settings:version"
             title="Version"
           />
+        </Section>
+
+        <Section title="Diagnostics">
+          <DiagnosticLoggingPanel />
         </Section>
       </ScrollView>
     </Screen>
@@ -375,6 +386,125 @@ function StorageResetRow() {
   );
 }
 
+function DiagnosticLoggingPanel() {
+  const { isActive, entryCount, fileSizeBytes } = useDiagnosticLogging();
+  const [busy, setBusy] = useState(false);
+  const [feedback, setFeedback] = useState<{ text: string; isError?: boolean }>();
+
+  async function handleToggle() {
+    setBusy(true);
+    setFeedback(undefined);
+    try {
+      if (isActive) {
+        await stopDiagnosticLogging();
+        setFeedback({ text: 'Diagnostic logging stopped.' });
+      } else {
+        await startDiagnosticLogging();
+        setFeedback({ text: 'Diagnostic logging started. Device specs recorded.' });
+      }
+    } catch (e) {
+      setFeedback({ text: 'Failed to toggle logging.', isError: true });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleShare() {
+    setBusy(true);
+    setFeedback(undefined);
+    try {
+      const result = await shareDiagnosticLog();
+      if (!result.success) {
+        setFeedback({ text: result.error ?? 'Failed to share log.', isError: true });
+      }
+    } catch (e) {
+      setFeedback({ text: 'Failed to share log.', isError: true });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleClear() {
+    setBusy(true);
+    setFeedback(undefined);
+    try {
+      await clearDiagnosticLogs();
+      setFeedback({ text: 'Diagnostic logs cleared.' });
+    } catch (e) {
+      setFeedback({ text: 'Failed to clear logs.', isError: true });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const formatSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  };
+
+  return (
+    <View style={styles.diagnosticsPanel} testID="settings:diagnostics">
+      <View style={styles.diagnosticsHeader}>
+        <Ionicons
+          color={isActive ? '#16A34A' : '#6B7280'}
+          name={isActive ? 'radio-button-on' : 'radio-button-off'}
+          size={20}
+          style={styles.rowIcon}
+        />
+        <View style={styles.rowCopy}>
+          <Text style={styles.rowTitle}>Diagnostic trace</Text>
+          <Text style={styles.rowSubtitle}>
+            {isActive
+              ? `Recording active (${entryCount} events · ${formatSize(fileSizeBytes)})`
+              : entryCount > 0
+                ? `Inactive (${entryCount} events recorded · ${formatSize(fileSizeBytes)})`
+                : 'Inactive (no logs recorded)'}
+          </Text>
+        </View>
+      </View>
+
+      <Text style={styles.diagnosticsBody}>
+        Captures device specs, render cycles, and database queries to troubleshoot rendering issues.
+      </Text>
+
+      {feedback ? (
+        <Text
+          style={[styles.diagnosticsMessage, feedback.isError && styles.tabvarError]}
+          testID="settings:diagnostics-feedback"
+        >
+          {feedback.text}
+        </Text>
+      ) : null}
+
+      <View style={styles.diagnosticsActions}>
+        <Button
+          disabled={busy}
+          label={isActive ? 'Stop logging' : 'Start logging'}
+          onPress={handleToggle}
+          testID="settings:diagnostics-toggle"
+          variant={isActive ? 'danger' : 'primary'}
+        />
+        <Button
+          disabled={busy || entryCount === 0}
+          label="Send diagnostic log"
+          onPress={handleShare}
+          testID="settings:diagnostics-share"
+          variant="secondary"
+        />
+        {entryCount > 0 && !isActive ? (
+          <Button
+            disabled={busy}
+            label="Clear log"
+            onPress={handleClear}
+            testID="settings:diagnostics-clear"
+            variant="secondary"
+          />
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <View style={styles.section}>
@@ -578,6 +708,31 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 8,
     paddingTop: 4,
+  },
+  diagnosticsActions: {
+    alignItems: 'flex-start',
+    gap: 8,
+    paddingTop: 4,
+  },
+  diagnosticsBody: {
+    color: '#4B5563',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  diagnosticsHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+  },
+  diagnosticsMessage: {
+    color: '#166534',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  diagnosticsPanel: {
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
   },
   tabvarBody: {
     color: '#4B5563',

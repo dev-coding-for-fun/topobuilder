@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
+import { logDiagnostic } from '@/diagnostics/logger';
 import { createAnnotation } from '@/domain/annotationFactory';
 import { createId, nowIso } from '@/domain/ids';
 import type { LineStyle } from '@/domain/lineStyles';
@@ -257,9 +258,14 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
 
   const loadCragDetail = useCallback(
     async (cragId: string): Promise<CragDetail | undefined> => {
+      logDiagnostic('STORE_DB', `loadCragDetail starting for cragId=${cragId}`);
+      const startTime = Date.now();
       const dbRef = requireDb();
       const crag = await getCrag(dbRef, cragId);
-      if (!crag) return undefined;
+      if (!crag) {
+        logDiagnostic('STORE_DB', `loadCragDetail crag not found for cragId=${cragId}`);
+        return undefined;
+      }
       const sectors = await listSectorsForCrag(dbRef, cragId);
       const sectorsWithTopos: SectorWithTopos[] = await Promise.all(
         sectors.map(async (sector) => {
@@ -277,6 +283,15 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
           return { ...sector, topos: toposWithRoutes, unmappedRoutes };
         }),
       );
+      const elapsed = Date.now() - startTime;
+      const totalTopos = sectorsWithTopos.reduce((acc, s) => acc + s.topos.length, 0);
+      logDiagnostic('STORE_DB', `loadCragDetail completed in ${elapsed}ms`, {
+        cragId,
+        cragName: crag.name,
+        sectorsCount: sectorsWithTopos.length,
+        totalTopos,
+        sectors: sectorsWithTopos.map((s) => ({ id: s.id, name: s.name, topos: s.topos.length })),
+      });
       return { crag, sectors: sectorsWithTopos };
     },
     [db],
@@ -293,8 +308,11 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
 
   const createSector = useCallback(
     async (cragId: string, name: string, description?: string, tabvarSectorId?: number) => {
+      logDiagnostic('STORE_DB', `createSector starting for cragId=${cragId}, name="${name}"`);
       const sector = await createSectorRepo(requireDb(), { cragId, name, description, tabvarSectorId });
+      logDiagnostic('STORE_DB', `createSectorRepo returned sector id=${sector.id}, name="${sector.name}", refreshing store summaries...`);
       await refresh();
+      logDiagnostic('STORE_DB', `createSector store summaries refresh completed`);
       return sector;
     },
     [db, refresh],
@@ -328,8 +346,11 @@ export function TopoStoreProvider({ children }: { children: React.ReactNode }) {
 
   const createTopo = useCallback(
     async (sectorId: string, name?: string) => {
+      logDiagnostic('STORE_DB', `createTopo starting for sectorId=${sectorId}, name="${name ?? ''}"`);
       const topo = await createTopoRepo(requireDb(), { sectorId, name });
+      logDiagnostic('STORE_DB', `createTopoRepo returned topo id=${topo.id}, refreshing store summaries...`);
       await refresh();
+      logDiagnostic('STORE_DB', `createTopo store summaries refresh completed`);
       return topo;
     },
     [db, refresh],
