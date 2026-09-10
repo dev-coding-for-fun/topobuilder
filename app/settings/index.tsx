@@ -273,7 +273,7 @@ function TabvarSyncPanel() {
       </View>
 
       <Text style={styles.tabvarBody}>
-        Connect TopoBuilder to Tabvar to publish or sync guidebook data when exports are ready.
+        Connect Bolted to Tabvar to publish or sync guidebook data when exports are ready.
       </Text>
 
       {message ? (

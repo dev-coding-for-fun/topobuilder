@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "TopoBuilder",
-    "slug": "topo-builder",
+    "name": "Bolted",
+    "slug": "topobuilder",
     "scheme": "topobuilder",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -15,8 +15,8 @@
       "bundleIdentifier": "com.bowvalleydev.topobuilder",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSCameraUsageDescription": "TopoBuilder uses the camera to capture rock face photos for offline topo markup.",
-        "NSPhotoLibraryUsageDescription": "TopoBuilder imports rock face photos so you can mark up climbing routes offline.",
+        "NSCameraUsageDescription": "Bolted uses the camera to capture rock face photos for offline topo markup.",
+        "NSPhotoLibraryUsageDescription": "Bolted imports rock face photos so you can mark up climbing routes offline.",
         "UIBackgroundModes": [
           "processing",
           "fetch"
@@ -67,9 +67,9 @@
       [
         "expo-image-picker",
         {
-          "cameraPermission": "TopoBuilder uses the camera to capture rock face photos for offline topo markup.",
+          "cameraPermission": "Bolted uses the camera to capture rock face photos for offline topo markup.",
           "microphonePermission": false,
-          "photosPermission": "TopoBuilder imports rock face photos so you can mark up climbing routes offline."
+          "photosPermission": "Bolted imports rock face photos so you can mark up climbing routes offline."
         }
       ],
       "expo-background-task",
