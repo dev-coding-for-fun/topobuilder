@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Bolted",
-    "slug": "topobuilder",
+    "slug": "topo-builder",
     "scheme": "topobuilder",
     "version": "1.0.1",
     "orientation": "portrait",
