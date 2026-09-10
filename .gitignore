@@ -43,3 +43,7 @@ yarn-error.*
 
 # keys
 .env/
+
+# Scratch & local diagnostic dumps
+scratch*
+*fingerprint*.json
